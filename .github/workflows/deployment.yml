@@ -1,0 +1,57 @@
+name: Frontend CD (Next.js Deploy)
+
+on:
+  push:
+    branches: [ "main" ,"feature/BATON-60-CD"] # 배포 대상 브랜치 (main 또는 master)
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. 소스 코드 가져오기
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      # 2. 도커 허브 로그인
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }} # 아까 확인한 @ 뒤가 없는 순수 ID
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+      
+      # 도커 빌드 환경 설정
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 3. Docker 이미지 빌드 및 푸시
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          # id 부분을 본인의 도커 허브 계정 ID로 변경하거나 secrets로 관리하세요.
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/dev11-final-team03-frontend:latest
+          # 빌드 캐시를 활용해 배포 속도를 높입니다.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # 4. EC2 서버에 원격 접속해서 프론트엔드 컨테이너만 리부팅하기
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}       # EC2 탄력적 IP
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_PRIVATE_KEY }} # .pem 키 파일 내용 통째로
+          script: |
+            cd /home/${{ secrets.EC2_USERNAME }}/app
+            
+            # 1. 새로운 프론트엔드 이미지만 다운로드
+            docker compose -f compose-prod.yaml pull frontend
+            
+            # 2. 무중단 감성으로 프론트엔드 컨테이너만 지우고 새로 띄우기
+            docker compose -f compose-prod.yaml up -d --no-deps frontend
+            
+            # 3. 찌꺼기 이미지(기존 <none> 이미지) 청소해서 용량 확보
+            docker image prune -f
