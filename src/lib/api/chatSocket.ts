@@ -13,7 +13,6 @@ export type ChatSocketMessage = {
 };
 
 export type ChatSocketSendMessage = {
-  senderId: number;
   content: string;
 };
 
@@ -35,7 +34,7 @@ type ConnectChatSocketParams = {
 export type ChatSocketConnection = {
   client: Client;
   sendMessage: (message: ChatSocketSendMessage) => void;
-  markAsRead: (message: { readerId: number }) => void;
+  markAsRead: () => void;
   disconnect: () => void;
 };
 
@@ -113,14 +112,13 @@ export function connectChatSocket({
         body: JSON.stringify(message),
       });
     },
-    markAsRead: (message: { readerId: number }) => {
+    markAsRead: () => {
       if (!client.connected) {
         throw new Error("WebSocket is not connected.");
       }
 
       client.publish({
         destination: `/app/chat-rooms/${roomId}/read`,
-        body: JSON.stringify(message),
       });
     },
     disconnect: () => {

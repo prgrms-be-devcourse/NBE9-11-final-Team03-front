@@ -224,9 +224,9 @@ export default function ChatsPage() {
             return prevMessages.map((prevMessage) =>
               prevMessage.id === message.id
                 ? {
-                    ...prevMessage,
-                    ...message,
-                  }
+                  ...prevMessage,
+                  ...message,
+                }
                 : prevMessage,
             );
           }
@@ -236,9 +236,7 @@ export default function ChatsPage() {
 
         const userId = currentUserIdRef.current;
         if (userId !== null && message.senderId !== userId) {
-          chatSocketRef.current?.markAsRead({
-            readerId: userId,
-          });
+          chatSocketRef.current?.markAsRead();
         }
       },
       onRead: (event) => {
@@ -248,9 +246,9 @@ export default function ChatsPage() {
           prevMessages.map((message) =>
             readMessageIds.has(message.id)
               ? {
-                  ...message,
-                  read: true,
-                }
+                ...message,
+                read: true,
+              }
               : message,
           ),
         );
@@ -260,9 +258,7 @@ export default function ChatsPage() {
 
         const userId = currentUserIdRef.current;
         if (userId !== null) {
-          connection?.markAsRead({
-            readerId: userId,
-          });
+          connection?.markAsRead();
         }
       },
       onDisconnect: () => {
@@ -291,8 +287,8 @@ export default function ChatsPage() {
     setIsLoadingMessages(true);
 
     try {
-      const nextMessages = await chatApi.getMessages(roomId);
-      setMessages(nextMessages);
+      const response = await chatApi.getMessages(roomId);
+      setMessages(response.content);
     } catch (error) {
       setMessages([]);
       setErrorMessage(
@@ -477,10 +473,7 @@ export default function ChatsPage() {
     setIsSending(true);
 
     try {
-      // REST send uses token auth and sends only { content }; WebSocket publish
-      // still requires senderId per the backend socket contract.
       chatSocketRef.current.sendMessage({
-        senderId: currentUserId,
         content,
       });
       setMessageInput("");
@@ -507,11 +500,10 @@ export default function ChatsPage() {
           </p>
         </div>
         <div
-          className={`rounded-full px-4 py-2 text-sm font-bold ${
-            isConnectedToSocket
+          className={`rounded-full px-4 py-2 text-sm font-bold ${isConnectedToSocket
               ? "bg-teal-50 text-teal-700"
               : "bg-zinc-100 text-zinc-500"
-          }`}
+            }`}
         >
           {isConnectedToSocket ? "WebSocket 연결됨" : "WebSocket 연결 대기"}
         </div>
@@ -780,9 +772,8 @@ function ChatRoomListButton({
     <button
       type="button"
       onClick={onSelect}
-      className={`flex w-full cursor-pointer gap-3 px-5 py-4 text-left transition ${
-        isActive ? "bg-teal-50" : "bg-white hover:bg-zinc-50"
-      }`}
+      className={`flex w-full cursor-pointer gap-3 px-5 py-4 text-left transition ${isActive ? "bg-teal-50" : "bg-white hover:bg-zinc-50"
+        }`}
     >
       <ChatRoomAvatar
         imageUrl={room.opponentProfileImageUrl}
@@ -860,9 +851,8 @@ function MessageBubble({
   return (
     <div className={`flex flex-col ${isMine ? "items-end" : "items-start"}`}>
       <div
-        className={`flex w-full items-end gap-2 ${
-          isMine ? "justify-end" : "justify-start"
-        }`}
+        className={`flex w-full items-end gap-2 ${isMine ? "justify-end" : "justify-start"
+          }`}
       >
         {isMine ? (
           <MessageMeta
@@ -873,11 +863,10 @@ function MessageBubble({
         ) : null}
 
         <div
-          className={`max-w-[72%] rounded-lg px-4 py-3 shadow-sm ${
-            isMine
+          className={`max-w-[72%] rounded-lg px-4 py-3 shadow-sm ${isMine
               ? "bg-zinc-950 text-white"
               : "border border-zinc-200 bg-white text-zinc-900"
-          }`}
+            }`}
         >
           <p className="whitespace-pre-wrap break-words text-sm font-semibold leading-6">
             {message.content}
@@ -911,9 +900,8 @@ function MessageMeta({
 }) {
   return (
     <div
-      className={`mb-1 flex shrink-0 flex-col text-[11px] font-semibold leading-4 ${
-        isMine ? "items-end" : "items-start"
-      }`}
+      className={`mb-1 flex shrink-0 flex-col text-[11px] font-semibold leading-4 ${isMine ? "items-end" : "items-start"
+        }`}
     >
       {shouldShowUnreadCount ? (
         <span className="font-black text-amber-500">1</span>

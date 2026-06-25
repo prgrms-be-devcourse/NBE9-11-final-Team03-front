@@ -306,8 +306,8 @@ export const chatApi = {
     });
   },
 
-  getMessages(chatRoomId: number): Promise<ChatMessageRes[]> {
-    return apiFetch<ChatMessageRes[]>(
+  getMessages(chatRoomId: number): Promise<CursorPageRes<ChatMessageRes>> {
+    return apiFetch<CursorPageRes<ChatMessageRes>>(
       `/api/v1/chat-rooms/${chatRoomId}/messages`,
     );
   },
