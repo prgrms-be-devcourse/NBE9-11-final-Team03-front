@@ -1,0 +1,36 @@
+name: Frontend CI (Next.js Lint & Build Check)
+
+on:
+  push:
+    branches: [ "main", "dev", "feature/BATON-60-CD"] # 검사하고 싶은 브랜치들을 적어줍니다.
+  pull_request:
+    branches: [ "main", "dev"] # PR이 날아왔을 때도 자동으로 문지기 역할 작동!
+
+jobs:
+  lint-and-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. 깃허브 가상 환경으로 내 소스 코드 체크아웃
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      # 2. Node.js LTS 환경 세팅
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm' # npm 패키지들을 캐싱해서 검사 속도를 올립니다.
+
+      # 3. 패키지 설치 (package-lock.json 기준 완벽 동기화)
+      - name: Install dependencies
+        run: npm ci
+
+      # 4. ESLint 문법 및 코드 스타일 검사
+      - name: Run Linter
+        run: npm run lint
+
+      # 5. Next.js 빌드 테스트 (실제 배포 가능한 상태인지 최종 확인)
+      # 빌드 중 에러가 나면 깃허브 Actions에 빨간 불이 뜨며 실패 처리됩니다.
+      - name: Test Build Next.js
+        run: npm run build
