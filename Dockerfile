@@ -1,6 +1,8 @@
 # 1단계: 빌드 스테이지 (내 로컬 LTS 환경과 동기화)
 FROM node:22-alpine AS builder
 WORKDIR /app
+ARG NEXT_PUBLIC_API_BASE_URL=/
+ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
 
 # 의존성 설치 (캐싱 활용)
 COPY package*.json ./
