@@ -1,5 +1,9 @@
-import type { ApiResponse } from "./types";
-import { clearAuthSession } from "@/lib/auth";
+import type { ApiResponse, UserLoginRes } from "./types";
+import {
+  clearAuthSession,
+  extractAuthClaimsFromAccessToken,
+  setAuthSession,
+} from "@/lib/auth";
 
 const DEFAULT_API_BASE_URL = "http://localhost:8080";
 
@@ -41,6 +45,16 @@ function getAccessToken(): string | null {
   }
 
   return window.localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
+}
+
+function shouldAttemptReissue(path: string): boolean {
+  return (
+    !path.includes("/api/v1/auth/login") &&
+    !path.includes("/api/v1/auth/signup") &&
+    !path.includes("/api/v1/auth/reissue") &&
+    !path.includes("/api/v1/auth/email-send") &&
+    !path.includes("/api/v1/auth/email-verification")
+  );
 }
 
 function buildUrl(path: string, query?: object): string {
@@ -97,10 +111,13 @@ async function parseApiResponse<T>(
   }
 }
 
-export async function apiFetch<T>(
+async function executeRequest<T>(
   path: string,
   options: ApiRequestOptions = {},
-): Promise<T> {
+): Promise<{
+  response: Response;
+  apiResponse: ApiResponse<T> | null;
+}> {
   const { body, query, headers: optionHeaders, ...requestOptions } = options;
   const headers = new Headers(optionHeaders);
   const token = getAccessToken();
@@ -120,11 +137,60 @@ export async function apiFetch<T>(
     credentials: "include",
     headers,
   });
-  const apiResponse = await parseApiResponse<T>(response);
-  const shouldClearAuth =
-    response.status === 401 && !path.includes("/api/v1/auth/login");
 
-  if (shouldClearAuth) {
+  return {
+    response,
+    apiResponse: await parseApiResponse<T>(response),
+  };
+}
+
+async function reissueAccessToken(): Promise<boolean> {
+  const response = await fetch(buildUrl("/api/v1/auth/reissue"), {
+    method: "POST",
+    credentials: "include",
+  });
+  const apiResponse = await parseApiResponse<UserLoginRes>(response);
+
+  if (!response.ok || !apiResponse || apiResponse.success === false) {
+    return false;
+  }
+
+  const accessToken = apiResponse.data?.accessToken;
+  if (!accessToken) {
+    return false;
+  }
+
+  const claims = extractAuthClaimsFromAccessToken(accessToken);
+  if (claims.userId === null) {
+    return false;
+  }
+
+  setAuthSession({
+    accessToken,
+    userId: claims.userId,
+    role: claims.role,
+  });
+
+  return true;
+}
+
+export async function apiFetch<T>(
+  path: string,
+  options: ApiRequestOptions = {},
+): Promise<T> {
+  let { response, apiResponse } = await executeRequest<T>(path, options);
+
+  if (response.status === 401 && shouldAttemptReissue(path)) {
+    const didReissue = await reissueAccessToken();
+
+    if (didReissue) {
+      ({ response, apiResponse } = await executeRequest<T>(path, options));
+    } else {
+      clearAuthSession();
+    }
+  }
+
+  if (response.status === 401 && shouldAttemptReissue(path)) {
     clearAuthSession();
   }
 

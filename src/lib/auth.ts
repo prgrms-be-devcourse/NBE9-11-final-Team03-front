@@ -1,7 +1,8 @@
-import type { UserLoginRes } from "@/lib/api/types";
+import type { UserLoginRes, UserRole } from "@/lib/api/types";
 
 export const ACCESS_TOKEN_STORAGE_KEY = "baton_access_token";
 export const USER_ID_STORAGE_KEY = "baton_user_id";
+export const USER_ROLE_STORAGE_KEY = "baton_user_role";
 export const PROFILE_IMAGE_URL_STORAGE_KEY = "baton_profile_image_url";
 export const NICKNAME_STORAGE_KEY = "baton_nickname";
 export const AUTH_CHANGED_EVENT = "auth-changed";
@@ -16,8 +17,14 @@ const REFRESH_TOKEN_STORAGE_KEYS = [
 interface AuthSessionParams {
   accessToken: string;
   userId: number;
+  role?: UserRole | null;
   nickname?: string | null;
   profileImageUrl?: string | null;
+}
+
+export interface AuthTokenClaims {
+  userId: number | null;
+  role: UserRole | null;
 }
 
 function getStorage(): Storage | null {
@@ -55,28 +62,48 @@ function base64UrlDecode(value: string): string {
     "=",
   );
 
-  return window.atob(padded);
+  return globalThis.atob(padded);
+}
+
+function toUserRole(value: unknown): UserRole | null {
+  return value === "USER" || value === "ADMIN" ? value : null;
+}
+
+export function extractAuthClaimsFromAccessToken(
+  accessToken: string,
+): AuthTokenClaims {
+  const [, payload] = accessToken.split(".");
+
+  if (payload) {
+    try {
+      const parsed = JSON.parse(base64UrlDecode(payload)) as {
+        sub?: unknown;
+        role?: unknown;
+      };
+      const userId = Number(parsed.sub);
+
+      return {
+        userId: Number.isInteger(userId) && userId > 0 ? userId : null,
+        role: toUserRole(parsed.role),
+      };
+    } catch {
+      return {
+        userId: null,
+        role: null,
+      };
+    }
+  }
+
+  return {
+    userId: null,
+    role: null,
+  };
 }
 
 export function extractUserIdFromLoginResponse(
   response: UserLoginRes,
 ): number | null {
-  const [, payload] = response.accessToken.split(".");
-
-  if (payload) {
-    try {
-      const parsed = JSON.parse(base64UrlDecode(payload)) as { sub?: unknown };
-      const userId = Number(parsed.sub);
-
-      if (Number.isInteger(userId) && userId > 0) {
-        return userId;
-      }
-    } catch {
-      return null;
-    }
-  }
-
-  return null;
+  return extractAuthClaimsFromAccessToken(response.accessToken).userId;
 }
 
 export function getAccessToken(): string | null {
@@ -90,6 +117,11 @@ export function getStoredUserId(): number | null {
     : Number(storedUserId);
 
   return Number.isInteger(userId) && userId > 0 ? userId : null;
+}
+
+export function getStoredUserRole(): UserRole | null {
+  const value = getStorage()?.getItem(USER_ROLE_STORAGE_KEY);
+  return toUserRole(value);
 }
 
 export function getStoredProfileImageUrl(): string | null {
@@ -164,6 +196,7 @@ export function clearStoredLastTalentId(
 export function setAuthSession({
   accessToken,
   userId,
+  role,
   nickname,
   profileImageUrl,
 }: AuthSessionParams): void {
@@ -175,6 +208,14 @@ export function setAuthSession({
 
   storage.setItem(ACCESS_TOKEN_STORAGE_KEY, accessToken);
   storage.setItem(USER_ID_STORAGE_KEY, String(userId));
+
+  if (role !== undefined) {
+    if (role) {
+      storage.setItem(USER_ROLE_STORAGE_KEY, role);
+    } else {
+      storage.removeItem(USER_ROLE_STORAGE_KEY);
+    }
+  }
 
   if (nickname !== undefined) {
     const nextNickname = nickname?.trim();
@@ -200,7 +241,7 @@ export function setAuthSession({
 export function setAuthStorage(
   accessToken: string,
   userId: number,
-  options: Pick<AuthSessionParams, "nickname" | "profileImageUrl"> = {},
+  options: Pick<AuthSessionParams, "role" | "nickname" | "profileImageUrl"> = {},
 ): void {
   setAuthSession({
     accessToken,
@@ -218,6 +259,7 @@ export function clearAuthSession(): void {
 
   storage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
   storage.removeItem(USER_ID_STORAGE_KEY);
+  storage.removeItem(USER_ROLE_STORAGE_KEY);
   storage.removeItem(PROFILE_IMAGE_URL_STORAGE_KEY);
   storage.removeItem(NICKNAME_STORAGE_KEY);
   REFRESH_TOKEN_STORAGE_KEYS.forEach((key) => storage.removeItem(key));

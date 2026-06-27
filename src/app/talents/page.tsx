@@ -17,6 +17,7 @@ import {
   talentApi,
   type CategoryRes,
   type TalentListRes,
+  type TalentSortType,
 } from "@/lib/api";
 import {
   formatCredit,
@@ -24,13 +25,6 @@ import {
   formatEstimatedDuration,
   formatRating,
 } from "@/utils/format";
-
-type TalentSortOption =
-  | "latest"
-  | "rating"
-  | "credits_asc"
-  | "completed"
-  | "trust";
 
 const PAGE_SIZE = 20;
 
@@ -53,7 +47,7 @@ function getCategoryErrorMessage(error: unknown) {
 export default function TalentsPage() {
   const [keyword, setKeyword] = useState("");
   const [filter, setFilter] = useState<TalentFilterValue>({});
-  const [sortBy, setSortBy] = useState<TalentSortOption>("latest");
+  const [sortBy, setSortBy] = useState<TalentSortType>("LATEST");
   const [categories, setCategories] = useState<CategoryRes[]>([]);
   const [isCategoryLoading, setIsCategoryLoading] = useState(true);
   const [categoryErrorMessage, setCategoryErrorMessage] = useState<
@@ -110,8 +104,19 @@ export default function TalentsPage() {
     let ignore = false;
 
     async function loadInitialTalents() {
+      setIsInitialLoading(true);
+      setErrorMessage(null);
+
       try {
-        const response = await talentApi.getList({ size: PAGE_SIZE });
+        const response = await talentApi.search({
+          categoryId: filter.categoryId,
+          minCredit: filter.minCredits,
+          maxCredit: filter.maxCredits,
+          minRating: filter.minRating,
+          completedOnly: filter.completedOnly ? true : undefined,
+          sort: sortBy,
+          size: PAGE_SIZE,
+        });
 
         if (ignore) {
           return;
@@ -145,14 +150,20 @@ export default function TalentsPage() {
     return () => {
       ignore = true;
     };
-  }, []);
+  }, [filter, sortBy]);
 
   async function handleLoadMore() {
     setErrorMessage(null);
     setIsMoreLoading(true);
 
     try {
-      const response = await talentApi.getList({
+      const response = await talentApi.search({
+        categoryId: filter.categoryId,
+        minCredit: filter.minCredits,
+        maxCredit: filter.maxCredits,
+        minRating: filter.minRating,
+        completedOnly: filter.completedOnly ? true : undefined,
+        sort: sortBy,
         cursor: nextCursor,
         size: PAGE_SIZE,
       });
@@ -172,57 +183,15 @@ export default function TalentsPage() {
 
   const filteredTalents = useMemo(() => {
     const normalizedKeyword = keyword.trim().toLowerCase();
-    const selectedCategory =
-      filter.categoryId === undefined
-        ? undefined
-        : categories.find(
-            (category) => category.categoryId === filter.categoryId,
-          );
-
-    const filtered = talents.filter((talent) => {
+    return talents.filter((talent) => {
       const matchesKeyword =
         normalizedKeyword.length === 0 ||
         talent.title.toLowerCase().includes(normalizedKeyword) ||
         talent.categoryName.toLowerCase().includes(normalizedKeyword);
-      const matchesCategory =
-        filter.categoryId === undefined ||
-        (selectedCategory !== undefined &&
-          talent.categoryName === selectedCategory.name);
-      const matchesMinCredit =
-        filter.minCredits === undefined ||
-        talent.creditPrice >= filter.minCredits;
-      const matchesMaxCredit =
-        filter.maxCredits === undefined ||
-        talent.creditPrice <= filter.maxCredits;
-      const matchesRating =
-        filter.minRating === undefined || talent.avgRating >= filter.minRating;
 
-      return (
-        matchesKeyword &&
-        matchesCategory &&
-        matchesMinCredit &&
-        matchesMaxCredit &&
-        matchesRating
-      );
+      return matchesKeyword;
     });
-
-    return filtered.sort((a, b) => {
-      switch (sortBy) {
-        case "rating":
-          return b.avgRating - a.avgRating;
-        case "credits_asc":
-          return a.creditPrice - b.creditPrice;
-        case "completed":
-        case "trust":
-          return b.completeCount - a.completeCount;
-        case "latest":
-        default:
-          return (
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-          );
-      }
-    });
-  }, [categories, filter, keyword, sortBy, talents]);
+  }, [keyword, talents]);
 
   const isEmpty =
     !isInitialLoading && !errorMessage && filteredTalents.length === 0;
@@ -237,6 +206,10 @@ export default function TalentsPage() {
         <TalentSearchBar value={keyword} onChange={setKeyword} />
         <TalentSortSelect value={sortBy} onChange={setSortBy} />
       </div>
+      <p className="-mt-3 mb-5 text-xs font-semibold text-zinc-500">
+        카테고리, 크레딧, 평점, 완료 이력, 정렬은 서버 검색으로 조회합니다.
+        검색어는 현재 불러온 페이지 안에서 제목과 카테고리를 좁혀 봅니다.
+      </p>
       <div className="mb-6">
         <TalentFilter
           categories={categories}

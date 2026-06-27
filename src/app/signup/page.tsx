@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { authApi } from "@/lib/api";
 import { validatePassword } from "@/lib/validation/password";
@@ -51,16 +51,91 @@ type SignupValues = z.infer<typeof schema>;
 export default function SignupPage() {
   const router = useRouter();
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [emailVerificationCode, setEmailVerificationCode] = useState("");
+  const [emailVerificationMessage, setEmailVerificationMessage] = useState<
+    string | null
+  >(null);
+  const [verifiedEmail, setVerifiedEmail] = useState<string | null>(null);
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [isVerifyingEmail, setIsVerifyingEmail] = useState(false);
   const [profileImageUrlPreview, setProfileImageUrlPreview] = useState("");
   const [imageLoadError, setImageLoadError] = useState(false);
   const {
     register,
+    control,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<SignupValues>({ resolver: zodResolver(schema) });
+  const currentEmail = useWatch({ control, name: "email" })?.trim() ?? "";
+  const isEmailVerified =
+    verifiedEmail !== null && currentEmail.length > 0 && verifiedEmail === currentEmail;
+
+  async function handleSendEmailVerification() {
+    setSubmitError(null);
+    setEmailVerificationMessage(null);
+    setVerifiedEmail(null);
+
+    const parsedEmail = z.string().email().safeParse(currentEmail);
+    if (!parsedEmail.success) {
+      setEmailVerificationMessage("이메일 형식으로 입력해 주세요.");
+      return;
+    }
+
+    setIsSendingEmail(true);
+
+    try {
+      await authApi.sendEmail({ email: currentEmail });
+      setEmailVerificationMessage("인증번호를 발송했습니다. 메일함을 확인해 주세요.");
+    } catch (error) {
+      setEmailVerificationMessage(
+        error instanceof Error
+          ? error.message
+          : "인증번호 발송에 실패했습니다.",
+      );
+    } finally {
+      setIsSendingEmail(false);
+    }
+  }
+
+  async function handleVerifyEmail() {
+    setSubmitError(null);
+    setEmailVerificationMessage(null);
+
+    if (!/^\d{6}$/.test(emailVerificationCode)) {
+      setEmailVerificationMessage("인증번호는 6자리 숫자로 입력해 주세요.");
+      return;
+    }
+
+    setIsVerifyingEmail(true);
+
+    try {
+      await authApi.verifyEmail({
+        email: currentEmail,
+        verificationCode: emailVerificationCode,
+      });
+      setVerifiedEmail(currentEmail);
+      setEmailVerificationMessage("이메일 인증이 완료되었습니다.");
+    } catch (error) {
+      setVerifiedEmail(null);
+      setEmailVerificationMessage(
+        error instanceof Error
+          ? error.message
+          : "인증번호 확인에 실패했습니다.",
+      );
+    } finally {
+      setIsVerifyingEmail(false);
+    }
+  }
 
   async function onSubmit(values: SignupValues) {
     setSubmitError(null);
+    const normalizedEmail = values.email.trim();
+
+    if (verifiedEmail !== normalizedEmail) {
+      setSubmitError("이메일 인증을 완료해 주세요.");
+      return;
+    }
+
     const passwordError = validatePassword(values.email, values.password);
 
     if (passwordError) {
@@ -70,7 +145,7 @@ export default function SignupPage() {
 
     try {
       await authApi.signup({
-        email: values.email.trim(),
+        email: normalizedEmail,
         password: values.password,
         nickname: values.nickname.trim(),
         profileImageUrl: values.profileImageUrl?.trim() || null,
@@ -86,7 +161,53 @@ export default function SignupPage() {
     <div className="mx-auto flex w-[420px] flex-col py-12">
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-5 rounded-lg border border-zinc-200 bg-white p-6">
         <h1 className="text-2xl font-black text-zinc-950">회원가입</h1>
-        <Field label="이메일" error={errors.email?.message}><input {...register("email")} className="form-input" /></Field>
+        <Field label="이메일" error={errors.email?.message}>
+          <div className="grid grid-cols-[1fr_128px] gap-2">
+            <input {...register("email")} className="form-input" />
+            <button
+              type="button"
+              disabled={isSendingEmail || isSubmitting || currentEmail.length === 0}
+              onClick={handleSendEmailVerification}
+              className="h-11 rounded-md border border-zinc-300 bg-white text-sm font-bold text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-60"
+            >
+              {isSendingEmail ? "발송 중" : "인증번호 발송"}
+            </button>
+          </div>
+          <div className="mt-3 grid grid-cols-[1fr_112px] gap-2">
+            <input
+              value={emailVerificationCode}
+              onChange={(event) =>
+                setEmailVerificationCode(event.target.value.replace(/\D/g, "").slice(0, 6))
+              }
+              inputMode="numeric"
+              maxLength={6}
+              placeholder="6자리 코드"
+              className="form-input"
+            />
+            <button
+              type="button"
+              disabled={
+                isVerifyingEmail ||
+                isSubmitting ||
+                currentEmail.length === 0 ||
+                emailVerificationCode.length !== 6
+              }
+              onClick={handleVerifyEmail}
+              className="h-11 rounded-md bg-zinc-950 text-sm font-bold text-white transition hover:bg-zinc-700 disabled:opacity-60"
+            >
+              {isVerifyingEmail ? "확인 중" : "인증 확인"}
+            </button>
+          </div>
+          {emailVerificationMessage ? (
+            <p
+              className={`mt-2 text-xs font-semibold ${
+                isEmailVerified ? "text-teal-700" : "text-amber-700"
+              }`}
+            >
+              {emailVerificationMessage}
+            </p>
+          ) : null}
+        </Field>
         <Field label="비밀번호" error={errors.password?.message}>
           <input
             type="password"
@@ -159,7 +280,7 @@ export default function SignupPage() {
         ) : null}
         <button
           type="submit"
-          disabled={isSubmitting}
+          disabled={isSubmitting || !isEmailVerified}
           className="h-11 w-full rounded-md bg-zinc-950 text-sm font-bold text-white disabled:opacity-60"
         >
           {isSubmitting ? "가입 중..." : "가입하기"}
