@@ -31,6 +31,8 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
+          build-args: |
+            NEXT_PUBLIC_API_BASE_URL=/
           # id 부분을 본인의 도커 허브 계정 ID로 변경하거나 secrets로 관리하세요.
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/dev11-final-team03-frontend:latest
           # 빌드 캐시를 활용해 배포 속도를 높입니다.
