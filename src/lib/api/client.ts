@@ -6,10 +6,12 @@ import {
 } from "@/lib/auth";
 
 const DEFAULT_API_BASE_URL = "http://localhost:8080";
+const ENV_API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 
 export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/+$/, "") ||
-  DEFAULT_API_BASE_URL;
+  ENV_API_BASE_URL === undefined
+    ? DEFAULT_API_BASE_URL
+    : ENV_API_BASE_URL.replace(/\/+$/, "");
 
 export const ACCESS_TOKEN_STORAGE_KEY = "baton_access_token";
 
@@ -57,21 +59,31 @@ function shouldAttemptReissue(path: string): boolean {
   );
 }
 
-function buildUrl(path: string, query?: object): string {
+export function buildApiUrl(path: string, query?: object): string {
   const pathname = path.startsWith("/") ? path : `/${path}`;
-  const url = new URL(`${API_BASE_URL}${pathname}`);
 
-  if (!query) {
+  if (API_BASE_URL) {
+    const url = new URL(`${API_BASE_URL}${pathname}`);
+
+    Object.entries(query ?? {}).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        url.searchParams.set(key, String(value));
+      }
+    });
+
     return url.toString();
   }
 
-  Object.entries(query).forEach(([key, value]) => {
+  const searchParams = new URLSearchParams();
+
+  Object.entries(query ?? {}).forEach(([key, value]) => {
     if (value !== undefined && value !== null) {
-      url.searchParams.set(key, String(value));
+      searchParams.set(key, String(value));
     }
   });
 
-  return url.toString();
+  const search = searchParams.toString();
+  return search ? `${pathname}?${search}` : pathname;
 }
 
 function shouldStringifyBody(
@@ -131,7 +143,7 @@ async function executeRequest<T>(
     headers.set("Content-Type", "application/json");
   }
 
-  const response = await fetch(buildUrl(path, query), {
+  const response = await fetch(buildApiUrl(path, query), {
     ...requestOptions,
     body: toRequestBody(body, isJsonBody),
     credentials: "include",
@@ -145,7 +157,7 @@ async function executeRequest<T>(
 }
 
 async function reissueAccessToken(): Promise<boolean> {
-  const response = await fetch(buildUrl("/api/v1/auth/reissue"), {
+  const response = await fetch(buildApiUrl("/api/v1/auth/reissue"), {
     method: "POST",
     credentials: "include",
   });

@@ -16,6 +16,16 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## Backend URL
+
+Next.js inlines `NEXT_PUBLIC_*` values during `next build`.
+
+For EC2 deployments where Nginx proxies `/api/v1/*` and `/ws/*` to the backend, build with the same-origin value:
+
+```bash
+docker build --build-arg NEXT_PUBLIC_API_BASE_URL=/ -t frontend .
+```
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

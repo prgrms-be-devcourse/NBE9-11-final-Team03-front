@@ -40,7 +40,8 @@ export type ChatSocketConnection = {
 };
 
 const SOCKET_URL =
-  process.env.NEXT_PUBLIC_WS_URL?.replace(/\/+$/, "") ?? `${API_BASE_URL}/ws`;
+  process.env.NEXT_PUBLIC_WS_URL?.replace(/\/+$/, "") ||
+  (API_BASE_URL ? `${API_BASE_URL}/ws` : "/ws");
 
 export function connectChatSocket({
   roomId,
@@ -56,11 +57,11 @@ export function connectChatSocket({
 
   const client = new Client({
     webSocketFactory: () => new SockJS(SOCKET_URL),
-      connectHeaders: accessToken
-          ? {
-              Authorization: `Bearer ${accessToken}`,
-          }
-          : {},
+    connectHeaders: accessToken
+      ? {
+          Authorization: `Bearer ${accessToken}`,
+        }
+      : {},
     reconnectDelay: 3000,
     onConnect: () => {
       messageSubscription = client.subscribe(
