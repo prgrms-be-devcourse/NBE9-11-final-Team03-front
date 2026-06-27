@@ -27,9 +27,7 @@ export function MatchProposalInbox({ type }: MatchProposalInboxProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState("");
-  const [preparedChatRoomId, setPreparedChatRoomId] = useState<number | null>(
-    null,
-  );
+  const [preparedChatHref, setPreparedChatHref] = useState<string | null>(null);
   const [processingProposalId, setProcessingProposalId] = useState<
     number | null
   >(null);
@@ -49,7 +47,7 @@ export function MatchProposalInbox({ type }: MatchProposalInboxProps) {
 
       if (clearSuccessMessage) {
         setSuccessMessage("");
-        setPreparedChatRoomId(null);
+        setPreparedChatHref(null);
       }
 
       try {
@@ -92,23 +90,28 @@ export function MatchProposalInbox({ type }: MatchProposalInboxProps) {
 
     setErrorMessage(null);
     setSuccessMessage("");
-    setPreparedChatRoomId(null);
+    setPreparedChatHref(null);
     setProcessingProposalId(proposalId);
 
     try {
       await matchApi.acceptProposal(proposalId);
 
       try {
-        const chatRoom = await chatApi.createRoom({
-          talentId: proposal.providerTalentId,
-          buyerId: proposal.requesterId,
-        });
+        const chatRooms = await chatApi.getMyChatRooms({ size: 20 });
+        const transactionRoom = chatRooms.content.find(
+          (room) =>
+            room.talentId === proposal.providerTalentId &&
+            room.roomType === "TRANSACTION",
+        );
 
-        setPreparedChatRoomId(chatRoom.id);
-        setSuccessMessage("제안을 수락했고 채팅방이 준비되었습니다.");
+        setPreparedChatHref(
+          transactionRoom ? `/chats?roomId=${transactionRoom.roomId}` : "/chats",
+        );
+        setSuccessMessage("제안을 수락했습니다. 생성된 거래 채팅을 확인해 주세요.");
       } catch {
+        setPreparedChatHref("/chats");
         setSuccessMessage(
-          "제안은 수락되었지만 채팅방을 준비하지 못했습니다. 채팅 메뉴에서 직접 방을 열어 주세요.",
+          "제안은 수락되었습니다. 채팅 메뉴에서 생성된 거래 채팅을 확인해 주세요.",
         );
       }
 
@@ -125,7 +128,7 @@ export function MatchProposalInbox({ type }: MatchProposalInboxProps) {
   async function handleReject(proposalId: number) {
     setErrorMessage(null);
     setSuccessMessage("");
-    setPreparedChatRoomId(null);
+    setPreparedChatHref(null);
     setProcessingProposalId(proposalId);
 
     try {
@@ -151,12 +154,12 @@ export function MatchProposalInbox({ type }: MatchProposalInboxProps) {
       {successMessage ? (
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-md bg-teal-50 p-3 text-sm font-semibold text-teal-700">
           <p>{successMessage}</p>
-          {preparedChatRoomId !== null ? (
+          {preparedChatHref !== null ? (
             <Link
-              href={`/chats?roomId=${preparedChatRoomId}`}
+              href={preparedChatHref}
               className="btn btn-secondary rounded-md border border-teal-200 bg-white px-3 py-2 text-sm font-black text-teal-700 transition hover:bg-teal-100"
             >
-              채팅방으로 이동
+              채팅으로 이동
             </Link>
           ) : null}
         </div>

@@ -1,14 +1,19 @@
 "use client";
 
-import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
+import { FormEvent, useEffect, useState } from "react";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { SectionTitle } from "@/components/common/SectionTitle";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { TalentAttachmentPanel } from "@/components/talent/TalentAttachmentPanel";
 import { TalentDetailActions } from "@/components/talent/TalentDetailActions";
-import { talentApi, type TalentDetailRes } from "@/lib/api";
+import {
+  talentApi,
+  type ReportReason,
+  type TalentDetailRes,
+} from "@/lib/api";
 import { setStoredLastTalentId } from "@/lib/auth";
 import {
   formatCredit,
@@ -55,10 +60,14 @@ function getTalentId(talent: TalentDetailRes): number | null {
 
 export default function TalentDetailPage() {
   const params = useParams<{ talentId: string }>();
+  const router = useRouter();
   const talentId = Number(params.talentId);
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const [talent, setTalent] = useState<TalentDetailRes | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -170,6 +179,26 @@ export default function TalentDetailPage() {
     talentAuthorId !== null &&
     currentUserId === talentAuthorId;
 
+  async function handleDeleteTalent() {
+    if (!talent || !window.confirm("이 재능을 삭제하시겠습니까?")) {
+      return;
+    }
+
+    setIsDeleting(true);
+    setActionMessage(null);
+
+    try {
+      await talentApi.delete(talent.id);
+      router.push("/talents");
+    } catch (error) {
+      setActionMessage(
+        error instanceof Error ? error.message : "재능 삭제에 실패했습니다.",
+      );
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
   return (
     <div className="fixed-container py-10">
       <div className="grid grid-cols-[1fr_340px] gap-8">
@@ -209,9 +238,33 @@ export default function TalentDetailPage() {
           <div className="mt-8">
             {/* UX guard only; the backend still performs the real permission check. */}
             {isOwner ? (
-              <p className="rounded-md bg-zinc-50 p-3 text-sm font-semibold text-zinc-500">
-                내가 등록한 재능입니다.
-              </p>
+              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4">
+                <p className="text-sm font-black text-zinc-950">
+                  내가 등록한 재능입니다.
+                </p>
+                <div className="mt-4 grid grid-cols-3 gap-3">
+                  <Link
+                    href={`/talents/${talent.id}/edit`}
+                    className="inline-flex h-11 items-center justify-center rounded-md bg-zinc-950 px-4 text-sm font-bold text-white transition hover:bg-zinc-700"
+                  >
+                    수정
+                  </Link>
+                  <button
+                    type="button"
+                    disabled={isDeleting}
+                    onClick={handleDeleteTalent}
+                    className="h-11 rounded-md border border-red-200 bg-white px-4 text-sm font-bold text-red-600 transition hover:bg-red-50 disabled:opacity-60"
+                  >
+                    {isDeleting ? "삭제 중" : "삭제"}
+                  </button>
+                  <a
+                    href="#talent-attachments"
+                    className="inline-flex h-11 items-center justify-center rounded-md border border-zinc-300 bg-white px-4 text-sm font-bold text-zinc-700 transition hover:bg-zinc-50"
+                  >
+                    첨부 관리
+                  </a>
+                </div>
+              </div>
             ) : currentUserId === null ? (
               <p className="rounded-md bg-zinc-50 p-3 text-sm font-semibold text-zinc-500">
                 로그인 후 이용해 주세요.
@@ -228,6 +281,11 @@ export default function TalentDetailPage() {
                 isLoggedIn={currentUserId !== null}
               />
             )}
+            {actionMessage ? (
+              <p className="mt-3 rounded-md bg-red-50 p-3 text-sm font-semibold text-red-700">
+                {actionMessage}
+              </p>
+            ) : null}
           </div>
         </article>
 
@@ -281,11 +339,20 @@ export default function TalentDetailPage() {
               확인 후 제공자에게 지급되며, 문제 발생 시 분쟁 신청이 가능합니다.
             </p>
           </div>
+          {!isOwner && currentUserId !== null ? (
+            <button
+              type="button"
+              onClick={() => setIsReportModalOpen(true)}
+              className="h-11 w-full rounded-md border border-red-200 bg-white px-4 text-sm font-bold text-red-600 transition hover:bg-red-50"
+            >
+              재능 신고
+            </button>
+          ) : null}
         </aside>
       </div>
 
-      <div className="mt-10">
-        <TalentAttachmentPanel talentId={talent.id} />
+      <div id="talent-attachments" className="mt-10 scroll-mt-24">
+        <TalentAttachmentPanel talentId={talent.id} isOwner={isOwner} />
       </div>
 
       <section className="mt-10">
@@ -298,6 +365,17 @@ export default function TalentDetailPage() {
           description="백엔드 리뷰 연동 전까지는 상세 정보만 확인할 수 있습니다."
         />
       </section>
+
+      {isReportModalOpen ? (
+        <TalentReportModal
+          talentId={talent.id}
+          onClose={() => setIsReportModalOpen(false)}
+          onReported={(message) => {
+            setIsReportModalOpen(false);
+            setActionMessage(message);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -307,6 +385,119 @@ function Metric({ label, value }: { label: string; value: string }) {
     <div>
       <p className="text-sm text-zinc-500">{label}</p>
       <p className="mt-1 font-bold text-zinc-950">{value}</p>
+    </div>
+  );
+}
+
+const reportReasons: { value: ReportReason; label: string }[] = [
+  { value: "ILLEGAL_OR_CHEATING", label: "불법 또는 부정행위" },
+  { value: "EXTERNAL_CONTACT_OR_AD", label: "외부 연락/광고 유도" },
+  { value: "INAPPROPRIATE_CONTENT", label: "부적절한 콘텐츠" },
+  { value: "ETC", label: "기타" },
+];
+
+function TalentReportModal({
+  talentId,
+  onClose,
+  onReported,
+}: {
+  talentId: number;
+  onClose: () => void;
+  onReported: (message: string) => void;
+}) {
+  const [reason, setReason] = useState<ReportReason>("INAPPROPRIATE_CONTENT");
+  const [description, setDescription] = useState("");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setErrorMessage(null);
+    setIsSubmitting(true);
+
+    try {
+      await talentApi.report(talentId, {
+        reason,
+        description: description.trim() || null,
+      });
+      onReported("신고가 접수되었습니다.");
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "신고 접수에 실패했습니다.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="talent-report-title"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/45 p-6"
+    >
+      <form
+        onSubmit={handleSubmit}
+        className="w-[480px] rounded-xl border border-zinc-200 bg-white p-7 shadow-2xl"
+      >
+        <h2 id="talent-report-title" className="text-xl font-black text-zinc-950">
+          재능 신고
+        </h2>
+        <p className="mt-2 text-sm leading-6 text-zinc-600">
+          신고 사유와 상세 설명을 남기면 관리자가 확인합니다.
+        </p>
+
+        <label className="mt-5 block text-sm font-semibold text-zinc-800">
+          신고 사유
+          <select
+            value={reason}
+            onChange={(event) => setReason(event.target.value as ReportReason)}
+            className="form-input mt-2"
+          >
+            {reportReasons.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="mt-4 block text-sm font-semibold text-zinc-800">
+          상세 설명
+          <textarea
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            maxLength={1000}
+            rows={5}
+            className="form-input mt-2 min-h-32 resize-none"
+          />
+        </label>
+
+        {errorMessage ? (
+          <p className="mt-4 rounded-md bg-red-50 p-3 text-sm font-semibold text-red-700">
+            {errorMessage}
+          </p>
+        ) : null}
+
+        <div className="mt-6 grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            disabled={isSubmitting}
+            onClick={onClose}
+            className="h-11 rounded-md border border-zinc-300 text-sm font-bold text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-60"
+          >
+            취소
+          </button>
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="h-11 rounded-md bg-red-600 text-sm font-bold text-white transition hover:bg-red-700 disabled:opacity-60"
+          >
+            {isSubmitting ? "접수 중..." : "신고 접수"}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

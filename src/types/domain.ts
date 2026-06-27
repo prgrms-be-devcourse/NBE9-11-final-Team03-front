@@ -30,12 +30,14 @@ export type ExchangeStatus =
 
 /** 크레딧 거래 타입 */
 export type CreditTransactionType =
-  | "EARN"
-  | "SPEND"
+  | "WELCOME"
+  | "PURCHASE_DEBIT"
   | "ESCROW_HOLD"
   | "ESCROW_RELEASE"
   | "REFUND"
-  | "CHARGE";
+  | "CHARGE"
+  | "REFERRAL_REWARD"
+  | "ADJUSTMENT";
 
 /** 에스크로 상태 */
 export type EscrowStatus = "HELD" | "RELEASED" | "REFUNDED" | "DISPUTED";

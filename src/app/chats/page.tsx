@@ -340,13 +340,13 @@ export default function ChatsPage() {
   );
 
   const openExistingRoom = useCallback(
-    async (roomId: number, userId: number) => {
+    async (roomId: number) => {
       setErrorMessage(null);
       setIsEnteringRoom(true);
       setIsConnectedToSocket(false);
 
       try {
-        const room = await chatApi.getRoom(roomId, userId);
+        const room = await chatApi.getRoom(roomId);
 
         setCurrentRoom(room);
         setSocketConnectionVersion((version) => version + 1);
@@ -388,7 +388,7 @@ export default function ChatsPage() {
     initialRoomQueryHandledRef.current = true;
 
     const timeoutId = window.setTimeout(() => {
-      void openExistingRoom(roomId, currentUserId);
+      void openExistingRoom(roomId);
     }, 0);
 
     return () => {
@@ -430,7 +430,7 @@ export default function ChatsPage() {
       return;
     }
 
-    await openExistingRoom(roomId, currentUserId);
+    await openExistingRoom(roomId);
   }
 
   async function handleLoadMoreRooms() {
@@ -795,7 +795,7 @@ function ChatRoomListButton({
           {room.lastMessage ?? "아직 메시지가 없습니다."}
         </p>
         <span className="mt-3 inline-flex rounded-full bg-zinc-100 px-2 py-1 text-[11px] font-black text-zinc-600">
-          {getRoomStatusLabel(room.status)}
+          {getRoomStatusLabel(room.roomType)}
         </span>
       </div>
     </button>

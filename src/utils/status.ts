@@ -34,12 +34,14 @@ export function getCreditTransactionTypeLabel(
   type: CreditTransactionType,
 ): string {
   const labels: Record<CreditTransactionType, string> = {
-    EARN: "적립",
-    SPEND: "사용",
+    WELCOME: "웰컴 크레딧",
+    PURCHASE_DEBIT: "구매 차감",
     ESCROW_HOLD: "에스크로 예치",
     ESCROW_RELEASE: "에스크로 지급",
     REFUND: "환불",
     CHARGE: "충전",
+    REFERRAL_REWARD: "추천 보상",
+    ADJUSTMENT: "관리자 조정",
   };
   return labels[type];
 }

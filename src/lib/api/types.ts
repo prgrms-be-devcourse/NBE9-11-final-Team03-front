@@ -17,7 +17,12 @@ export interface CategoryRes {
   sortOrder: number;
 }
 
-export type UserStatus = "ACTIVE" | "DORMANT" | "SUSPENDED" | "WITHDRAWN";
+export type UserStatus =
+  | "ACTIVE"
+  | "DORMANT"
+  | "SUSPENDED"
+  | "WITHDRAWN"
+  | "BANNED";
 
 export type UserRole = "USER" | "ADMIN";
 
@@ -54,7 +59,58 @@ export interface UserSignupRes {
   createdAt: string;
 }
 
+export interface EmailSendReq {
+  email: string;
+}
+
+export interface EmailVerificationReq {
+  email: string;
+  verificationCode: string;
+}
+
+export interface ProfileCategoryRes {
+  id: number;
+  name: string;
+  sortOrder: number;
+  active: boolean;
+}
+
+export interface ProfileUpdateReq {
+  profileImageUrl?: string | null;
+  introduction?: string | null;
+  myTalentCategoryIds?: number[] | null;
+  wantTalentCategoryIds?: number[] | null;
+  portfolioLinkList?: string[] | null;
+}
+
+export interface MyProfileDetailRes {
+  id: number;
+  nickname: string;
+  profileImageUrl: string | null;
+  introduction: string;
+  trustScore: number;
+  portfolioLinkList: string[];
+  myTalentCategories: ProfileCategoryRes[];
+  wantTalentCategories: ProfileCategoryRes[];
+  visible: boolean;
+}
+
+export interface ProfileUpdateRes extends MyProfileDetailRes {
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type TalentStatus = "ACTIVE" | "CLOSED";
+
+export type TalentSortType = "LATEST" | "RATING" | "POPULAR";
+
+export type ReportReason =
+  | "ILLEGAL_OR_CHEATING"
+  | "EXTERNAL_CONTACT_OR_AD"
+  | "INAPPROPRIATE_CONTENT"
+  | "ETC";
+
+export type ReportStatus = "PENDING" | "RESOLVED";
 
 export interface AuthorInfo {
   id?: number;
@@ -113,6 +169,29 @@ export interface TalentCreateReq {
 export interface TalentCreateRes {
   talentId?: number;
   id?: number;
+}
+
+export interface TalentUpdateRes {
+  talentId: number;
+  categoryId: number;
+  title: string;
+  content: string;
+  estimatedHours: number;
+  creditPrice: number;
+  status: TalentStatus;
+}
+
+export interface TalentReportReq {
+  reason: ReportReason;
+  description?: string | null;
+}
+
+export interface TalentReportRes {
+  reportId: number;
+  talentId: number;
+  reason: ReportReason;
+  status: ReportStatus;
+  createdAt: string;
 }
 
 export interface TalentAttachmentPresignedUrlReq {
@@ -236,7 +315,6 @@ export type ChatMessageType = "TEXT" | "IMAGE" | "SYSTEM";
 
 export interface ChatRoomCreateReq {
   talentId: number;
-  buyerId: number;
 }
 
 export interface ChatRoomRes {
@@ -245,6 +323,7 @@ export interface ChatRoomRes {
   buyerId: number;
   sellerId: number;
   tradeId: number | null;
+  tradeGroupId: number | null;
   status: ChatRoomType;
   lastMessageAt: string | null;
   createdAt: string;
@@ -253,6 +332,7 @@ export interface ChatRoomRes {
 export interface ChatRoomListItem {
   roomId: number;
   tradeId: number | null;
+  tradeGroupId: number | null;
   talentId: number;
   talentTitle: string | null;
   buyerId: number;
@@ -262,7 +342,7 @@ export interface ChatRoomListItem {
   opponentProfileImageUrl: string | null;
   lastMessage: string | null;
   lastMessageAt: string | null;
-  status: ChatRoomStatus;
+  roomType: ChatRoomStatus;
   createdAt: string;
 }
 
@@ -285,8 +365,8 @@ export type TradeType = "SWAP" | "PURCHASE";
 export type TradeStatus =
   | "IN_PROGRESS"
   | "UNDER_REVIEW"
+  | "AWAITING_PARTNER"
   | "COMPLETED"
-  | "CANCELED"
   | "CANCELLED"
   | "DISPUTED";
 
@@ -300,6 +380,7 @@ export type TradeEscrowStatus =
 export interface TradeRes {
   tradeId: number;
   matchId: number | null;
+  tradeGroupId: number | null;
   talentId: number;
   buyerId: number;
   sellerId: number;
@@ -316,6 +397,26 @@ export interface TradeRes {
   updatedAt: string;
 }
 
+export interface TradeListRes {
+  tradeId: number;
+  tradeGroupId: number | null;
+  talentId: number;
+  talentTitle?: string | null;
+  buyerId: number;
+  sellerId: number;
+  buyerNickname?: string | null;
+  sellerNickname?: string | null;
+  creditPrice: number;
+  tradeType: TradeType;
+  tradeStatus: TradeStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TradeDisputeReq {
+  reason: string;
+}
+
 export interface TradeSubmissionReq {
   fileKey: string;
   description: string;
@@ -323,7 +424,6 @@ export interface TradeSubmissionReq {
 
 export interface TradeSubmissionPresignedUrlReq {
   fileName: string;
-  contentType: string;
 }
 
 export interface TradeSubmissionPresignedUrlRes {
@@ -345,7 +445,15 @@ export interface CreditBalanceRes {
   escrowBalance: number;
 }
 
-export type CreditTransactionType = string;
+export type CreditTransactionType =
+  | "WELCOME"
+  | "PURCHASE_DEBIT"
+  | "ESCROW_HOLD"
+  | "ESCROW_RELEASE"
+  | "REFUND"
+  | "CHARGE"
+  | "REFERRAL_REWARD"
+  | "ADJUSTMENT";
 
 export interface CreditTransactionRes {
   transactionId: number;
@@ -356,4 +464,133 @@ export interface CreditTransactionRes {
   defaultReason: string;
   detailReason: string | null;
   createdAt: string;
+}
+
+export interface AdminPageRes<T> {
+  content: T[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+  hasNext: boolean;
+}
+
+export interface AdminUserSearchParams {
+  status?: UserStatus;
+  role?: UserRole;
+  keyword?: string;
+  page?: number;
+  size?: number;
+}
+
+export interface AdminUserStatusUpdateReq {
+  status: Exclude<UserStatus, "WITHDRAWN">;
+  reason: string;
+}
+
+export interface AdminUserRes {
+  userId: number;
+  email: string;
+  nickname: string;
+  profileImageUrl: string | null;
+  introduction: string;
+  trustScore: number;
+  status: UserStatus;
+  role: UserRole;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminTalentSearchParams {
+  status?: TalentStatus;
+  categoryId?: number;
+  keyword?: string;
+  page?: number;
+  size?: number;
+}
+
+export interface AdminTalentStatusUpdateReq {
+  status: TalentStatus;
+  reason: string;
+}
+
+export interface AdminTalentRes {
+  talentId: number;
+  authorId: number;
+  categoryId: number;
+  categoryName: string;
+  title: string;
+  estimatedHours: number;
+  creditPrice: number;
+  status: TalentStatus;
+  viewCount: number;
+  completeCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminReportSearchParams {
+  status?: ReportStatus;
+  reason?: ReportReason;
+  page?: number;
+  size?: number;
+}
+
+export interface AdminReportResolveReq {
+  memo: string;
+}
+
+export interface AdminTalentReportRes {
+  reportId: number;
+  talentId: number;
+  reporterId: number;
+  reason: ReportReason;
+  description: string | null;
+  status: ReportStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type AdminActionTargetType = "USER" | "TALENT" | "REPORT";
+
+export type AdminActionType =
+  | "USER_STATUS_CHANGED"
+  | "TALENT_STATUS_CHANGED"
+  | "REPORT_RESOLVED";
+
+export interface AdminActionLogSearchParams {
+  adminId?: number;
+  targetType?: AdminActionTargetType;
+  targetId?: number;
+  actionType?: AdminActionType;
+  page?: number;
+  size?: number;
+}
+
+export interface AdminActionLogRes {
+  logId: number;
+  adminId: number;
+  targetType: AdminActionTargetType;
+  targetId: number;
+  actionType: AdminActionType;
+  reason: string | null;
+  createdAt: string;
+}
+
+export type DisputeVerdict = "BUYER_WIN" | "SELLER_WIN";
+
+export interface AdminDisputeRes {
+  tradeId: number;
+  matchId: number | null;
+  tradeGroupId: number | null;
+  talentId: number;
+  buyerId: number;
+  sellerId: number;
+  creditPrice: number;
+  tradeType: TradeType;
+  tradeStatus: TradeStatus;
+  escrowStatus: TradeEscrowStatus;
+  disputeReason: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
