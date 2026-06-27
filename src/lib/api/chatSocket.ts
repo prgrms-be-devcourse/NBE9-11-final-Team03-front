@@ -1,5 +1,6 @@
 import { Client, type IMessage, type StompSubscription } from "@stomp/stompjs";
 import SockJS from "sockjs-client";
+import { API_BASE_URL } from "@/lib/api/client";
 import { getAccessToken } from "@/lib/auth";
 
 export type ChatSocketMessage = {
@@ -38,7 +39,8 @@ export type ChatSocketConnection = {
   disconnect: () => void;
 };
 
-const SOCKET_URL = "http://localhost:8080/ws";
+const SOCKET_URL =
+  process.env.NEXT_PUBLIC_WS_URL?.replace(/\/+$/, "") ?? `${API_BASE_URL}/ws`;
 
 export function connectChatSocket({
   roomId,
@@ -54,11 +56,11 @@ export function connectChatSocket({
 
   const client = new Client({
     webSocketFactory: () => new SockJS(SOCKET_URL),
-    connectHeaders: accessToken
-      ? {
-          Authorization: `Bearer ${accessToken}`,
-        }
-      : {},
+      connectHeaders: accessToken
+          ? {
+              Authorization: `Bearer ${accessToken}`,
+          }
+          : {},
     reconnectDelay: 3000,
     onConnect: () => {
       messageSubscription = client.subscribe(

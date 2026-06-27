@@ -8,6 +8,7 @@ export interface TalentFilterValue {
   minCredits?: number;
   maxCredits?: number;
   minRating?: number;
+  completedOnly?: boolean;
 }
 
 interface TalentFilterProps {
@@ -65,7 +66,7 @@ export function TalentFilter({ categories, value, onChange }: TalentFilterProps)
   ];
 
   return (
-    <div className="grid grid-cols-3 gap-3 rounded-lg border border-zinc-200 bg-white p-4">
+    <div className="grid grid-cols-4 gap-3 rounded-lg border border-zinc-200 bg-white p-4">
       <label className="text-sm font-semibold text-zinc-700">
         카테고리
         <Listbox
@@ -106,6 +107,17 @@ export function TalentFilter({ categories, value, onChange }: TalentFilterProps)
             onChange({ ...value, minRating: parseOptionalNumber(selected) })
           }
         />
+      </label>
+      <label className="flex min-h-[72px] items-center gap-2 rounded-md border border-zinc-200 bg-zinc-50 px-3 text-sm font-semibold text-zinc-700">
+        <input
+          type="checkbox"
+          checked={value.completedOnly === true}
+          onChange={(event) =>
+            onChange({ ...value, completedOnly: event.target.checked })
+          }
+          className="h-4 w-4 accent-teal-700"
+        />
+        완료 이력 있음
       </label>
     </div>
   );

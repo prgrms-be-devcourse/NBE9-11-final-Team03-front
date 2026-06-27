@@ -12,9 +12,11 @@ import {
   clearAuthSession,
   getStoredNickname,
   getStoredProfileImageUrl,
+  getStoredUserRole,
   isLoggedIn as getIsLoggedIn,
   subscribeAuthChanged,
 } from "@/lib/auth";
+import type { UserRole } from "@/lib/api";
 
 const publicNavItems = [
   { href: "/talents", label: "재능 둘러보기" },
@@ -24,6 +26,7 @@ const authNavItems = [
   { href: "/talents", label: "재능 둘러보기" },
   { href: "/talents/new", label: "재능 등록" },
   { href: "/matches", label: "매칭 추천" },
+  { href: "/trades", label: "거래" },
   { href: "/chats", label: "채팅" },
   { href: "/credits", label: "크레딧 지갑" },
 ];
@@ -32,6 +35,7 @@ interface HeaderAuthState {
   isLoggedIn: boolean;
   nickname: string | null;
   profileImageUrl: string | null;
+  role: UserRole | null;
 }
 
 function readHeaderAuthState(): HeaderAuthState {
@@ -39,6 +43,7 @@ function readHeaderAuthState(): HeaderAuthState {
     isLoggedIn: getIsLoggedIn(),
     nickname: getStoredNickname(),
     profileImageUrl: getStoredProfileImageUrl(),
+    role: getStoredUserRole(),
   };
 }
 
@@ -49,8 +54,13 @@ export function Header() {
     isLoggedIn: false,
     nickname: null,
     profileImageUrl: null,
+    role: null,
   });
-  const navItems = authState.isLoggedIn ? authNavItems : publicNavItems;
+  const navItems = authState.isLoggedIn
+    ? authState.role === "ADMIN"
+      ? [...authNavItems, { href: "/admin", label: "관리자" }]
+      : authNavItems
+    : publicNavItems;
 
   useEffect(() => {
     function syncAuthState(): void {
@@ -110,6 +120,12 @@ export function Header() {
     if (href === "/chats") {
       return pathname.startsWith("/chats");
     }
+    if (href === "/trades") {
+      return pathname.startsWith("/trades");
+    }
+    if (href === "/admin") {
+      return pathname.startsWith("/admin");
+    }
     return pathname === href;
   }
 
@@ -154,6 +170,7 @@ export function Header() {
               <ProfileMenu
                 nickname={authState.nickname}
                 profileImageUrl={authState.profileImageUrl}
+                isAdmin={authState.role === "ADMIN"}
                 onLogout={handleLogout}
               />
               <button

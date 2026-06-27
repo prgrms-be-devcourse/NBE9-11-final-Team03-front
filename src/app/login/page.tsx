@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { authApi } from "@/lib/api";
-import { extractUserIdFromLoginResponse, setAuthStorage } from "@/lib/auth";
+import { authApi, profileApi } from "@/lib/api";
+import { extractAuthClaimsFromAccessToken, setAuthStorage } from "@/lib/auth";
 
 const LOGIN_FAILURE_MESSAGE = "이메일 또는 비밀번호가 올바르지 않습니다.";
 
@@ -34,7 +34,8 @@ export default function LoginPage() {
         email: values.email,
         password: values.password,
       });
-      const userId = extractUserIdFromLoginResponse(response);
+      const claims = extractAuthClaimsFromAccessToken(response.accessToken);
+      const userId = claims.userId;
 
       if (userId === null) {
         setSubmitError("로그인은 성공했지만 사용자 정보를 확인하지 못했습니다.");
@@ -42,9 +43,22 @@ export default function LoginPage() {
       }
 
       setAuthStorage(response.accessToken, userId, {
+        role: claims.role,
         nickname: null,
         profileImageUrl: null,
       });
+
+      try {
+        const profile = await profileApi.getMe();
+        setAuthStorage(response.accessToken, userId, {
+          role: claims.role,
+          nickname: profile.nickname,
+          profileImageUrl: profile.profileImageUrl,
+        });
+      } catch {
+        // 프로필 조회 실패와 무관하게 로그인은 유지한다.
+      }
+
       router.push("/talents");
     } catch {
       setSubmitError(LOGIN_FAILURE_MESSAGE);

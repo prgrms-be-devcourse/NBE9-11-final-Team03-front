@@ -6,12 +6,14 @@ import { useEffect, useRef, useState } from "react";
 interface ProfileMenuProps {
   nickname: string | null;
   profileImageUrl: string | null;
+  isAdmin: boolean;
   onLogout: () => void;
 }
 
 const profileMenuItems = [
   { href: "/mypage", label: "마이페이지" },
-  { href: "/mypage/edit", label: "회원 정보 수정" },
+  { href: "/profile/edit", label: "프로필 수정" },
+  { href: "/trades", label: "내 거래" },
   { href: "/matches?tab=received", label: "받은 제안" },
   { href: "/matches?tab=sent", label: "보낸 제안" },
   { href: "/chats", label: "채팅" },
@@ -21,6 +23,7 @@ const profileMenuItems = [
 export function ProfileMenu({
   nickname,
   profileImageUrl,
+  isAdmin,
   onLogout,
 }: ProfileMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -105,6 +108,16 @@ export function ProfileMenu({
               {item.label}
             </Link>
           ))}
+          {isAdmin ? (
+            <Link
+              href="/admin"
+              role="menuitem"
+              onClick={() => setIsOpen(false)}
+              className="block px-4 py-2.5 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-50 hover:text-zinc-950"
+            >
+              관리자
+            </Link>
+          ) : null}
           <div className="my-1 border-t border-zinc-100" />
           <button
             type="button"

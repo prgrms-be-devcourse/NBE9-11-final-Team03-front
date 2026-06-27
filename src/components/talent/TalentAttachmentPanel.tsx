@@ -10,7 +10,6 @@ import {
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { talentApi, type TalentAttachmentRes } from "@/lib/api";
-import { hasStoredAccessToken } from "@/lib/auth";
 import { formatDate } from "@/utils/format";
 
 const ALLOWED_IMAGE_TYPES = [
@@ -33,10 +32,19 @@ function validateImageFile(file: File): string | null {
   return null;
 }
 
-export function TalentAttachmentPanel({ talentId }: { talentId: number }) {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+type AttachmentMode = "file" | "link";
+
+export function TalentAttachmentPanel({
+  talentId,
+  isOwner,
+}: {
+  talentId: number;
+  isOwner: boolean;
+}) {
   const [attachments, setAttachments] = useState<TalentAttachmentRes[]>([]);
+  const [mode, setMode] = useState<AttachmentMode>("file");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [linkUrl, setLinkUrl] = useState("");
   const [description, setDescription] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState("");
@@ -67,7 +75,6 @@ export function TalentAttachmentPanel({ talentId }: { talentId: number }) {
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
-      setIsLoggedIn(hasStoredAccessToken());
       void loadAttachments();
     }, 0);
 
@@ -100,8 +107,8 @@ export function TalentAttachmentPanel({ talentId }: { talentId: number }) {
   async function handleUpload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!isLoggedIn) {
-      setErrorMessage("로그인 후 이용해 주세요.");
+    if (!isOwner) {
+      setErrorMessage("작성자만 첨부파일을 관리할 수 있습니다.");
       return;
     }
 
@@ -152,8 +159,8 @@ export function TalentAttachmentPanel({ talentId }: { talentId: number }) {
   }
 
   async function handleDeleteAttachment(attachmentId: number) {
-    if (!isLoggedIn) {
-      setErrorMessage("로그인 후 이용해 주세요.");
+    if (!isOwner) {
+      setErrorMessage("작성자만 첨부파일을 삭제할 수 있습니다.");
       return;
     }
 
@@ -176,13 +183,51 @@ export function TalentAttachmentPanel({ talentId }: { talentId: number }) {
     }
   }
 
+  async function handleSaveLink(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!isOwner) {
+      setErrorMessage("작성자만 외부 참고 링크를 저장할 수 있습니다.");
+      return;
+    }
+
+    const nextLinkUrl = linkUrl.trim();
+    if (!nextLinkUrl) {
+      setErrorMessage("저장할 외부 참고 링크를 입력해 주세요.");
+      return;
+    }
+
+    setErrorMessage(null);
+    setSuccessMessage("");
+    setIsUploading(true);
+
+    try {
+      await talentApi.saveAttachment(talentId, {
+        url: nextLinkUrl,
+        description: description.trim() || null,
+      });
+      setLinkUrl("");
+      setDescription("");
+      setSuccessMessage("외부 참고 링크가 등록되었습니다.");
+      await loadAttachments();
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "외부 참고 링크를 저장하지 못했습니다.",
+      );
+    } finally {
+      setIsUploading(false);
+    }
+  }
+
   return (
     <section className="rounded-lg border border-zinc-200 bg-white p-6">
       <div className="flex items-start justify-between gap-5">
         <div>
           <h2 className="text-xl font-black text-zinc-950">첨부파일</h2>
           <p className="mt-2 text-sm leading-6 text-zinc-600">
-            재능을 설명하는 이미지 파일을 확인할 수 있습니다.
+            재능을 설명하는 이미지 파일과 외부 참고 링크를 확인할 수 있습니다.
           </p>
         </div>
         <button
@@ -237,7 +282,7 @@ export function TalentAttachmentPanel({ talentId }: { talentId: number }) {
                     등록일 {formatDate(attachment.createdAt)}
                   </p>
                 </div>
-                {isLoggedIn ? (
+                {isOwner ? (
                   <button
                     type="button"
                     disabled={deletingAttachmentId === attachment.attachmentId}
@@ -257,51 +302,120 @@ export function TalentAttachmentPanel({ talentId }: { talentId: number }) {
         )}
       </div>
 
-      {isLoggedIn ? (
-        <form
-          onSubmit={handleUpload}
-          className="mt-6 rounded-lg border border-zinc-200 bg-zinc-50 p-5"
-        >
-          <p className="font-black text-zinc-950">첨부파일 업로드</p>
-          <p className="mt-1 text-xs leading-5 text-zinc-500">
-            PNG, JPEG, WEBP, GIF 이미지만 가능하며 최대 5MB까지 업로드할 수
-            있습니다.
-          </p>
-          <div className="mt-4 grid gap-4">
-            <label className="block text-sm font-semibold text-zinc-800">
-              이미지 파일
-              <input
-                type="file"
-                accept="image/png,image/jpeg,image/webp,image/gif"
-                onChange={handleFileChange}
-                className="mt-2 block w-full text-sm text-zinc-700 file:mr-4 file:h-10 file:rounded-md file:border-0 file:bg-zinc-950 file:px-4 file:text-sm file:font-bold file:text-white"
-              />
-            </label>
-            <label className="block text-sm font-semibold text-zinc-800">
-              설명
-              <textarea
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
-                rows={3}
-                maxLength={200}
-                className="form-input mt-2 min-h-24 resize-none"
-                placeholder="첨부파일 설명을 입력해 주세요."
-              />
-            </label>
+      {isOwner ? (
+        <div className="mt-6 rounded-lg border border-zinc-200 bg-zinc-50 p-5">
+          <div className="flex gap-2 rounded-lg border border-zinc-200 bg-white p-1">
+            {[
+              { value: "file" as const, label: "파일 업로드" },
+              { value: "link" as const, label: "외부 링크" },
+            ].map((item) => (
+              <button
+                key={item.value}
+                type="button"
+                onClick={() => {
+                  setMode(item.value);
+                  setErrorMessage(null);
+                  setSuccessMessage("");
+                }}
+                className={`h-10 flex-1 rounded-md px-4 text-sm font-bold transition ${
+                  mode === item.value
+                    ? "bg-zinc-950 text-white"
+                    : "text-zinc-600 hover:bg-zinc-50"
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
           </div>
-          <button
-            type="submit"
-            disabled={isUploading || selectedFile === null}
-            className="mt-4 h-10 rounded-md bg-zinc-950 px-5 text-sm font-bold text-white transition hover:bg-zinc-700 disabled:opacity-60"
-          >
-            {isUploading ? "업로드 중" : "첨부파일 등록"}
-          </button>
-        </form>
+
+          {mode === "file" ? (
+            <form onSubmit={handleUpload} className="mt-5">
+              <p className="font-black text-zinc-950">첨부파일 업로드</p>
+              <p className="mt-1 text-xs leading-5 text-zinc-500">
+                PNG, JPEG, WEBP, GIF 이미지만 가능하며 최대 5MB까지 업로드할 수
+                있습니다.
+              </p>
+              <div className="mt-4 grid gap-4">
+                <label className="block text-sm font-semibold text-zinc-800">
+                  이미지 파일
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif"
+                    onChange={handleFileChange}
+                    className="mt-2 block w-full text-sm text-zinc-700 file:mr-4 file:h-10 file:rounded-md file:border-0 file:bg-zinc-950 file:px-4 file:text-sm file:font-bold file:text-white"
+                  />
+                </label>
+                <AttachmentDescriptionField
+                  value={description}
+                  onChange={setDescription}
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={isUploading || selectedFile === null}
+                className="mt-4 h-10 rounded-md bg-zinc-950 px-5 text-sm font-bold text-white transition hover:bg-zinc-700 disabled:opacity-60"
+              >
+                {isUploading ? "업로드 중" : "첨부파일 등록"}
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleSaveLink} className="mt-5">
+              <p className="font-black text-zinc-950">외부 참고 링크</p>
+              <p className="mt-1 text-xs leading-5 text-zinc-500">
+                작업 예시, 포트폴리오, 참고 문서 링크를 저장할 수 있습니다.
+              </p>
+              <div className="mt-4 grid gap-4">
+                <label className="block text-sm font-semibold text-zinc-800">
+                  링크 URL
+                  <input
+                    value={linkUrl}
+                    onChange={(event) => setLinkUrl(event.target.value)}
+                    placeholder="https://example.com/reference"
+                    className="form-input mt-2"
+                  />
+                </label>
+                <AttachmentDescriptionField
+                  value={description}
+                  onChange={setDescription}
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={isUploading || linkUrl.trim().length === 0}
+                className="mt-4 h-10 rounded-md bg-zinc-950 px-5 text-sm font-bold text-white transition hover:bg-zinc-700 disabled:opacity-60"
+              >
+                {isUploading ? "저장 중" : "링크 등록"}
+              </button>
+            </form>
+          )}
+        </div>
       ) : (
         <p className="mt-6 rounded-lg bg-zinc-50 p-4 text-sm font-semibold text-zinc-500">
-          첨부파일 업로드와 삭제는 로그인 후 이용할 수 있습니다.
+          첨부파일 업로드와 삭제는 작성자만 이용할 수 있습니다.
         </p>
       )}
     </section>
+  );
+}
+
+function AttachmentDescriptionField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="block text-sm font-semibold text-zinc-800">
+      설명
+      <textarea
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        rows={3}
+        maxLength={200}
+        className="form-input mt-2 min-h-24 resize-none"
+        placeholder="첨부 설명을 입력해 주세요."
+      />
+    </label>
   );
 }

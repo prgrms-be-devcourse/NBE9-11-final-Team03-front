@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FeedbackModal } from "@/components/common/FeedbackModal";
 import { matchApi } from "@/lib/api";
+import { getStoredLastTalentId, getStoredUserId } from "@/lib/auth";
 
 interface TalentDetailActionsProps {
   providerId: number;
@@ -19,8 +20,23 @@ export function TalentDetailActions({
 }: TalentDetailActionsProps) {
   const [message, setMessage] = useState<string | null>(null);
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
+  const [requesterTalentIdInput, setRequesterTalentIdInput] = useState("");
   const [isSubmittingCreditRequest, setIsSubmittingCreditRequest] =
     useState(false);
+  const [isSubmittingSwapRequest, setIsSubmittingSwapRequest] = useState(false);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      const userId = getStoredUserId();
+      const storedTalentId = getStoredLastTalentId(userId);
+
+      if (storedTalentId !== null) {
+        setRequesterTalentIdInput(String(storedTalentId));
+      }
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, []);
 
   async function handleCreateCreditRequest() {
     if (!isLoggedIn) {
@@ -63,6 +79,43 @@ export function TalentDetailActions({
     }
   }
 
+  async function handleCreateSwapRequest() {
+    if (!isLoggedIn) {
+      setMessage("로그인 후 이용해 주세요.");
+      return;
+    }
+
+    if (isOwner) {
+      setMessage("내가 등록한 재능에는 제안할 수 없습니다.");
+      return;
+    }
+
+    const requesterTalentId = Number(requesterTalentIdInput.trim());
+    if (!Number.isInteger(requesterTalentId) || requesterTalentId <= 0) {
+      setMessage("교환에 사용할 내 재능 ID를 숫자로 입력해 주세요.");
+      return;
+    }
+
+    setMessage(null);
+    setIsSubmittingSwapRequest(true);
+
+    try {
+      await matchApi.createProposal({
+        requesterTalentId,
+        providerId,
+        providerTalentId,
+        requestMessage: "내 재능으로 교환을 제안합니다.",
+      });
+      setIsSuccessModalOpen(true);
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "교환 제안 전송에 실패했습니다.",
+      );
+    } finally {
+      setIsSubmittingSwapRequest(false);
+    }
+  }
+
   return (
     <>
       <div className="grid grid-cols-3 gap-3">
@@ -74,25 +127,27 @@ export function TalentDetailActions({
         >
           {isSubmittingCreditRequest ? "요청 중..." : "크레딧으로 요청하기"}
         </button>
+        <input
+          value={requesterTalentIdInput}
+          onChange={(event) =>
+            setRequesterTalentIdInput(event.target.value.replace(/\D/g, ""))
+          }
+          inputMode="numeric"
+          placeholder="내 재능 ID"
+          className="h-11 rounded-md border border-zinc-300 bg-white px-3 text-sm font-semibold outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+        />
         <button
           type="button"
-          disabled
-          className="h-11 rounded-md border border-zinc-300 bg-white px-4 text-sm font-bold text-zinc-400 disabled:cursor-not-allowed"
-          title="내 재능 선택 API가 없어 교환 제안은 아직 사용할 수 없습니다."
+          disabled={isSubmittingSwapRequest}
+          onClick={handleCreateSwapRequest}
+          className="h-11 rounded-md border border-zinc-300 bg-white px-4 text-sm font-bold text-zinc-700 transition hover:border-teal-300 hover:text-teal-700 disabled:opacity-60"
         >
-          내 재능으로 교환 제안하기
-        </button>
-        <button
-          type="button"
-          disabled
-          className="h-11 rounded-md border border-zinc-300 bg-white px-4 text-sm font-bold text-zinc-400 disabled:cursor-not-allowed"
-          title="관심 재능 저장 API가 아직 없습니다."
-        >
-          관심 재능으로 저장하기
+          {isSubmittingSwapRequest ? "제안 중..." : "교환 제안"}
         </button>
       </div>
       <p className="mt-2 text-xs font-semibold text-zinc-500">
-        내 재능 선택 API가 없어 교환 제안은 아직 사용할 수 없습니다.
+        교환 제안은 requesterTalentId가 필요합니다. 최근 확인한 내 재능 ID가
+        있으면 자동으로 채워지고, 아니면 직접 입력해 주세요.
       </p>
 
       {message ? (

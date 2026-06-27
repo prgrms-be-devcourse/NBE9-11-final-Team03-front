@@ -17,10 +17,10 @@ const MAX_SUBMISSION_FILE_SIZE_BYTES = 20 * 1024 * 1024;
 const TRADE_STATUS_LABELS: Record<string, string> = {
   IN_PROGRESS: "거래 진행 중",
   COMPLETED: "거래 완료",
-  CANCELED: "거래 취소",
   CANCELLED: "거래 취소",
   DISPUTED: "분쟁 중",
   UNDER_REVIEW: "구매자 검토 중",
+  AWAITING_PARTNER: "상대 확정 대기",
 };
 
 const ESCROW_STATUS_LABELS: Record<string, string> = {
@@ -111,6 +111,7 @@ export default function TradeDetailPage() {
   const [submission, setSubmission] = useState<TradeSubmissionRes | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [description, setDescription] = useState("");
+  const [disputeReason, setDisputeReason] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [submissionMessage, setSubmissionMessage] = useState<string | null>(
@@ -227,8 +228,8 @@ export default function TradeDetailPage() {
     if (
       !trade ||
       currentUserId === null ||
-      (trade.tradeStatus !== "UNDER_REVIEW" &&
-        trade.tradeStatus !== "COMPLETED")
+      currentUserId !== trade.buyerId ||
+      trade.tradeStatus !== "UNDER_REVIEW"
     ) {
       return;
     }
@@ -261,6 +262,59 @@ export default function TradeDetailPage() {
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "구매 확정에 실패했습니다.",
+      );
+    } finally {
+      setIsActionLoading(false);
+    }
+  }
+
+  async function handleCancelTrade() {
+    if (!trade || currentUserId === null) {
+      return;
+    }
+
+    if (!window.confirm("진행 중인 거래를 취소하시겠습니까?")) {
+      return;
+    }
+
+    setErrorMessage(null);
+    setSuccessMessage("");
+    setIsActionLoading(true);
+
+    try {
+      await tradeApi.cancel(trade.tradeId);
+      await refreshTrade("거래가 취소되었습니다.");
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "거래 취소에 실패했습니다.",
+      );
+    } finally {
+      setIsActionLoading(false);
+    }
+  }
+
+  async function handleDisputeTrade() {
+    if (!trade || currentUserId === null) {
+      return;
+    }
+
+    const reason = disputeReason.trim();
+    if (reason.length < 5 || reason.length > 200) {
+      setErrorMessage("분쟁 사유는 5자 이상 200자 이하로 입력해 주세요.");
+      return;
+    }
+
+    setErrorMessage(null);
+    setSuccessMessage("");
+    setIsActionLoading(true);
+
+    try {
+      await tradeApi.dispute(trade.tradeId, { reason });
+      setDisputeReason("");
+      await refreshTrade("분쟁이 신청되었습니다.");
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "분쟁 신청에 실패했습니다.",
       );
     } finally {
       setIsActionLoading(false);
@@ -326,7 +380,6 @@ export default function TradeDetailPage() {
         trade.tradeId,
         {
           fileName: selectedFile.name,
-          contentType: selectedFile.type || "application/octet-stream",
         },
       );
 
@@ -363,19 +416,27 @@ export default function TradeDetailPage() {
     trade !== null && isSeller && trade.tradeStatus === "IN_PROGRESS";
   const canReviewResult =
     trade !== null && isBuyer && trade.tradeStatus === "UNDER_REVIEW";
+  const canCancelTrade =
+    trade !== null &&
+    (isBuyer || isSeller) &&
+    trade.tradeStatus === "IN_PROGRESS";
+  const canDisputeTrade =
+    trade !== null && isBuyer && trade.tradeStatus === "UNDER_REVIEW";
+  const shouldShowSwapAwaitingPartnerNotice =
+    trade !== null &&
+    trade.tradeType === "SWAP" &&
+    trade.tradeStatus === "AWAITING_PARTNER";
   const shouldShowBuyerInProgressNotice =
     trade !== null && isBuyer && trade.tradeStatus === "IN_PROGRESS";
   const shouldShowSellerReviewNotice =
     trade !== null && isSeller && trade.tradeStatus === "UNDER_REVIEW";
   const shouldShowSubmissionSection =
     submission !== null ||
-    (trade !== null &&
-      (trade.tradeStatus === "UNDER_REVIEW" ||
-        trade.tradeStatus === "COMPLETED"));
+    (trade !== null && isBuyer && trade.tradeStatus === "UNDER_REVIEW");
   const terminalTradeMessage =
     trade?.tradeStatus === "COMPLETED"
       ? "거래가 완료되었습니다."
-      : trade?.tradeStatus === "CANCELLED" || trade?.tradeStatus === "CANCELED"
+      : trade?.tradeStatus === "CANCELLED"
         ? "거래가 취소되었습니다."
         : trade?.tradeStatus === "DISPUTED"
           ? "분쟁 중인 거래입니다."
@@ -502,6 +563,30 @@ export default function TradeDetailPage() {
               />
             ) : null}
 
+            {!terminalTradeMessage && shouldShowSwapAwaitingPartnerNotice ? (
+              <TradeActionNotice
+                title="상대 확정을 기다리고 있습니다"
+                description="재능 교환 거래의 한쪽 확정이 완료되었습니다. 상대방이 결과물을 확인하고 확정하면 교환 거래가 완료됩니다."
+              />
+            ) : null}
+
+            {!terminalTradeMessage && canCancelTrade ? (
+              <section className="rounded-lg border border-zinc-200 bg-white p-5">
+                <p className="font-black text-zinc-950">거래 취소</p>
+                <p className="mt-2 text-sm leading-6 text-zinc-600">
+                  작업 진행 중인 거래만 참여자가 취소할 수 있습니다.
+                </p>
+                <button
+                  type="button"
+                  disabled={isActionLoading}
+                  onClick={handleCancelTrade}
+                  className="mt-5 h-10 w-full rounded-md border border-red-200 px-4 text-sm font-bold text-red-600 transition hover:bg-red-50 disabled:opacity-60"
+                >
+                  거래 취소
+                </button>
+              </section>
+            ) : null}
+
             {!terminalTradeMessage && canReviewResult ? (
               <section className="rounded-lg border border-zinc-200 bg-white p-5">
                 <p className="font-black text-zinc-950">구매자 액션</p>
@@ -519,13 +604,42 @@ export default function TradeDetailPage() {
                   </button>
                   <button
                     type="button"
-                    disabled={isActionLoading}
+                    disabled={isActionLoading || trade.tradeStatus !== "UNDER_REVIEW"}
                     onClick={handleConfirmTrade}
                     className="h-10 rounded-md bg-zinc-950 px-4 text-sm font-bold text-white transition hover:bg-zinc-700 disabled:opacity-60"
                   >
                     구매 확정
                   </button>
                 </div>
+              </section>
+            ) : null}
+
+            {!terminalTradeMessage && canDisputeTrade ? (
+              <section className="rounded-lg border border-zinc-200 bg-white p-5">
+                <p className="font-black text-zinc-950">분쟁 신청</p>
+                <p className="mt-2 text-sm leading-6 text-zinc-600">
+                  결과물이 약속과 다를 경우 5자 이상 200자 이하로 사유를
+                  입력해 주세요.
+                </p>
+                <textarea
+                  value={disputeReason}
+                  onChange={(event) => setDisputeReason(event.target.value)}
+                  maxLength={200}
+                  rows={4}
+                  className="form-input mt-4 min-h-24 resize-none"
+                />
+                <button
+                  type="button"
+                  disabled={
+                    isActionLoading ||
+                    disputeReason.trim().length < 5 ||
+                    disputeReason.trim().length > 200
+                  }
+                  onClick={handleDisputeTrade}
+                  className="mt-3 h-10 w-full rounded-md border border-amber-300 bg-white px-4 text-sm font-bold text-amber-700 transition hover:bg-amber-50 disabled:opacity-60"
+                >
+                  분쟁 신청
+                </button>
               </section>
             ) : null}
 

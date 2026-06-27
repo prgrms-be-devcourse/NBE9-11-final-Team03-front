@@ -62,66 +62,72 @@ export function MatchRecommendationPanel() {
     number | null
   >(null);
   const [isSubmittingProposal, setIsSubmittingProposal] = useState(false);
+
   const hasSearched = requestContext !== null;
 
-  const loadRecommendations = useCallback(async (
-    context: RequestContext,
-    clearStatusMessage = true,
-    source: RecommendationLoadSource = "manual",
-  ) => {
-    setErrorMessage(null);
-    if (clearStatusMessage) {
-      setStatusMessage("");
-    }
-    setIsLoadingList(true);
+  const loadRecommendations = useCallback(
+    async (
+      context: RequestContext,
+      clearStatusMessage = true,
+      source: RecommendationLoadSource = "manual",
+    ) => {
+      setErrorMessage(null);
 
-    try {
-      const response = await matchApi.getRecommendations({
-        talentId: context.requesterTalentId,
-      });
-      const userId = getStoredUserId();
-
-      if (userId !== null) {
-        setStoredLastTalentId(userId, context.requesterTalentId);
-        setRememberedTalentId(context.requesterTalentId);
+      if (clearStatusMessage) {
+        setStatusMessage("");
       }
 
-      setRequesterTalentIdInput(String(context.requesterTalentId));
-      setRequestContext(context);
-      setIsManualInputOpen(false);
+      setIsLoadingList(true);
 
-      if (source === "stored") {
-        setStatusMessage("최근 등록한 재능 기준으로 추천을 조회했습니다.");
-      }
+      try {
+        const response = await matchApi.getRecommendations({
+          talentId: context.requesterTalentId,
+        });
+        const userId = getStoredUserId();
 
-      setRecommendations(Array.isArray(response) ? response : []);
-    } catch (error) {
-      const userId = getStoredUserId();
-
-      if (error instanceof ApiError && error.status === 403) {
         if (userId !== null) {
-          clearStoredLastTalentId(userId, context.requesterTalentId);
+          setStoredLastTalentId(userId, context.requesterTalentId);
+          setRememberedTalentId(context.requesterTalentId);
         }
 
-        setRequesterTalentIdInput("");
-        setRememberedTalentId(null);
-        setRequestContext(null);
-        setIsManualInputOpen(true);
-      }
+        setRequesterTalentIdInput(String(context.requesterTalentId));
+        setRequestContext(context);
+        setIsManualInputOpen(false);
 
-      setStatusMessage("");
-      setRecommendations([]);
-      setErrorMessage(
-        error instanceof ApiError && error.status === 403
-          ? source === "stored"
-            ? STORED_TALENT_FORBIDDEN_MESSAGE
-            : MANUAL_TALENT_FORBIDDEN_MESSAGE
-          : RECOMMENDATION_API_ERROR_MESSAGE,
-      );
-    } finally {
-      setIsLoadingList(false);
-    }
-  }, []);
+        if (source === "stored") {
+          setStatusMessage("최근 등록한 재능 기준으로 추천을 조회했습니다.");
+        }
+
+        setRecommendations(Array.isArray(response) ? response : []);
+      } catch (error) {
+        const userId = getStoredUserId();
+
+        if (error instanceof ApiError && error.status === 403) {
+          if (userId !== null) {
+            clearStoredLastTalentId(userId, context.requesterTalentId);
+          }
+
+          setRequesterTalentIdInput("");
+          setRememberedTalentId(null);
+          setRequestContext(null);
+          setIsManualInputOpen(true);
+        }
+
+        setStatusMessage("");
+        setRecommendations([]);
+        setErrorMessage(
+          error instanceof ApiError && error.status === 403
+            ? source === "stored"
+              ? STORED_TALENT_FORBIDDEN_MESSAGE
+              : MANUAL_TALENT_FORBIDDEN_MESSAGE
+            : RECOMMENDATION_API_ERROR_MESSAGE,
+        );
+      } finally {
+        setIsLoadingList(false);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -146,11 +152,7 @@ export function MatchRecommendationPanel() {
       setRememberedTalentId(storedTalentId);
       setRequesterTalentIdInput(String(storedTalentId));
       setRequestContext(nextContext);
-      void loadRecommendations(
-        nextContext,
-        false,
-        "stored",
-      );
+      void loadRecommendations(nextContext, false, "stored");
     }, 0);
 
     return () => window.clearTimeout(timeoutId);
@@ -201,6 +203,7 @@ export function MatchRecommendationPanel() {
         providerTalentId: recommendation.talentId,
         requesterTalentId: requestContext.requesterTalentId,
       });
+
       setSelectedDetail(response);
       setIsProfileModalOpen(false);
       setRequestMessage("");
@@ -221,6 +224,7 @@ export function MatchRecommendationPanel() {
     }
 
     const trimmedMessage = requestMessage.trim();
+
     if (!trimmedMessage) {
       setErrorMessage("제안 메시지를 입력해 주세요.");
       return;
@@ -237,19 +241,11 @@ export function MatchRecommendationPanel() {
         providerTalentId: selectedDetail.talentId,
         requestMessage: trimmedMessage,
       });
-      setStatusMessage("교환 제안이 전송되었습니다.");
+
+      setStatusMessage("교환 제안이 전송되었습니다. 상대방의 응답을 기다려 주세요.");
+      setSelectedDetail(null);
       setIsProfileModalOpen(false);
       setRequestMessage("");
-
-      try {
-        const refreshedDetail = await matchApi.getRecommendationDetail({
-          providerTalentId: selectedDetail.talentId,
-          requesterTalentId: requestContext.requesterTalentId,
-        });
-        setSelectedDetail(refreshedDetail);
-      } catch {
-        setSelectedDetail(null);
-      }
 
       await loadRecommendations(requestContext, false);
     } catch (error) {
@@ -337,6 +333,7 @@ export function MatchRecommendationPanel() {
             )}
           </>
         )}
+
         {isHydrated ? (
           <p className="mt-2 text-xs text-zinc-500">
             userId나 profileId가 아니라 재능 상세 URL의 talentId를 입력해야
@@ -386,9 +383,7 @@ export function MatchRecommendationPanel() {
             <RecommendationCard
               key={recommendation.talentId}
               recommendation={recommendation}
-              isLoadingDetail={
-                loadingDetailTalentId === recommendation.talentId
-              }
+              isLoadingDetail={loadingDetailTalentId === recommendation.talentId}
               onOpen={() => handleOpenDetail(recommendation)}
             />
           ))}
@@ -443,8 +438,8 @@ function RecommendationCard({
             {recommendation.title}
           </p>
           <p className="mt-1 truncate text-sm text-zinc-500">
-            {recommendation.categoryName} · 완료{" "}
-            {recommendation.completeCount}건
+            {recommendation.categoryName} · 완료 {recommendation.completeCount}
+            건
           </p>
         </div>
         <StatusBadge label={recommendation.categoryName} tone="info" />

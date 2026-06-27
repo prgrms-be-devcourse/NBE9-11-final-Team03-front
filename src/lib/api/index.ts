@@ -5,6 +5,19 @@ import {
   getStoredUserId,
 } from "@/lib/auth";
 import type {
+  AdminActionLogRes,
+  AdminActionLogSearchParams,
+  AdminDisputeRes,
+  AdminPageRes,
+  AdminReportResolveReq,
+  AdminReportSearchParams,
+  AdminTalentReportRes,
+  AdminTalentRes,
+  AdminTalentSearchParams,
+  AdminTalentStatusUpdateReq,
+  AdminUserRes,
+  AdminUserSearchParams,
+  AdminUserStatusUpdateReq,
   CategoryRes,
   ChatMessageCreateReq,
   ChatMessageRes,
@@ -14,6 +27,8 @@ import type {
   CreditBalanceRes,
   CreditTransactionRes,
   CursorPageRes,
+  EmailSendReq,
+  EmailVerificationReq,
   MatchProposalCreateReq,
   MatchProposalReceivedRes,
   MatchProposalRes,
@@ -21,6 +36,9 @@ import type {
   MatchProposalStatus,
   MatchRecommendationDetailRes,
   MatchRecommendationRes,
+  MyProfileDetailRes,
+  ProfileUpdateReq,
+  ProfileUpdateRes,
   TalentAttachmentPresignedUrlReq,
   TalentAttachmentPresignedUrlRes,
   TalentAttachmentRes,
@@ -29,11 +47,18 @@ import type {
   TalentCreateRes,
   TalentDetailRes,
   TalentListRes,
+  TalentReportReq,
+  TalentReportRes,
+  TalentSortType,
+  TalentUpdateRes,
+  TradeDisputeReq,
+  TradeListRes,
   TradeRes,
   TradeSubmissionPresignedUrlReq,
   TradeSubmissionPresignedUrlRes,
   TradeSubmissionReq,
   TradeSubmissionRes,
+  TradeStatus,
   UserLoginReq,
   UserLoginRes,
   UserSignupReq,
@@ -54,6 +79,15 @@ interface TalentSearchParams extends CursorParams {
   maxCredit?: number;
   minRating?: number;
   completedOnly?: boolean;
+  sort?: TalentSortType;
+}
+
+interface TalentListParams extends CursorParams {
+  sort?: TalentSortType;
+}
+
+interface TradeListParams extends CursorParams {
+  status?: TradeStatus;
 }
 
 interface MatchRecommendationParams {
@@ -63,14 +97,6 @@ interface MatchRecommendationParams {
 interface MatchRecommendationDetailParams {
   providerTalentId: number;
   requesterTalentId: number;
-}
-
-function createAcceptProposalIdempotencyKey(proposalId: number): string {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
-  }
-
-  return `accept-proposal-${proposalId}-${Date.now()}`;
 }
 
 export const authApi = {
@@ -88,6 +114,26 @@ export const authApi = {
     });
   },
 
+  reissue(): Promise<UserLoginRes> {
+    return apiFetch<UserLoginRes>("/api/v1/auth/reissue", {
+      method: "POST",
+    });
+  },
+
+  sendEmail(payload: EmailSendReq): Promise<void> {
+    return apiFetch<void>("/api/v1/auth/email-send", {
+      method: "POST",
+      body: payload,
+    });
+  },
+
+  verifyEmail(payload: EmailVerificationReq): Promise<void> {
+    return apiFetch<void>("/api/v1/auth/email-verification", {
+      method: "POST",
+      body: payload,
+    });
+  },
+
   async logout(): Promise<void> {
     try {
       await apiFetch<void>("/api/v1/auth/logout", {
@@ -96,6 +142,26 @@ export const authApi = {
     } finally {
       clearAuthStorage();
     }
+  },
+
+  async deleteMe(): Promise<void> {
+    await apiFetch<void>("/api/v1/users/me", {
+      method: "DELETE",
+    });
+    clearAuthStorage();
+  },
+};
+
+export const profileApi = {
+  getMe(): Promise<MyProfileDetailRes> {
+    return apiFetch<MyProfileDetailRes>("/api/v1/profiles/me");
+  },
+
+  update(payload: ProfileUpdateReq): Promise<ProfileUpdateRes> {
+    return apiFetch<ProfileUpdateRes>("/api/v1/profiles", {
+      method: "PATCH",
+      body: payload,
+    });
   },
 };
 
@@ -106,7 +172,7 @@ export const categoryApi = {
 };
 
 export const talentApi = {
-  getList(params: CursorParams = {}): Promise<CursorPageRes<TalentListRes>> {
+  getList(params: TalentListParams = {}): Promise<CursorPageRes<TalentListRes>> {
     return apiFetch<CursorPageRes<TalentListRes>>("/api/v1/talents", {
       query: params,
     });
@@ -124,6 +190,23 @@ export const talentApi = {
 
   create(payload: TalentCreateReq): Promise<TalentCreateRes> {
     return apiFetch<TalentCreateRes>("/api/v1/talents", {
+      method: "POST",
+      body: payload,
+    });
+  },
+
+  update(talentId: number, payload: TalentCreateReq): Promise<TalentUpdateRes> {
+    return apiFetch<TalentUpdateRes>(`/api/v1/talents/${talentId}`, {
+      method: "PUT",
+      body: payload,
+    });
+  },
+
+  report(
+    talentId: number,
+    payload: TalentReportReq,
+  ): Promise<TalentReportRes> {
+    return apiFetch<TalentReportRes>(`/api/v1/talents/${talentId}/reports`, {
       method: "POST",
       body: payload,
     });
@@ -257,17 +340,11 @@ export const matchApi = {
     );
   },
 
-  acceptProposal(
-    proposalId: number,
-    idempotencyKey = createAcceptProposalIdempotencyKey(proposalId),
-  ): Promise<MatchProposalRes> {
+  acceptProposal(proposalId: number): Promise<MatchProposalRes> {
     return apiFetch<MatchProposalRes>(
       `/api/v1/match-proposals/${proposalId}/accept`,
       {
         method: "PATCH",
-        headers: {
-          "Idempotency-Key": idempotencyKey,
-        },
       },
     );
   },
@@ -298,12 +375,8 @@ export const chatApi = {
     });
   },
 
-  getRoom(chatRoomId: number, userId: number): Promise<ChatRoomRes> {
-    return apiFetch<ChatRoomRes>(`/api/v1/chat-rooms/${chatRoomId}`, {
-      query: {
-        userId,
-      },
-    });
+  getRoom(chatRoomId: number): Promise<ChatRoomRes> {
+    return apiFetch<ChatRoomRes>(`/api/v1/chat-rooms/${chatRoomId}`);
   },
 
   getMessages(chatRoomId: number): Promise<CursorPageRes<ChatMessageRes>> {
@@ -327,6 +400,12 @@ export const chatApi = {
 };
 
 export const tradeApi = {
+  getList(params: TradeListParams = {}): Promise<CursorPageRes<TradeListRes>> {
+    return apiFetch<CursorPageRes<TradeListRes>>("/api/v1/trade", {
+      query: params,
+    });
+  },
+
   getDetail(tradeId: number): Promise<TradeRes> {
     return apiFetch<TradeRes>(`/api/v1/trade/${tradeId}`);
   },
@@ -334,6 +413,13 @@ export const tradeApi = {
   cancel(tradeId: number): Promise<TradeRes> {
     return apiFetch<TradeRes>(`/api/v1/trade/${tradeId}/cancel`, {
       method: "PATCH",
+    });
+  },
+
+  dispute(tradeId: number, payload: TradeDisputeReq): Promise<TradeRes> {
+    return apiFetch<TradeRes>(`/api/v1/trade/${tradeId}/dispute`, {
+      method: "PATCH",
+      body: payload,
     });
   },
 
@@ -385,6 +471,105 @@ export const tradeApi = {
       {
         method: "POST",
         body: payload,
+      },
+    );
+  },
+};
+
+export const adminApi = {
+  getUsers(
+    params: AdminUserSearchParams = {},
+  ): Promise<AdminPageRes<AdminUserRes>> {
+    return apiFetch<AdminPageRes<AdminUserRes>>("/api/v1/admin/users", {
+      query: params,
+    });
+  },
+
+  getUser(userId: number): Promise<AdminUserRes> {
+    return apiFetch<AdminUserRes>(`/api/v1/admin/users/${userId}`);
+  },
+
+  updateUserStatus(
+    userId: number,
+    payload: AdminUserStatusUpdateReq,
+  ): Promise<AdminUserRes> {
+    return apiFetch<AdminUserRes>(`/api/v1/admin/users/${userId}/status`, {
+      method: "PATCH",
+      body: payload,
+    });
+  },
+
+  getTalents(
+    params: AdminTalentSearchParams = {},
+  ): Promise<AdminPageRes<AdminTalentRes>> {
+    return apiFetch<AdminPageRes<AdminTalentRes>>("/api/v1/admin/talents", {
+      query: params,
+    });
+  },
+
+  getTalent(talentId: number): Promise<AdminTalentRes> {
+    return apiFetch<AdminTalentRes>(`/api/v1/admin/talents/${talentId}`);
+  },
+
+  updateTalentStatus(
+    talentId: number,
+    payload: AdminTalentStatusUpdateReq,
+  ): Promise<AdminTalentRes> {
+    return apiFetch<AdminTalentRes>(`/api/v1/admin/talents/${talentId}/status`, {
+      method: "PATCH",
+      body: payload,
+    });
+  },
+
+  getReports(
+    params: AdminReportSearchParams = {},
+  ): Promise<AdminPageRes<AdminTalentReportRes>> {
+    return apiFetch<AdminPageRes<AdminTalentReportRes>>("/api/v1/admin/reports", {
+      query: params,
+    });
+  },
+
+  getReport(reportId: number): Promise<AdminTalentReportRes> {
+    return apiFetch<AdminTalentReportRes>(`/api/v1/admin/reports/${reportId}`);
+  },
+
+  resolveReport(
+    reportId: number,
+    payload: AdminReportResolveReq,
+  ): Promise<AdminTalentReportRes> {
+    return apiFetch<AdminTalentReportRes>(
+      `/api/v1/admin/reports/${reportId}/resolve`,
+      {
+        method: "PATCH",
+        body: payload,
+      },
+    );
+  },
+
+  getActionLogs(
+    params: AdminActionLogSearchParams = {},
+  ): Promise<AdminPageRes<AdminActionLogRes>> {
+    return apiFetch<AdminPageRes<AdminActionLogRes>>(
+      "/api/v1/admin/action-logs",
+      {
+        query: params,
+      },
+    );
+  },
+
+  getDisputes(): Promise<AdminDisputeRes[]> {
+    return apiFetch<AdminDisputeRes[]>("/api/v1/admin/trade/disputes");
+  },
+
+  resolveDispute(
+    tradeId: number,
+    verdict: "BUYER_WIN" | "SELLER_WIN",
+  ): Promise<TradeRes> {
+    return apiFetch<TradeRes>(
+      `/api/v1/admin/trade/${tradeId}/dispute/resolve`,
+      {
+        method: "PATCH",
+        body: { verdict },
       },
     );
   },
