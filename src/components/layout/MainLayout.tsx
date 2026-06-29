@@ -9,7 +9,7 @@ interface MainLayoutProps {
 
 export function MainLayout({ children }: MainLayoutProps) {
   return (
-    <div className="app-fixed-shell flex min-h-dvh flex-col bg-zinc-50">
+    <div className="app-fixed-shell flex min-h-dvh flex-col bg-zinc-50 pb-16 lg:pb-0">
       <Header />
       <main className="flex-1">{children}</main>
       <Footer />

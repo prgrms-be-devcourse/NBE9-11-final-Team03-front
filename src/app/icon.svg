@@ -1,0 +1,10 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="baton-mark" x1="18" y1="14" x2="238" y2="242" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#79E4DD" />
+      <stop offset="1" stop-color="#8C5BFF" />
+    </linearGradient>
+  </defs>
+  <rect x="6" y="6" width="244" height="244" rx="62" fill="url(#baton-mark)" />
+  <text x="128" y="191" fill="#FFFFFF" font-family="Arial Black, Arial, Helvetica, sans-serif" font-size="174" font-weight="900" text-anchor="middle">B</text>
+</svg>

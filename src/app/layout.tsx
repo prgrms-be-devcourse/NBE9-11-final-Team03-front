@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import { MainLayout } from "@/components/layout/MainLayout";
+import { AppShell } from "@/components/layout/AppShell";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Baton",
-  description: "주니어·초입자를 위한 양방향 재능 교환 플랫폼",
+  description: "재능 교환으로 첫 협업 경험을 만드는 서비스",
 };
 
 export default function RootLayout({
@@ -13,12 +13,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="ko"
-      className="h-full antialiased"
-    >
-      <body className="min-h-full">
-        <MainLayout>{children}</MainLayout>
+    <html lang="ko" data-scroll-behavior="smooth">
+      <body>
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );
