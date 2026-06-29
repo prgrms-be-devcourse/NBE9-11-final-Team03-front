@@ -1,32 +1,59 @@
-import { Handshake } from "lucide-react";
-
 type BrandLogoProps = {
   compact?: boolean;
 };
 
-export function BrandLogo({ compact = false }: BrandLogoProps) {
+export function BrandLogoContent() {
   return (
-    <span className="inline-flex items-center gap-2.5" aria-label="Baton">
-      <span
-        className={`relative inline-flex shrink-0 items-center justify-center rounded-md bg-zinc-950 shadow-sm ${
-          compact ? "h-8 w-8" : "h-9 w-9"
-        }`}
-        aria-hidden="true"
-      >
-        <span className="absolute left-1.5 top-1.5 h-2 w-2 rounded-full bg-teal-400" />
-        <span className="absolute bottom-1.5 right-1.5 h-2 w-2 rounded-full bg-amber-400" />
-        <Handshake
-          className={compact ? "h-5 w-5 text-white" : "h-5.5 w-5.5 text-white"}
-          strokeWidth={2.5}
-        />
+    <>
+      <span className="brandGlyph" aria-hidden="true">
+        <i />
+        <i />
       </span>
-      <span
-        className={`font-black tracking-normal text-zinc-950 ${
-          compact ? "text-base" : "text-xl"
-        }`}
-      >
-        Baton
+      <strong className="brandLogoText">Baton</strong>
+    </>
+  );
+}
+
+export function BrandLogo({ compact = false }: BrandLogoProps) {
+  if (compact) {
+    return (
+      <span className="inline-flex items-center gap-2.5" aria-label="Baton">
+        <span
+          className={`inline-flex shrink-0 items-end gap-1 ${
+            compact ? "h-7 w-7" : "h-8 w-8"
+          }`}
+          aria-hidden="true"
+        >
+          <span
+            className={`w-1.5 rounded-full bg-[linear-gradient(180deg,#8c5bff_0%,#6d7cff_100%)] ${
+              compact ? "h-5" : "h-6"
+            }`}
+          />
+          <span
+            className={`w-1.5 rounded-full bg-[linear-gradient(180deg,#8c5bff_0%,#6d7cff_100%)] ${
+              compact ? "h-7" : "h-8"
+            }`}
+          />
+          <span
+            className={`mb-1.5 w-1.5 rounded-full bg-[linear-gradient(180deg,#8c5bff_0%,#6d7cff_100%)] ${
+              compact ? "h-4" : "h-5"
+            }`}
+          />
+        </span>
+        <span
+          className={`font-black tracking-[-0.055em] text-zinc-950 ${
+            compact ? "text-[22px]" : "text-[26px]"
+          }`}
+        >
+          Baton
+        </span>
       </span>
+    );
+  }
+
+  return (
+    <span className="brandLogoContent" aria-label="Baton">
+      <BrandLogoContent />
     </span>
   );
 }

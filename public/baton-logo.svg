@@ -1,0 +1,15 @@
+<svg width="184" height="54" viewBox="0 0 184 54" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="baton-logo-title">
+  <title id="baton-logo-title">Baton</title>
+  <g fill="url(#baton-logo-mark)">
+    <rect x="3" y="15" width="11" height="30" rx="5.5" />
+    <rect x="22" y="8" width="11" height="37" rx="5.5" />
+    <rect x="41" y="15" width="11" height="23" rx="5.5" />
+  </g>
+  <text x="70" y="39" fill="#15151F" font-family="Arial Black, Arial, Helvetica, sans-serif" font-size="33" font-weight="700">Baton</text>
+  <defs>
+    <linearGradient id="baton-logo-mark" x1="3" y1="8" x2="53" y2="45" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8C5BFF" />
+      <stop offset="1" stop-color="#6D7CFF" />
+    </linearGradient>
+  </defs>
+</svg>
