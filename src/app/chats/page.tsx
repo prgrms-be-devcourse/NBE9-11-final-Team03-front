@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { MessageCircle, RefreshCw, Send } from "lucide-react";
+import { MessageCircle, Send } from "lucide-react";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import {
@@ -116,47 +116,20 @@ function getInitial(name: string): string {
   return name.trim().slice(0, 1) || "?";
 }
 
-function getParticipantLabel(room: ChatRoomRes, userId: number): string {
-  if (userId === room.buyerId) {
-    return `구매자 #${room.buyerId}`;
-  }
-
-  if (userId === room.sellerId) {
-    return `판매자 #${room.sellerId}`;
-  }
-
-  return "상대방";
-}
-
-function getCounterpartLabel(
-  room: ChatRoomRes,
-  currentUserId: number | null,
-): string {
-  if (currentUserId === room.buyerId) {
-    return `판매자 #${room.sellerId}`;
-  }
-
-  if (currentUserId === room.sellerId) {
-    return `구매자 #${room.buyerId}`;
-  }
-
-  return "상대방";
-}
-
 function getMessageSenderLabel({
-  room,
   senderId,
   currentUserId,
+  opponentName,
 }: {
-  room: ChatRoomRes;
   senderId: number;
   currentUserId: number | null;
+  opponentName: string;
 }): string {
   if (senderId === currentUserId) {
     return "나";
   }
 
-  return getParticipantLabel(room, senderId);
+  return opponentName;
 }
 
 export default function ChatsPage() {
@@ -181,6 +154,15 @@ export default function ChatsPage() {
   const currentUserIdRef = useRef<number | null>(null);
   const initialRoomQueryHandledRef = useRef(false);
   const currentRoomId = currentRoom?.id ?? null;
+  const currentRoomListItem =
+    currentRoomId === null
+      ? undefined
+      : chatRooms.find((room) => room.roomId === currentRoomId);
+  const currentOpponentName =
+    currentRoomListItem?.opponentNickname?.trim() || "상대방";
+  const currentTalentTitle =
+    currentRoomListItem?.talentTitle?.trim() ||
+    (currentRoom ? `talentId ${currentRoom.talentId}` : "재능 정보 없음");
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -444,14 +426,6 @@ export default function ChatsPage() {
     });
   }
 
-  async function handleRefreshMessages() {
-    if (currentRoom === null || currentUserId === null) {
-      return;
-    }
-
-    await loadMessages(currentRoom.id);
-  }
-
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -489,39 +463,40 @@ export default function ChatsPage() {
   }
 
   return (
-    <div className="fixed-container py-10">
-      <div className="mb-8 flex items-end justify-between">
-        <div>
-          <h1 className="text-3xl font-black tracking-normal text-zinc-950">
-            채팅
+    <main className="relative min-h-[calc(100dvh-64px)] overflow-hidden bg-white">
+      <div className="pointer-events-none absolute left-1/2 top-[-220px] h-[420px] w-[720px] -translate-x-1/2 rounded-full bg-[#f4f0ff] blur-3xl" />
+
+      <div className="fixed-container relative py-10">
+        <header className="mx-auto mb-12 max-w-3xl text-center">
+          <h1 className="mt-4 text-5xl font-black tracking-normal text-zinc-950">
+            CHATING
           </h1>
-          <p className="mt-3 text-base font-medium text-zinc-600">
-            내 채팅방 목록에서 대화를 선택하고 WebSocket으로 실시간 메시지를 주고받습니다.
+          <p className="mx-auto mt-5 max-w-2xl text-lg font-semibold leading-8 text-zinc-600">
+            매칭과 거래에서 이어진 대화를 한 곳에서 확인하고 실시간으로 메시지를 주고받으세요.
           </p>
-        </div>
-        <div
-          className={`rounded-full px-4 py-2 text-sm font-bold ${isConnectedToSocket
-              ? "bg-teal-50 text-teal-700"
-              : "bg-zinc-100 text-zinc-500"
+          <div
+            className={`mx-auto mt-5 inline-flex rounded-full px-4 py-2 text-sm font-black ${isConnectedToSocket
+              ? "border border-emerald-200 bg-emerald-50 text-emerald-700"
+              : "border border-[#ded6ff] bg-white/90 text-zinc-500"
             }`}
-        >
-          {isConnectedToSocket ? "WebSocket 연결됨" : "WebSocket 연결 대기"}
-        </div>
-      </div>
-
-      <div className="grid h-[680px] min-h-0 grid-cols-[340px_1fr] overflow-hidden rounded-lg border border-zinc-200 bg-white">
-        <aside className="border-r border-zinc-200 bg-zinc-50">
-          <div className="border-b border-zinc-200 px-5 py-4">
-            <p className="text-sm font-bold text-zinc-500">대화 목록</p>
+          >
+            {isConnectedToSocket ? "WebSocket 연결됨" : "WebSocket 연결 대기"}
           </div>
-          <div className="h-[624px] overflow-y-auto [scrollbar-gutter:stable]">
-            {currentRoom ? (
-              <CurrentRoomCard
-                room={currentRoom}
-                currentUserId={currentUserId}
-              />
-            ) : null}
+        </header>
 
+        <div className="relative grid h-[720px] min-h-0 grid-cols-[340px_1fr] overflow-hidden rounded-lg border border-[#ded6ff] bg-white/95 shadow-[0_28px_80px_rgba(80,60,160,0.12)] backdrop-blur">
+          <div
+            className="absolute inset-x-0 top-0 h-1 bg-[linear-gradient(90deg,#8c5bff_0%,#78a9ff_52%,#79e4dd_100%)]"
+            aria-hidden="true"
+          />
+          <aside className="flex min-h-0 flex-col border-r border-[#eee8ff] bg-[#fbf9ff]/70">
+          <div className="border-b border-[#eee8ff] px-5 py-5">
+            <p className="text-sm font-black text-zinc-950">대화 목록</p>
+            <p className="mt-1 text-xs font-bold text-zinc-400">
+              총 {chatRooms.length}{hasNextRooms ? "+" : ""}개 대화
+            </p>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto [overscroll-behavior-y:contain] [scrollbar-gutter:stable]">
             {isLoadingRooms ? (
               <div className="px-5 py-8 text-center text-sm font-semibold text-zinc-500">
                 채팅방 목록을 불러오는 중입니다.
@@ -529,7 +504,7 @@ export default function ChatsPage() {
             ) : null}
 
             {!isLoadingRooms && chatRooms.length > 0 ? (
-              <div className="divide-y divide-zinc-200">
+              <div className="divide-y divide-[#eee8ff]">
                 {chatRooms.map((room) => (
                   <ChatRoomListButton
                     key={room.roomId}
@@ -544,7 +519,7 @@ export default function ChatsPage() {
                       type="button"
                       disabled={isLoadingMoreRooms}
                       onClick={handleLoadMoreRooms}
-                      className="h-10 w-full cursor-pointer rounded-md border border-zinc-200 bg-white text-sm font-bold text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-60"
+                      className="h-10 w-full cursor-pointer rounded-lg border border-[#ded6ff] bg-white text-sm font-black text-zinc-700 transition hover:border-[#8c5bff] hover:bg-[#fbf9ff] hover:text-[#8c5bff] disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {isLoadingMoreRooms ? "불러오는 중" : "더 보기"}
                     </button>
@@ -565,60 +540,40 @@ export default function ChatsPage() {
         </aside>
 
         <section className="flex min-h-0 min-w-0 flex-col">
-          <div className="border-b border-zinc-200 px-6 py-4">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-sm font-black text-zinc-950">
-                  {currentRoom
-                    ? `선택된 채팅방 #${currentRoom.id}`
-                    : "채팅방을 선택해 주세요"}
-                </p>
-                <p className="mt-1 text-xs font-semibold text-zinc-500">
-                  왼쪽 채팅방 목록에서 대화를 선택하면 메시지를 확인할 수 있습니다.
-                </p>
-              </div>
-              <button
-                type="button"
-                disabled={
-                  currentRoom === null ||
-                  currentUserId === null ||
-                  isLoadingMessages
-                }
-                onClick={handleRefreshMessages}
-                className="btn btn-secondary inline-flex h-11 cursor-pointer items-center gap-2 rounded-md border border-zinc-200 px-4 text-sm font-bold text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-60"
-              >
-                <RefreshCw className="size-4" aria-hidden="true" />
-                새로고침
-              </button>
-            </div>
-
+          <div className="border-b border-[#eee8ff] px-6 py-5">
             {!hasCheckedUserId ? (
-              <p className="mt-3 text-xs font-semibold text-zinc-500">
+              <p className="text-xs font-semibold text-zinc-500">
                 사용자 정보를 확인하는 중입니다.
               </p>
             ) : currentUserId === null ? (
-              <p className="mt-3 text-sm font-semibold text-amber-700">
+              <p className="text-sm font-semibold text-amber-700">
                 로그인 후 이용해 주세요.
               </p>
-            ) : null}
-          </div>
-
-          {currentRoom ? (
-            <div className="flex h-16 items-center justify-between border-b border-zinc-200 px-6">
-              <div className="min-w-0">
-                <p className="truncate text-lg font-black text-zinc-950">
-                  채팅방 #{currentRoom.id}
+            ) : currentRoom ? (
+              <div className="flex items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="truncate text-lg font-black text-zinc-950">
+                    {currentOpponentName}
+                  </p>
+                  <p className="mt-1 truncate text-sm font-semibold text-zinc-500">
+                    {currentTalentTitle}
+                  </p>
+                </div>
+                <span className="shrink-0 rounded-full border border-[#d9ccff] bg-[#f4f0ff] px-3 py-1 text-xs font-black text-[#8c5bff]">
+                  {getRoomStatusLabel(currentRoom.status)}
+                </span>
+              </div>
+            ) : (
+              <div>
+                <p className="text-lg font-black text-zinc-950">
+                  채팅방을 선택해 주세요
                 </p>
-                <p className="mt-1 truncate text-sm font-semibold text-zinc-500">
-                  talentId {currentRoom.talentId} · 상대방{" "}
-                  {getCounterpartLabel(currentRoom, currentUserId)}
+                <p className="mt-1 text-sm font-semibold text-zinc-500">
+                  왼쪽 목록에서 대화를 선택하면 메시지를 확인할 수 있습니다.
                 </p>
               </div>
-              <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-black text-zinc-600">
-                {getRoomStatusLabel(currentRoom.status)}
-              </span>
-            </div>
-          ) : null}
+            )}
+          </div>
 
           {errorMessage ? (
             <div className="px-6 pt-4">
@@ -626,7 +581,7 @@ export default function ChatsPage() {
             </div>
           ) : null}
 
-          <div className="min-h-0 flex-1 overflow-y-auto bg-zinc-50 px-6 py-6 [scrollbar-gutter:stable]">
+          <div className="min-h-0 flex-1 overflow-y-auto bg-[#fbf9ff]/60 px-6 py-6 [scrollbar-gutter:stable]">
             <div className="mx-auto flex max-w-[720px] flex-col gap-4">
               {currentRoom === null ? (
                 isEnteringRoom ? (
@@ -664,9 +619,9 @@ export default function ChatsPage() {
                         message={message}
                         isMine={message.senderId === currentUserId}
                         senderLabel={getMessageSenderLabel({
-                          room: currentRoom,
                           senderId: message.senderId,
                           currentUserId,
+                          opponentName: currentOpponentName,
                         })}
                       />
                     </Fragment>
@@ -677,14 +632,14 @@ export default function ChatsPage() {
             </div>
           </div>
 
-          <div className="border-t border-zinc-200 px-6 py-4">
+          <div className="border-t border-[#eee8ff] bg-white/95 px-6 py-4">
             <form onSubmit={handleSubmit} className="flex items-center gap-3">
               <label htmlFor="chat-message" className="sr-only">
                 메시지 입력
               </label>
-              <div className="flex h-12 flex-1 items-center gap-3 rounded-md border border-zinc-200 bg-white px-4 focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-100">
+              <div className="flex h-12 flex-1 items-center gap-3 rounded-lg border border-[#ded6ff] bg-white px-4 transition focus-within:border-[#8c5bff] focus-within:ring-4 focus-within:ring-[#f4f0ff]">
                 <MessageCircle
-                  className="size-5 text-zinc-400"
+                  className="size-5 text-[#8c5bff]"
                   aria-hidden="true"
                 />
                 <input
@@ -697,7 +652,7 @@ export default function ChatsPage() {
                     currentUserId === null ||
                     !isConnectedToSocket
                   }
-                  className="field h-full flex-1 border-0 bg-transparent text-sm font-semibold text-zinc-950 outline-none disabled:bg-transparent"
+                  className="field h-full flex-1 border-0 bg-transparent text-sm font-semibold text-zinc-950 outline-none placeholder:text-zinc-400 disabled:bg-transparent"
                   placeholder={
                     isConnectedToSocket
                       ? "메시지를 입력해 주세요."
@@ -714,7 +669,7 @@ export default function ChatsPage() {
                   messageInput.trim().length === 0 ||
                   isSending
                 }
-                className="btn btn-primary inline-flex h-12 items-center gap-2 rounded-md bg-zinc-950 px-5 text-sm font-black text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-300"
+                className="inline-flex h-12 cursor-pointer items-center gap-2 rounded-lg bg-[#8c5bff] px-5 text-sm font-black text-white shadow-[0_14px_28px_rgba(140,91,255,0.22)] transition hover:bg-[#7c4eff] disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:shadow-none"
               >
                 <Send className="size-4" aria-hidden="true" />
                 {isSending ? "전송 중" : "보내기"}
@@ -725,34 +680,9 @@ export default function ChatsPage() {
             </p>
           </div>
         </section>
+        </div>
       </div>
-    </div>
-  );
-}
-
-function CurrentRoomCard({
-  room,
-  currentUserId,
-}: {
-  room: ChatRoomRes;
-  currentUserId: number | null;
-}) {
-  return (
-    <div className="border-b border-teal-200 bg-white px-5 py-4">
-      <p className="text-xs font-black uppercase tracking-wide text-teal-700">
-        현재 열린 채팅방
-      </p>
-      <p className="mt-2 text-base font-black text-zinc-950">room #{room.id}</p>
-      <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs font-semibold text-zinc-600">
-        <p>talentId {room.talentId}</p>
-        <p>{getRoomStatusLabel(room.status)}</p>
-        <p>{getParticipantLabel(room, room.buyerId)}</p>
-        <p>{getParticipantLabel(room, room.sellerId)}</p>
-        <p className="col-span-2">
-          상대방 {getCounterpartLabel(room, currentUserId)}
-        </p>
-      </div>
-    </div>
+    </main>
   );
 }
 
@@ -765,16 +695,21 @@ function ChatRoomListButton({
   isActive: boolean;
   onSelect: () => void;
 }) {
-  const opponentName = room.opponentNickname?.trim() || `user #${room.opponentId}`;
+  const opponentName = room.opponentNickname?.trim() || "상대방";
   const listDate = formatChatRoomListDate(room.lastMessageAt ?? room.createdAt);
 
   return (
     <button
       type="button"
       onClick={onSelect}
-      className={`flex w-full cursor-pointer gap-3 px-5 py-4 text-left transition ${isActive ? "bg-teal-50" : "bg-white hover:bg-zinc-50"
+      className={`group relative flex w-full cursor-pointer gap-3 px-5 py-5 text-left transition ${isActive ? "bg-[#f4f0ff]" : "bg-white/70 hover:bg-white"
         }`}
     >
+      <span
+        className={`absolute bottom-0 left-0 top-0 w-1 transition ${isActive ? "bg-[#8c5bff]" : "bg-transparent group-hover:bg-[#ded6ff]"
+          }`}
+        aria-hidden="true"
+      />
       <ChatRoomAvatar
         imageUrl={room.opponentProfileImageUrl}
         name={opponentName}
@@ -794,7 +729,7 @@ function ChatRoomListButton({
         <p className="mt-2 truncate text-sm text-zinc-600">
           {room.lastMessage ?? "아직 메시지가 없습니다."}
         </p>
-        <span className="mt-3 inline-flex rounded-full bg-zinc-100 px-2 py-1 text-[11px] font-black text-zinc-600">
+        <span className="mt-3 inline-flex rounded-full border border-[#ded6ff] bg-white px-2.5 py-1 text-[11px] font-black text-[#8c5bff]">
           {getRoomStatusLabel(room.roomType)}
         </span>
       </div>
@@ -815,13 +750,13 @@ function ChatRoomAvatar({
       <img
         src={imageUrl}
         alt={`${name} 프로필 이미지`}
-        className="h-11 w-11 shrink-0 rounded-full object-cover"
+        className="h-11 w-11 shrink-0 rounded-full border border-[#ded6ff] object-cover"
       />
     );
   }
 
   return (
-    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-sm font-black text-zinc-500">
+    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#ded6ff] bg-[#f4f0ff] text-sm font-black text-[#8c5bff]">
       {getInitial(name)}
     </div>
   );
@@ -830,7 +765,7 @@ function ChatRoomAvatar({
 function DateDivider({ date }: { date: string }) {
   return (
     <div className="flex justify-center py-2">
-      <span className="rounded-full bg-zinc-200/80 px-3 py-1 text-xs font-bold text-zinc-500">
+      <span className="rounded-full border border-[#ded6ff] bg-white px-3 py-1 text-xs font-bold text-zinc-500">
         {formatDateDivider(date)}
       </span>
     </div>
@@ -863,9 +798,9 @@ function MessageBubble({
         ) : null}
 
         <div
-          className={`max-w-[72%] rounded-lg px-4 py-3 shadow-sm ${isMine
-              ? "bg-zinc-950 text-white"
-              : "border border-zinc-200 bg-white text-zinc-900"
+          className={`max-w-[72%] rounded-2xl px-4 py-3 shadow-sm ${isMine
+              ? "bg-[#8c5bff] text-white shadow-[0_12px_24px_rgba(140,91,255,0.18)]"
+              : "border border-[#eee8ff] bg-white text-zinc-900"
             }`}
         >
           <p className="whitespace-pre-wrap break-words text-sm font-semibold leading-6">

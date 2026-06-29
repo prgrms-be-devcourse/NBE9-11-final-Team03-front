@@ -7,7 +7,6 @@ import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { FeedbackModal } from "@/components/common/FeedbackModal";
 import { Listbox, type ListboxOption } from "@/components/common/Listbox";
-import { SectionTitle } from "@/components/common/SectionTitle";
 import { categoryApi, talentApi } from "@/lib/api";
 import { setStoredLastTalentId } from "@/lib/auth";
 
@@ -53,6 +52,12 @@ const estimatedDurationOptions: ListboxOption<string>[] = [
   { value: "720", label: "1개월" },
 ];
 
+const inputClassName =
+  "form-input h-12 rounded-lg border-[#d9ccff] bg-white/95 px-4 text-[15px] font-semibold shadow-sm shadow-violet-950/[0.03] transition focus:border-[#8c5bff] focus:ring-4 focus:ring-[#f4f0ff]";
+
+const textareaClassName =
+  "form-input min-h-44 resize-none rounded-lg border-[#d9ccff] bg-white/95 px-4 py-3 text-[15px] font-semibold leading-7 shadow-sm shadow-violet-950/[0.03] transition focus:border-[#8c5bff] focus:ring-4 focus:ring-[#f4f0ff]";
+
 function getCategoryErrorMessage(error: unknown) {
   const message =
     error instanceof Error ? error.message : "카테고리를 불러오지 못했습니다.";
@@ -97,7 +102,6 @@ export default function NewTalentPage() {
     resolver: zodResolver(schema),
     defaultValues: {
       estimatedHours: 8,
-      creditPrice: 100,
     },
   });
 
@@ -199,158 +203,184 @@ export default function NewTalentPage() {
   }
 
   return (
-    <div className="mx-auto w-[720px] py-10">
-      <SectionTitle
-        title="내 재능 등록하기"
-        description="내가 제공할 수 있는 일을 구체적으로 적을수록 좋은 교환 상대를 만나기 쉬워요."
+    <main className="relative min-h-[calc(100dvh-64px)] overflow-visible bg-[linear-gradient(135deg,#fbfdff_0%,#edf5ff_46%,#f4efff_100%)]">
+      <div
+        className="pointer-events-none absolute left-1/2 top-20 h-[420px] w-[720px] -translate-x-1/2 rounded-full bg-[#8c5bff]/12 blur-3xl"
+        aria-hidden="true"
+      />
+      <div
+        className="pointer-events-none absolute right-[8%] top-48 h-52 w-52 rounded-full bg-[#79e4dd]/20 blur-3xl"
+        aria-hidden="true"
       />
 
-      <form
-        onSubmit={handleSubmit(onSubmit)}
-        noValidate
-        className="space-y-5 rounded-lg border border-zinc-200 bg-white p-6"
-      >
-        <Field label="제목" error={errors.title?.message}>
-          <input {...register("title")} className="form-input" />
-        </Field>
-
-        <Field label="카테고리" error={errors.categoryId?.message}>
-          {isCategoryLoading ? (
-            <p className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm font-semibold text-zinc-600">
-              카테고리를 불러오는 중입니다...
-            </p>
-          ) : null}
-
-          {!isCategoryLoading && categoryOptions.length > 0 ? (
-            <Listbox
-              label="카테고리"
-              value={
-                selectedCategoryId === undefined
-                  ? ""
-                  : String(selectedCategoryId)
-              }
-              options={categoryOptions}
-              onChange={(selected) =>
-                setValue(
-                  "categoryId",
-                  selected === "" ? undefined : Number(selected),
-                  {
-                    shouldDirty: true,
-                    shouldValidate: true,
-                  },
-                )
-              }
-              className=""
-            />
-          ) : null}
-
-          {categoryError ? (
-            <p className="mt-2 text-xs font-semibold text-red-600">
-              {categoryError}
-            </p>
-          ) : null}
-
-          {!isCategoryLoading &&
-          !categoryError &&
-          categoryOptions.length === 0 ? (
-            <p className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm font-semibold text-zinc-600">
-              등록 가능한 카테고리가 없습니다.
-            </p>
-          ) : null}
-        </Field>
-
-        <Field label="제공 내용" error={errors.content?.message}>
-          <textarea
-            {...register("content")}
-            rows={6}
-            className="form-input min-h-36"
-          />
-        </Field>
-
-        <div className="grid grid-cols-2 gap-5">
-          <Field
-            label="예상 작업 기간"
-            error={errors.estimatedHours?.message}
-          >
-            <Listbox
-              label="예상 작업 기간"
-              value={
-                selectedEstimatedHours === undefined
-                  ? ""
-                  : String(selectedEstimatedHours)
-              }
-              options={estimatedDurationOptions}
-              onChange={(selected) =>
-                setValue(
-                  "estimatedHours",
-                  selected === "" ? undefined : Number(selected),
-                  {
-                    shouldDirty: true,
-                    shouldValidate: true,
-                  },
-                )
-              }
-              className=""
-            />
-          </Field>
-
-          <Field label="필요 크레딧" error={errors.creditPrice?.message}>
-            <input
-              type="text"
-              inputMode="numeric"
-              className="form-input"
-              placeholder="예: 100"
-              value={
-                selectedCreditPrice === undefined
-                  ? ""
-                  : String(selectedCreditPrice)
-              }
-              onChange={(event) => {
-                const onlyNumbers = event.target.value.replace(/\D/g, "");
-
-                setValue(
-                  "creditPrice",
-                  onlyNumbers === "" ? undefined : Number(onlyNumbers),
-                  {
-                    shouldDirty: true,
-                    shouldValidate: true,
-                  },
-                );
-              }}
-            />
-
-            <p className="mt-2 text-xs text-zinc-500">
-              숫자만 입력해 주세요. 예: 150
-            </p>
-          </Field>
-        </div>
-
-        {message ? (
-          <p className="rounded-md bg-red-50 p-3 text-sm font-semibold text-red-700">
-            {message}
+      <div className="fixed-container relative pb-72 pt-16">
+        <header className="mx-auto max-w-3xl text-center">
+          <h1 className="mt-4 text-5xl font-black tracking-normal text-zinc-950">
+            내 재능 등록하기
+          </h1>
+          <p className="mx-auto mt-5 max-w-2xl text-lg font-semibold leading-8 text-zinc-600">
+            내가 제공할 수 있는 일을 선명하게 정리하고, 좋은 교환 상대를 만날 준비를 시작해요.
           </p>
-        ) : null}
+        </header>
 
-        <button
-          type="submit"
-          disabled={
-            isSubmitting || isCategoryLoading || categoryOptions.length === 0
-          }
-          className="h-11 w-full rounded-md bg-zinc-950 text-sm font-bold text-white disabled:opacity-60"
+        <form
+          onSubmit={handleSubmit(onSubmit)}
+          noValidate
+          className="relative mx-auto mt-12 w-[880px] overflow-visible rounded-lg border border-[#ded6ff] bg-white/90 p-8 shadow-[0_28px_80px_rgba(80,60,160,0.14)] backdrop-blur"
         >
-          {isSubmitting ? "등록 중..." : "재능 등록하기"}
-        </button>
-      </form>
+          <div
+            className="absolute inset-x-0 top-0 h-1 rounded-t-lg bg-[linear-gradient(90deg,#8c5bff_0%,#78a9ff_52%,#79e4dd_100%)]"
+            aria-hidden="true"
+          />
 
-      {isSuccessModalOpen ? (
-        <FeedbackModal
-          title="재능이 등록되었습니다"
-          description="등록한 재능은 재능 둘러보기에서 확인할 수 있어요."
-          confirmLabel="재능 둘러보기로 이동"
-          onConfirm={() => router.push("/talents")}
-        />
-      ) : null}
-    </div>
+          <div className="grid gap-6">
+            <Field label="제목" error={errors.title?.message}>
+              <input {...register("title")} className={inputClassName} />
+            </Field>
+
+            <Field label="카테고리" error={errors.categoryId?.message}>
+              {isCategoryLoading ? (
+                <p className="rounded-lg border border-[#d9ccff] bg-[#fbf9ff] px-4 py-3 text-sm font-bold text-zinc-600">
+                  카테고리를 불러오는 중입니다...
+                </p>
+              ) : null}
+
+              {!isCategoryLoading && categoryOptions.length > 0 ? (
+                <Listbox
+                  label="카테고리"
+                  value={
+                    selectedCategoryId === undefined
+                      ? ""
+                      : String(selectedCategoryId)
+                  }
+                  options={categoryOptions}
+                  onChange={(selected) =>
+                    setValue(
+                      "categoryId",
+                      selected === "" ? undefined : Number(selected),
+                      {
+                        shouldDirty: true,
+                        shouldValidate: true,
+                      },
+                    )
+                  }
+                  className=""
+                />
+              ) : null}
+
+              {categoryError ? (
+                <p className="mt-2 text-xs font-semibold text-red-600">
+                  {categoryError}
+                </p>
+              ) : null}
+
+              {!isCategoryLoading &&
+                !categoryError &&
+                categoryOptions.length === 0 ? (
+                <p className="rounded-lg border border-[#d9ccff] bg-[#fbf9ff] px-4 py-3 text-sm font-bold text-zinc-600">
+                  등록 가능한 카테고리가 없습니다.
+                </p>
+              ) : null}
+            </Field>
+
+            <Field label="제공 내용" error={errors.content?.message}>
+              <textarea
+                {...register("content")}
+                rows={7}
+                className={textareaClassName}
+              />
+            </Field>
+
+            <div className="grid grid-cols-2 gap-5">
+              <Field
+                label="예상 작업 기간"
+                error={errors.estimatedHours?.message}
+              >
+                <Listbox
+                  label="예상 작업 기간"
+                  value={
+                    selectedEstimatedHours === undefined
+                      ? ""
+                      : String(selectedEstimatedHours)
+                  }
+                  options={estimatedDurationOptions}
+                  onChange={(selected) =>
+                    setValue(
+                      "estimatedHours",
+                      selected === "" ? undefined : Number(selected),
+                      {
+                        shouldDirty: true,
+                        shouldValidate: true,
+                      },
+                    )
+                  }
+                  className=""
+                />
+              </Field>
+
+              <Field label="필요 크레딧">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  className={inputClassName}
+                  placeholder="숫자만 입력해 주세요. 예: 150"
+                  value={
+                    selectedCreditPrice === undefined
+                      ? ""
+                      : String(selectedCreditPrice)
+                  }
+                  onChange={(event) => {
+                    const onlyNumbers = event.target.value.replace(/\D/g, "");
+
+                    setValue(
+                      "creditPrice",
+                      onlyNumbers === "" ? undefined : Number(onlyNumbers),
+                      {
+                        shouldDirty: true,
+                        shouldValidate: true,
+                      },
+                    );
+                  }}
+                />
+
+                <div className="mt-2 min-h-5">
+                  {errors.creditPrice?.message ? (
+                    <p className="text-xs font-semibold text-red-600">
+                      {errors.creditPrice.message}
+                    </p>
+                  ) : null}
+                </div>
+              </Field>
+            </div>
+
+            {message ? (
+              <p className="rounded-lg border border-red-100 bg-red-50 p-3 text-sm font-semibold text-red-700">
+                {message}
+              </p>
+            ) : null}
+
+            <button
+              type="submit"
+              disabled={
+                isSubmitting || isCategoryLoading || categoryOptions.length === 0
+              }
+              className="mt-2 h-[52px] w-full cursor-pointer rounded-lg bg-[linear-gradient(135deg,#8c5bff_0%,#8973ff_42%,#78a9ff_74%,#79e4dd_100%)] text-base font-black text-white shadow-lg shadow-violet-400/20 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-violet-400/25 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-60"
+            >
+              {isSubmitting ? "등록 중..." : "재능 등록하기"}
+            </button>
+          </div>
+        </form>
+
+        {isSuccessModalOpen ? (
+          <FeedbackModal
+            title="재능이 등록되었습니다"
+            description="등록한 재능은 재능 둘러보기에서 확인할 수 있어요."
+            confirmLabel="재능 둘러보기로 이동"
+            onConfirm={() => router.push("/talents")}
+          />
+        ) : null}
+      </div>
+    </main>
   );
 }
 
@@ -364,10 +394,12 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <label className="block text-sm font-semibold text-zinc-800">
+    <label className="block text-[15px] font-black text-zinc-900">
       {label}
-      <div className="mt-2">{children}</div>
-      {error ? <p className="mt-1 text-xs text-red-600">{error}</p> : null}
+      <div className="mt-2.5">{children}</div>
+      {error ? (
+        <p className="mt-1.5 text-xs font-semibold text-red-600">{error}</p>
+      ) : null}
     </label>
   );
 }

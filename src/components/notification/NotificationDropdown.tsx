@@ -11,6 +11,18 @@ function getBadgeLabel(count: number): string {
   return count > 99 ? "99+" : String(count);
 }
 
+function getBadgeSizeClass(count: number): string {
+  if (count > 99) {
+    return "h-7 w-7 text-[9px]";
+  }
+
+  if (count > 9) {
+    return "h-6 w-6 text-[10px]";
+  }
+
+  return "h-5 w-5 text-[10px]";
+}
+
 function getInitial(name: string): string {
   return name.trim().slice(0, 1) || "?";
 }
@@ -116,15 +128,19 @@ export function NotificationDropdown() {
         aria-expanded={isOpen}
         aria-haspopup="menu"
         onClick={() => setIsOpen((value) => !value)}
-        className={`relative inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-md border text-zinc-700 shadow-sm transition ${
+        className={`relative inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-md border shadow-sm transition ${
           isOpen
-            ? "border-teal-100 bg-teal-50 text-teal-800"
-            : "border-zinc-200 bg-white hover:bg-zinc-50"
+            ? "border-[#d9ccff] bg-[#f4f0ff] text-[#8c5bff] shadow-violet-500/10"
+            : "border-zinc-200 bg-white text-zinc-700 hover:border-[#d9ccff] hover:bg-[#f8f5ff] hover:text-[#8c5bff]"
         }`}
       >
         <Bell className="h-5 w-5" aria-hidden="true" />
         {notificationCount > 0 ? (
-          <span className="absolute -right-1.5 -top-1.5 min-w-5 rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-black leading-none text-white ring-2 ring-white">
+          <span
+            className={`absolute -right-1.5 -top-1.5 flex items-center justify-center rounded-full bg-red-600 font-black leading-none text-white ring-2 ring-white ${getBadgeSizeClass(
+              notificationCount,
+            )}`}
+          >
             {getBadgeLabel(notificationCount)}
           </span>
         ) : null}
@@ -141,7 +157,7 @@ export function NotificationDropdown() {
             <Link
               href="/matches?tab=received"
               onClick={handleClose}
-              className="shrink-0 rounded-md border border-zinc-200 px-3 py-2 text-xs font-bold text-zinc-700 transition hover:bg-zinc-50"
+              className="shrink-0 rounded-md border border-[#d9ccff] px-3 py-2 text-xs font-bold text-[#8c5bff] transition hover:bg-[#f4f0ff]"
             >
               전체 보기
             </Link>
