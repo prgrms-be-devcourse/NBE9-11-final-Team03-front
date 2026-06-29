@@ -148,16 +148,20 @@ export function MatchProposalInbox({ type }: MatchProposalInboxProps) {
     type === "received" ? receivedProposals : sentProposals;
   const emptyTitle =
     type === "received" ? "받은 제안이 없습니다." : "보낸 제안이 없습니다.";
+  const emptyDescription =
+    type === "received"
+      ? "새로운 교환 요청이 도착하면 이곳에서 바로 확인할 수 있어요."
+      : "추천 조회에서 보낸 교환 요청의 진행 상태가 이곳에 표시됩니다.";
 
   return (
     <section>
       {successMessage ? (
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-md bg-teal-50 p-3 text-sm font-semibold text-teal-700">
-          <p>{successMessage}</p>
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#d9ccff] bg-[#fbf9ff] p-4 text-sm font-bold text-zinc-700 shadow-sm shadow-violet-950/[0.04]">
+          <p className="text-[#6f45e9]">{successMessage}</p>
           {preparedChatHref !== null ? (
             <Link
               href={preparedChatHref}
-              className="btn btn-secondary rounded-md border border-teal-200 bg-white px-3 py-2 text-sm font-black text-teal-700 transition hover:bg-teal-100"
+              className="inline-flex h-10 items-center justify-center rounded-lg bg-[linear-gradient(135deg,#8c5bff_0%,#8973ff_48%,#79e4dd_100%)] px-4 text-sm font-black text-white shadow-lg shadow-violet-400/20 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-violet-400/25"
             >
               채팅으로 이동
             </Link>
@@ -172,13 +176,13 @@ export function MatchProposalInbox({ type }: MatchProposalInboxProps) {
       ) : null}
 
       {isLoading ? (
-        <div className="rounded-lg border border-zinc-200 bg-white p-8 text-center text-sm font-semibold text-zinc-600">
+        <div className="rounded-lg border border-[#ded6ff] bg-white/95 p-8 text-center text-sm font-black text-zinc-500 shadow-sm shadow-violet-950/[0.04]">
           제안 목록을 불러오는 중입니다...
         </div>
       ) : null}
 
       {!isLoading && !errorMessage && proposals.length === 0 ? (
-        <EmptyState title={emptyTitle} />
+        <EmptyState title={emptyTitle} description={emptyDescription} />
       ) : null}
 
       {!isLoading && proposals.length > 0 ? (

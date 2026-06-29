@@ -65,7 +65,7 @@ export function Listbox<TValue extends string>({
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         onClick={() => setIsOpen((current) => !current)}
-        className="flex h-10 w-full items-center justify-between rounded-md border border-zinc-300 bg-white px-3 text-left text-sm font-semibold text-zinc-800 outline-none transition hover:border-zinc-400 focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+        className="flex h-12 w-full items-center justify-between rounded-lg border border-[#d9ccff] bg-white px-4 text-left text-sm font-bold text-zinc-900 shadow-sm shadow-violet-950/[0.03] outline-none transition hover:border-[#c8b7ff] hover:bg-[#fbf9ff] focus:border-[#8c5bff] focus:ring-4 focus:ring-[#f4f0ff]"
       >
         <span className={selected ? "text-zinc-900" : "text-zinc-400"}>
           {selected?.label ?? placeholder}
@@ -81,7 +81,7 @@ export function Listbox<TValue extends string>({
         <div
           role="listbox"
           aria-labelledby={id}
-          className="absolute z-40 mt-2 max-h-72 w-full overflow-y-auto rounded-lg border border-zinc-200 bg-white p-1 shadow-xl"
+          className="absolute z-40 mt-2 max-h-72 w-full overflow-y-auto rounded-lg border border-[#d9ccff] bg-white p-1.5 shadow-[0_18px_42px_rgba(80,60,160,0.16)]"
         >
           {options.map((option) => {
             const isSelected = option.value === value;
@@ -96,15 +96,15 @@ export function Listbox<TValue extends string>({
                   onChange(option.value);
                   setIsOpen(false);
                 }}
-                className={`flex h-10 w-full items-center justify-between rounded-md px-3 text-left text-sm font-semibold transition ${
+                className={`flex h-10 w-full items-center justify-between rounded-md px-3 text-left text-sm font-bold transition ${
                   isSelected
-                    ? "bg-teal-50 text-teal-800"
-                    : "text-zinc-700 hover:bg-zinc-50"
+                    ? "bg-[#f4f0ff] text-[#8c5bff]"
+                    : "text-zinc-700 hover:bg-[#f8f5ff] hover:text-[#8c5bff]"
                 } disabled:cursor-not-allowed disabled:text-zinc-300`}
               >
                 <span>{option.label}</span>
                 {isSelected ? (
-                  <Check className="h-4 w-4 text-teal-700" aria-hidden="true" />
+                  <Check className="h-4 w-4 text-[#8c5bff]" aria-hidden="true" />
                 ) : null}
               </button>
             );

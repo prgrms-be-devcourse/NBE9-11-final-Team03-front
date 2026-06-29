@@ -1,4 +1,3 @@
-import { StatusBadge } from "@/components/common/StatusBadge";
 import type {
   MatchProposalReceivedRes,
   MatchProposalSentRes,
@@ -40,6 +39,17 @@ function getStatusTone(status: MatchProposalStatus): ProposalStatusTone {
   return tones[status];
 }
 
+function getStatusClass(status: MatchProposalStatus): string {
+  const classes: Record<ProposalStatusTone, string> = {
+    default: "border-slate-200 bg-slate-50 text-slate-600",
+    success: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    warning: "border-[#d9ccff] bg-[#f4f0ff] text-[#8c5bff]",
+    danger: "border-rose-200 bg-rose-50 text-rose-600",
+  };
+
+  return classes[getStatusTone(status)];
+}
+
 function getInitial(name: string): string {
   return name.trim().slice(0, 1) || "?";
 }
@@ -63,7 +73,7 @@ function ProfileAvatar({
   }
 
   return (
-    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-sm font-black text-zinc-500">
+    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-[#d9ccff] bg-[#f4f0ff] text-sm font-black text-[#8c5bff]">
       {getInitial(name)}
     </div>
   );
@@ -94,68 +104,88 @@ export function MatchProposalCard({
     ? (proposal as MatchProposalReceivedRes).providerTalentTitle
     : (proposal as MatchProposalSentRes).providerTalentTitle;
   const canRespond = isReceived && proposal.status === "REQUESTED";
+  const variantLabel = isReceived ? "받은 제안" : "보낸 제안";
+  const variantDescription = isReceived
+    ? "상대가 보낸 교환 요청"
+    : "내가 보낸 교환 요청";
 
   return (
-    <article className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex min-w-0 items-center gap-3">
-          <ProfileAvatar imageUrl={profileImageUrl} name={profileName} />
-          <div className="min-w-0">
-            <p className="truncate text-lg font-black text-zinc-950">
-              {profileName}
+    <article className="overflow-hidden rounded-lg border border-[#ded6ff] bg-white/95 shadow-sm shadow-violet-950/[0.04] transition hover:-translate-y-0.5 hover:border-[#c8b7ff] hover:shadow-xl hover:shadow-violet-950/[0.08]">
+      <div className="h-1 bg-[linear-gradient(90deg,#8c5bff_0%,#78a9ff_52%,#79e4dd_100%)]" />
+      <div className="p-6">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-5">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.22em] text-[#8c5bff]">
+              {variantLabel}
             </p>
-            <p className="mt-1 text-sm font-semibold text-zinc-500">
-              {formatDate(proposal.createdAt)}
+            <p className="mt-1 text-sm font-bold text-zinc-500">
+              {variantDescription}
             </p>
           </div>
-        </div>
-        <StatusBadge
-          label={getStatusLabel(proposal.status)}
-          tone={getStatusTone(proposal.status)}
-        />
-      </div>
-
-      <div className="mt-5 grid gap-3 rounded-lg bg-zinc-50 p-4 text-sm">
-        <ProposalInfo label={firstTalentLabel} value={firstTalentTitle} />
-        <ProposalInfo label={secondTalentLabel} value={secondTalentTitle} />
-      </div>
-
-      <div className="mt-5">
-        <p className="text-xs font-semibold text-zinc-500">요청 메시지</p>
-        <p className="mt-2 whitespace-pre-line rounded-md border border-zinc-100 p-3 text-sm leading-6 text-zinc-700">
-          {proposal.requestMessage || "요청 메시지가 없습니다."}
-        </p>
-      </div>
-
-      {canRespond ? (
-        <div className="mt-5 flex justify-end gap-2">
-          <button
-            type="button"
-            disabled={isProcessing}
-            onClick={() => onAccept?.(proposal as MatchProposalReceivedRes)}
-            className="h-10 rounded-md border border-teal-200 bg-white px-4 text-sm font-bold text-teal-700 transition hover:bg-teal-50 disabled:opacity-60"
+          <span
+            className={`inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-black ${getStatusClass(
+              proposal.status,
+            )}`}
           >
-            {isProcessing ? "수락 중..." : "수락"}
-          </button>
-          <button
-            type="button"
-            disabled={isProcessing}
-            onClick={() => onReject?.(proposal.proposalId)}
-            className="h-10 rounded-md border border-red-200 bg-white px-4 text-sm font-bold text-red-600 transition hover:bg-red-50 disabled:opacity-60"
-          >
-            거절
-          </button>
+            {getStatusLabel(proposal.status)}
+          </span>
         </div>
-      ) : null}
 
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <ProfileAvatar imageUrl={profileImageUrl} name={profileName} />
+            <div className="min-w-0">
+              <p className="truncate text-lg font-black text-zinc-950">
+                {profileName}
+              </p>
+              <p className="mt-1 text-sm font-semibold text-zinc-500">
+                {formatDate(proposal.createdAt)}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-3 rounded-lg border border-[#eee8ff] bg-[#fbf9ff] p-4 text-sm md:grid-cols-2">
+          <ProposalInfo label={firstTalentLabel} value={firstTalentTitle} />
+          <ProposalInfo label={secondTalentLabel} value={secondTalentTitle} />
+        </div>
+
+        <div className="mt-5">
+          <p className="text-xs font-black text-zinc-500">요청 메시지</p>
+          <p className="mt-2 whitespace-pre-line rounded-lg border border-[#eee8ff] bg-white/90 p-4 text-sm font-semibold leading-6 text-zinc-700">
+            {proposal.requestMessage || "요청 메시지가 없습니다."}
+          </p>
+        </div>
+
+        {canRespond ? (
+          <div className="mt-5 flex justify-end gap-2">
+            <button
+              type="button"
+              disabled={isProcessing}
+              onClick={() => onAccept?.(proposal as MatchProposalReceivedRes)}
+              className="h-10 cursor-pointer rounded-lg border border-transparent bg-[linear-gradient(135deg,#8c5bff_0%,#8467ff_48%,#7f75ff_100%)] px-5 text-sm font-black text-white shadow-lg shadow-violet-400/[0.18] transition hover:-translate-y-0.5 hover:bg-[linear-gradient(135deg,#8250ff_0%,#7f62ff_48%,#796fff_100%)] hover:shadow-xl hover:shadow-violet-400/[0.22] disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-60"
+            >
+              {isProcessing ? "수락 중..." : "수락"}
+            </button>
+            <button
+              type="button"
+              disabled={isProcessing}
+              onClick={() => onReject?.(proposal.proposalId)}
+              className="h-10 cursor-pointer rounded-lg border border-rose-200 bg-white px-5 text-sm font-black text-rose-600 transition hover:border-rose-300 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              거절
+            </button>
+          </div>
+        ) : null}
+      </div>
     </article>
   );
 }
 
 function ProposalInfo({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <p className="text-xs font-semibold text-zinc-500">{label}</p>
+    <div className="rounded-md bg-white/80 p-3">
+      <p className="text-xs font-black text-[#8c5bff]">{label}</p>
       <p className="mt-1 break-words font-bold text-zinc-950">{value}</p>
     </div>
   );

@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { Header } from "@/components/layout/Header";
 import { MobileNavigation } from "@/components/layout/MobileNavigation";
+import { ScrollTopButton } from "@/components/layout/ScrollTopButton";
 
 interface AppShellProps {
   children: ReactNode;
@@ -27,7 +28,12 @@ export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
 
   if (shouldHideChrome(pathname)) {
-    return <>{children}</>;
+    return (
+      <>
+        {children}
+        <ScrollTopButton />
+      </>
+    );
   }
 
   return (
@@ -35,6 +41,7 @@ export function AppShell({ children }: AppShellProps) {
       <Header />
       <main className="flex-1">{children}</main>
       <MobileNavigation />
+      <ScrollTopButton />
     </div>
   );
 }

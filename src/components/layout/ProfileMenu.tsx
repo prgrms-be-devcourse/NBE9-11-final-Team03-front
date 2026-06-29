@@ -28,9 +28,6 @@ export function ProfileMenu({
 }: ProfileMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const displayName = nickname?.trim() || "프로필";
-  const placeholderText =
-    displayName === "프로필" ? "프로필" : displayName.slice(0, 1);
 
   useEffect(() => {
     if (!isOpen) {
@@ -78,7 +75,11 @@ export function ProfileMenu({
         aria-haspopup="menu"
         aria-expanded={isOpen}
         onClick={() => setIsOpen((current) => !current)}
-        className="flex h-10 w-10 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-zinc-200 bg-zinc-100 text-xs font-black text-zinc-600 transition hover:border-zinc-300 hover:bg-zinc-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2"
+        className={`flex h-10 w-10 cursor-pointer items-center justify-center overflow-hidden rounded-full border transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#8c5bff] focus-visible:ring-offset-2 ${
+          isOpen
+            ? "border-[#d9ccff] bg-[#f4f0ff] shadow-sm shadow-violet-500/10"
+            : "border-zinc-200 bg-white hover:border-[#d9ccff] hover:bg-[#f8f5ff]"
+        }`}
       >
         {profileImageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -88,14 +89,14 @@ export function ProfileMenu({
             className="h-full w-full object-cover"
           />
         ) : (
-          <span>{placeholderText}</span>
+          <DefaultProfileAvatar />
         )}
       </button>
 
       {isOpen ? (
         <div
           role="menu"
-          className="absolute right-0 top-12 z-50 w-48 overflow-hidden rounded-lg border border-zinc-200 bg-white py-2 shadow-xl"
+          className="absolute right-0 top-12 z-50 w-48 overflow-hidden rounded-lg border border-[#d9ccff] bg-white py-2 shadow-[0_18px_42px_rgba(80,60,160,0.16)]"
         >
           {profileMenuItems.map((item) => (
             <Link
@@ -103,7 +104,7 @@ export function ProfileMenu({
               href={item.href}
               role="menuitem"
               onClick={() => setIsOpen(false)}
-              className="block px-4 py-2.5 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-50 hover:text-zinc-950"
+              className="block px-4 py-2.5 text-sm font-semibold text-zinc-700 transition hover:bg-[#f4f0ff] hover:text-[#8c5bff]"
             >
               {item.label}
             </Link>
@@ -113,7 +114,7 @@ export function ProfileMenu({
               href="/admin"
               role="menuitem"
               onClick={() => setIsOpen(false)}
-              className="block px-4 py-2.5 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-50 hover:text-zinc-950"
+              className="block px-4 py-2.5 text-sm font-semibold text-zinc-700 transition hover:bg-[#f4f0ff] hover:text-[#8c5bff]"
             >
               관리자
             </Link>
@@ -123,12 +124,30 @@ export function ProfileMenu({
             type="button"
             role="menuitem"
             onClick={handleLogoutClick}
-            className="block w-full cursor-pointer px-4 py-2.5 text-left text-sm font-semibold text-red-700 transition hover:bg-red-50"
+            className="block w-full cursor-pointer px-4 py-2.5 text-left text-sm font-semibold text-red-700 transition hover:bg-[#f4f0ff]"
           >
             로그아웃
           </button>
         </div>
       ) : null}
     </div>
+  );
+}
+
+function DefaultProfileAvatar() {
+  return (
+    <svg
+      viewBox="0 0 48 48"
+      className="h-full w-full"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <rect width="48" height="48" rx="24" fill="#8C5BFF" />
+      <circle cx="24" cy="17" r="8" fill="#E7D8F5" />
+      <path
+        d="M10 42C10 32.6 16.2 27.2 24 27.2C31.8 27.2 38 32.6 38 42H10Z"
+        fill="#E7D8F5"
+      />
+    </svg>
   );
 }

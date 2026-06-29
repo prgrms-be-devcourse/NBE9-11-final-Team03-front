@@ -48,8 +48,8 @@ const estimatedDurationOptions: ListboxOption<string>[] = [
   { value: "24", label: "1일" },
   { value: "48", label: "2일" },
   { value: "72", label: "3일" },
-  { value: "168", label: "1주" },
-  { value: "336", label: "2주" },
+  { value: "168", label: "1주일" },
+  { value: "336", label: "2주일" },
   { value: "720", label: "1개월" },
 ];
 

@@ -4,8 +4,6 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
-import { SectionTitle } from "@/components/common/SectionTitle";
-import { StatusBadge } from "@/components/common/StatusBadge";
 import { tradeApi, type TradeListRes, type TradeStatus } from "@/lib/api";
 import { getStoredUserId, hasStoredAccessToken } from "@/lib/auth";
 import { formatCredit, formatDate } from "@/utils/format";
@@ -53,6 +51,44 @@ function getStatusTone(
   }
   if (status === "IN_PROGRESS") return "info";
   return "default";
+}
+
+function getStatusPillClass(status: TradeStatus): string {
+  const tone = getStatusTone(status);
+
+  const classes = {
+    default: "border-slate-200 bg-slate-50 text-slate-600",
+    success: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    warning: "border-amber-200 bg-amber-50 text-amber-700",
+    danger: "border-rose-200 bg-rose-50 text-rose-600",
+    info: "border-[#d9ccff] bg-[#f4f0ff] text-[#8c5bff]",
+  };
+
+  return classes[tone];
+}
+
+function TradeStatusPill({ status }: { status: TradeStatus }) {
+  return (
+    <span
+      className={`inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-black ${getStatusPillClass(
+        status,
+      )}`}
+    >
+      {statusLabels[status]}
+    </span>
+  );
+}
+
+function TradeTypePill({
+  tradeType,
+}: {
+  tradeType: TradeListItem["tradeType"];
+}) {
+  return (
+    <span className="inline-flex items-center rounded-full border border-[#d9ccff] bg-white px-3 py-1.5 text-xs font-black text-[#8c5bff]">
+      {tradeType === "SWAP" ? "재능 교환" : "크레딧 구매"}
+    </span>
+  );
 }
 
 function groupTradesForView(trades: TradeListItem[]): TradeGroupView[] {
@@ -220,75 +256,83 @@ export default function TradesPage() {
   const tradeGroups = groupTradesForView(trades);
 
   return (
-    <div className="fixed-container py-10">
-      <SectionTitle
-        title="내 거래"
-        description="진행 중, 검토 중, 분쟁 중인 거래를 상태별로 확인합니다."
-      />
+    <main className="relative min-h-[calc(100dvh-64px)] overflow-hidden bg-white">
+      <div className="pointer-events-none absolute left-1/2 top-[-220px] h-[420px] w-[720px] -translate-x-1/2 rounded-full bg-[#f4f0ff] blur-3xl" />
 
-      <div className="mb-6 flex flex-wrap gap-2 rounded-lg border border-zinc-200 bg-white p-2">
-        {statusOptions.map((option) => {
-          const isActive = selectedStatus === option.value;
+      <div className="fixed-container relative py-16">
+        <header className="text-center">
+          <h1 className="mt-3 text-6xl font-black tracking-normal text-zinc-950">
+            MY TRADE
+          </h1>
+          <p className="mx-auto mt-5 max-w-2xl text-base font-semibold leading-7 text-zinc-500">
+            진행 중인 교환, 검토 중인 결과물, 완료된 협업 기록을 한곳에서 확인하세요.
+          </p>
+        </header>
 
-          return (
-            <button
-              key={option.value || "all"}
-              type="button"
-              onClick={() => setSelectedStatus(option.value)}
-              className={`h-10 rounded-md px-4 text-sm font-bold transition ${isActive
-                  ? "bg-zinc-950 text-white"
-                  : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-950"
-                }`}
-            >
-              {option.label}
-            </button>
-          );
-        })}
-      </div>
+        <div className="mt-14 mb-10 flex flex-wrap gap-2 rounded-lg border border-[#ded6ff] bg-white/90 p-2 shadow-sm shadow-violet-950/[0.03]">
+          {statusOptions.map((option) => {
+            const isActive = selectedStatus === option.value;
 
-      {errorMessage ? (
-        <div className="mb-5">
-          <ErrorState message={errorMessage} />
-        </div>
-      ) : null}
-
-      {isLoading ? (
-        <div className="rounded-lg border border-zinc-200 bg-white p-8 text-center text-sm font-semibold text-zinc-600">
-          거래 목록을 불러오는 중입니다.
-        </div>
-      ) : null}
-
-      {!isLoading && !errorMessage && trades.length === 0 ? (
-        <EmptyState title="조건에 맞는 거래가 없습니다." />
-      ) : null}
-
-      {!isLoading && trades.length > 0 ? (
-        <>
-          <div className="grid gap-4">
-            {tradeGroups.map((group) => (
-              <TradeGroupCard
-                key={group.groupKey}
-                group={group}
-                currentUserId={currentUserId}
-              />
-            ))}
-          </div>
-
-          {hasNext ? (
-            <div className="mt-8 flex justify-center">
+            return (
               <button
+                key={option.value || "all"}
                 type="button"
-                disabled={isLoadingMore}
-                onClick={handleLoadMore}
-                className="h-10 rounded-md border border-zinc-300 bg-white px-4 text-sm font-bold text-zinc-800 transition hover:border-teal-300 hover:text-teal-700 disabled:opacity-60"
+                onClick={() => setSelectedStatus(option.value)}
+                className={`h-11 cursor-pointer rounded-md px-5 text-sm font-black transition ${isActive
+                  ? "bg-[#8c5bff] text-white shadow-lg shadow-violet-400/20"
+                  : "text-zinc-600 hover:bg-[#f4f0ff] hover:text-[#8c5bff]"
+                }`}
               >
-                {isLoadingMore ? "불러오는 중..." : "더 보기"}
+                {option.label}
               </button>
+            );
+          })}
+        </div>
+
+        {errorMessage ? (
+          <div className="mb-5">
+            <ErrorState message={errorMessage} />
+          </div>
+        ) : null}
+
+        {isLoading ? (
+          <div className="rounded-lg border border-zinc-200 bg-white p-8 text-center text-sm font-semibold text-zinc-600">
+            거래 목록을 불러오는 중입니다.
+          </div>
+        ) : null}
+
+        {!isLoading && !errorMessage && trades.length === 0 ? (
+          <EmptyState title="조건에 맞는 거래가 없습니다." />
+        ) : null}
+
+        {!isLoading && trades.length > 0 ? (
+          <>
+            <div className="grid gap-4">
+              {tradeGroups.map((group) => (
+                <TradeGroupCard
+                  key={group.groupKey}
+                  group={group}
+                  currentUserId={currentUserId}
+                />
+              ))}
             </div>
-          ) : null}
-        </>
-      ) : null}
-    </div>
+
+            {hasNext ? (
+              <div className="mt-8 flex justify-center">
+                <button
+                  type="button"
+                  disabled={isLoadingMore}
+                  onClick={handleLoadMore}
+                  className="h-11 cursor-pointer rounded-lg border border-[#ded6ff] bg-white px-6 text-sm font-black text-zinc-800 transition hover:border-[#8c5bff] hover:bg-[#fbf9ff] hover:text-[#8c5bff] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isLoadingMore ? "불러오는 중..." : "더 보기"}
+                </button>
+              </div>
+            ) : null}
+          </>
+        ) : null}
+      </div>
+    </main>
   );
 }
 
@@ -316,54 +360,54 @@ function TradeGroupCard({
   );
 
   return (
-    <section className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
-      <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <StatusBadge
-              label={statusLabels[groupStatus]}
-              tone={getStatusTone(groupStatus)}
-            />
-            <StatusBadge label="재능 교환" tone="info" />
+    <section className="overflow-hidden rounded-lg border border-[#ded6ff] bg-white/95 shadow-sm shadow-violet-950/[0.04] transition hover:-translate-y-0.5 hover:border-[#c8b7ff] hover:shadow-xl hover:shadow-violet-950/[0.08]">
+      <div className="h-1 bg-[linear-gradient(90deg,#8c5bff_0%,#7f75ff_100%)]" />
+      <div className="p-6">
+        <div className="mb-5 flex flex-col gap-4 border-b border-slate-200 pb-5 md:flex-row md:items-start md:justify-between">
+          <div className="min-w-0">
+            <p className="text-xs font-black uppercase tracking-[0.22em] text-[#8c5bff]">
+              교환 거래
+            </p>
+            <p className="mt-2 text-xl font-black text-zinc-950">
+              거래 #{group.trades[0].tradeGroupId ?? group.trades[0].tradeId}
+            </p>
+            <p className="mt-1 text-sm font-semibold text-zinc-500">
+              {formatDate(group.updatedAt)}
+            </p>
           </div>
 
-          <p className="mt-3 text-lg font-black text-zinc-950">
-            교환 거래 #
-            {group.trades[0].tradeGroupId ?? group.trades[0].tradeId}
-          </p>
-
-          <p className="mt-1 text-sm text-zinc-500">
-            {formatDate(group.updatedAt)}
-          </p>
+          <div className="flex flex-wrap items-center gap-2 md:justify-end">
+            <TradeStatusPill status={groupStatus} />
+            <TradeTypePill tradeType="SWAP" />
+            <span className="inline-flex items-center rounded-full bg-[#f4f0ff] px-3 py-1.5 text-xs font-black text-[#8c5bff]">
+              {formatGroupCredit(group)}
+            </span>
+          </div>
         </div>
 
-        <p className="text-lg font-black text-zinc-950 md:text-right">
-          {formatGroupCredit(group)}
-        </p>
-      </div>
+        <div className="grid gap-3 rounded-lg border border-[#eee8ff] bg-[#fbf9ff] p-4 md:grid-cols-2">
+          {receiveTrade ? (
+            <TradeLegLink
+              title="내가 받을 재능"
+              description="결과물 확인, 구매 확정, 분쟁 신청을 진행합니다."
+              trade={receiveTrade}
+            />
+          ) : null}
 
-      <div className="mt-5 grid gap-3 md:grid-cols-2">
-        {receiveTrade ? (
-          <TradeLegLink
-            title="내가 받을 재능"
-            description="결과물 확인, 구매 확정, 분쟁 신청을 진행합니다."
-            trade={receiveTrade}
-          />
-        ) : null}
+          {provideTrade ? (
+            <TradeLegLink
+              title="내가 제공할 재능"
+              description="결과물을 제출하는 거래입니다."
+              trade={provideTrade}
+            />
+          ) : null}
 
-        {provideTrade ? (
-          <TradeLegLink
-            title="내가 제공할 재능"
-            description="결과물을 제출하는 거래입니다."
-            trade={provideTrade}
-          />
-        ) : null}
-
-        {!receiveTrade && !provideTrade ? (
-          <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 text-sm font-semibold text-zinc-600 md:col-span-2">
-            현재 로그인 사용자와 연결된 거래 역할을 확인하지 못했습니다.
-          </div>
-        ) : null}
+          {!receiveTrade && !provideTrade ? (
+            <div className="rounded-md bg-white/85 p-4 text-sm font-semibold text-zinc-600 md:col-span-2">
+              현재 로그인 사용자와 연결된 거래 역할을 확인하지 못했습니다.
+            </div>
+          ) : null}
+        </div>
       </div>
     </section>
   );
@@ -381,9 +425,9 @@ function TradeLegLink({
   return (
     <Link
       href={`/trades/${trade.tradeId}`}
-      className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 transition hover:border-teal-300 hover:bg-teal-50"
+      className="rounded-md bg-white/85 p-4 transition hover:bg-white hover:shadow-sm hover:shadow-violet-950/[0.05]"
     >
-      <p className="text-sm font-black text-zinc-950">{title}</p>
+      <p className="text-xs font-black text-[#8c5bff]">{title}</p>
 
       <p className="mt-2 text-base font-black text-zinc-950">
         {getTradeTitle(trade)}
@@ -417,37 +461,33 @@ function TradeListCard({
   return (
     <Link
       href={`/trades/${trade.tradeId}`}
-      className="grid gap-4 rounded-lg border border-zinc-200 bg-white p-5 shadow-sm transition hover:border-teal-300 hover:bg-teal-50/40 md:grid-cols-[1fr_140px_160px] md:items-center md:gap-5"
+      className="block overflow-hidden rounded-lg border border-[#ded6ff] bg-white/95 shadow-sm shadow-violet-950/[0.04] transition hover:-translate-y-0.5 hover:border-[#c8b7ff] hover:shadow-xl hover:shadow-violet-950/[0.08]"
     >
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <StatusBadge
-            label={statusLabels[trade.tradeStatus]}
-            tone={getStatusTone(trade.tradeStatus)}
-          />
-          <StatusBadge
-            label={trade.tradeType === "SWAP" ? "재능 교환" : "크레딧 구매"}
-            tone="info"
-          />
+      <div className="h-1 bg-[linear-gradient(90deg,#8c5bff_0%,#7f75ff_100%)]" />
+      <div className="grid gap-5 p-6 md:grid-cols-[1fr_150px_170px] md:items-center">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <TradeStatusPill status={trade.tradeStatus} />
+            <TradeTypePill tradeType={trade.tradeType} />
+          </div>
+
+          <p className="mt-4 truncate text-xl font-black text-zinc-950">
+            {getTradeTitle(trade)}
+          </p>
+
+          <p className="mt-1 text-sm font-semibold text-zinc-500">
+            {myRoleLabel} · 거래 #{trade.tradeId}
+          </p>
         </div>
 
-        <p className="mt-3 text-lg font-black text-zinc-950">
-          {getTradeTitle(trade)}
-        </p>
+        <div className="rounded-lg border border-[#eee8ff] bg-[#fbf9ff] px-4 py-3 text-sm font-bold text-zinc-600">
+          {formatDate(trade.updatedAt)}
+        </div>
 
-        <p className="mt-1 text-sm text-zinc-500">
-          {myRoleLabel} ·{" "}
-          {trade.tradeType === "SWAP" ? "재능 교환" : "크레딧 구매"}
+        <p className="text-xl font-black text-zinc-950 md:text-right">
+          {formatCredit(trade.creditPrice)}
         </p>
       </div>
-
-      <p className="text-sm font-bold text-zinc-700">
-        {formatDate(trade.updatedAt)}
-      </p>
-
-      <p className="text-lg font-black text-zinc-950 md:text-right">
-        {formatCredit(trade.creditPrice)}
-      </p>
     </Link>
   );
 }

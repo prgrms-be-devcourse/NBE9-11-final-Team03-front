@@ -3,8 +3,6 @@
 import { ChangeEvent, FormEvent, useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { ErrorState } from "@/components/common/ErrorState";
-import { SectionTitle } from "@/components/common/SectionTitle";
-import { StatusBadge } from "@/components/common/StatusBadge";
 import {
   tradeApi,
   type TradeRes,
@@ -36,6 +34,12 @@ const TRADE_TYPE_LABELS: Record<string, string> = {
   SWAP: "재능 교환",
 };
 
+const inputClassName =
+  "form-input rounded-lg border-[#d9ccff] bg-white/95 px-4 py-3 text-[15px] font-semibold leading-7 shadow-sm shadow-violet-950/[0.03] transition focus:border-[#8c5bff] focus:ring-4 focus:ring-[#f4f0ff]";
+
+const sideCardClassName =
+  "relative overflow-hidden rounded-lg border border-[#ded6ff] bg-white/90 p-6 shadow-sm shadow-violet-950/[0.04] backdrop-blur";
+
 function readStoredUserId(): number | null {
   if (typeof window === "undefined") {
     return null;
@@ -57,6 +61,46 @@ function getStatusTone(
   if (status === "UNDER_REVIEW" || status === "HELD") return "warning";
   if (status === "IN_PROGRESS") return "info";
   return "default";
+}
+
+function getStatusClass(
+  status: TradeRes["tradeStatus"] | TradeRes["escrowStatus"],
+): string {
+  const classes = {
+    default: "border-slate-200 bg-slate-50 text-slate-600",
+    success: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    warning: "border-amber-200 bg-amber-50 text-amber-700",
+    danger: "border-rose-200 bg-rose-50 text-rose-600",
+    info: "border-[#d9ccff] bg-[#f4f0ff] text-[#8c5bff]",
+  };
+
+  return classes[getStatusTone(status)];
+}
+
+function StatusPill({
+  label,
+  status,
+}: {
+  label: string;
+  status: TradeRes["tradeStatus"] | TradeRes["escrowStatus"];
+}) {
+  return (
+    <span
+      className={`inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-black ${getStatusClass(
+        status,
+      )}`}
+    >
+      {label}
+    </span>
+  );
+}
+
+function TypePill({ label }: { label: string }) {
+  return (
+    <span className="inline-flex items-center rounded-full border border-[#d9ccff] bg-white px-3 py-1.5 text-xs font-black text-[#8c5bff]">
+      {label}
+    </span>
+  );
 }
 
 function getTradeStatusLabel(status: string): string {
@@ -444,52 +488,77 @@ export default function TradeDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="fixed-container py-10">
-        <div className="rounded-lg border border-zinc-200 bg-white p-8 text-center text-sm font-semibold text-zinc-600">
-          거래 상세를 불러오는 중입니다.
+      <main className="relative min-h-[calc(100dvh-64px)] overflow-visible bg-[linear-gradient(135deg,#fbfdff_0%,#edf5ff_46%,#f4efff_100%)]">
+        <div
+          className="pointer-events-none absolute left-1/2 top-20 h-[420px] w-[720px] -translate-x-1/2 rounded-full bg-[#8c5bff]/12 blur-3xl"
+          aria-hidden="true"
+        />
+
+        <div className="fixed-container relative py-16">
+          <div className="mx-auto w-[880px] rounded-lg border border-[#ded6ff] bg-white/90 p-8 text-center text-sm font-black text-zinc-500 shadow-[0_28px_80px_rgba(80,60,160,0.14)] backdrop-blur">
+            거래 상세를 불러오는 중입니다.
+          </div>
         </div>
-      </div>
+      </main>
     );
   }
 
   return (
-    <div className="fixed-container py-10">
-      <SectionTitle
-        title="거래 상세"
-        description="거래 상태, 에스크로 상태, 결과물 제출 및 구매 확정을 확인하세요."
+    <main className="relative min-h-[calc(100dvh-64px)] overflow-visible bg-[linear-gradient(135deg,#fbfdff_0%,#edf5ff_46%,#f4efff_100%)]">
+      <div
+        className="pointer-events-none absolute left-1/2 top-20 h-[420px] w-[720px] -translate-x-1/2 rounded-full bg-[#8c5bff]/12 blur-3xl"
+        aria-hidden="true"
+      />
+      <div
+        className="pointer-events-none absolute right-[8%] top-48 h-52 w-52 rounded-full bg-[#79e4dd]/20 blur-3xl"
+        aria-hidden="true"
       />
 
+      <div className="fixed-container relative pb-24 pt-16">
+        <header className="mx-auto max-w-3xl text-center">
+          <p className="text-sm font-black uppercase tracking-[0.32em] text-[#8c5bff]">
+            Trade Desk
+          </p>
+          <h1 className="mt-4 text-5xl font-black tracking-normal text-zinc-950">
+            TRADE DETAIL
+          </h1>
+          <p className="mx-auto mt-5 max-w-2xl text-lg font-semibold leading-8 text-zinc-600">
+            거래 상태, 에스크로, 결과물 제출과 구매 확정을 한 화면에서 확인하세요.
+          </p>
+        </header>
+
       {errorMessage ? (
-        <div className="mb-5">
+        <div className="mx-auto mt-8 w-[1180px]">
           <ErrorState message={errorMessage} />
         </div>
       ) : null}
 
       {successMessage ? (
-        <p className="mb-5 rounded-md bg-teal-50 p-3 text-sm font-semibold text-teal-700">
+        <p className="mx-auto mt-8 w-[1180px] rounded-lg border border-[#d9ccff] bg-[#fbf9ff] p-4 text-sm font-black text-[#8c5bff] shadow-sm shadow-violet-950/[0.04]">
           {successMessage}
         </p>
       ) : null}
 
       {trade ? (
-        <div className="grid grid-cols-[1fr_340px] gap-6">
-          <section className="rounded-lg border border-zinc-200 bg-white p-6">
+        <div className="mx-auto mt-12 grid w-[1180px] grid-cols-[1fr_360px] gap-6">
+          <section className="relative overflow-hidden rounded-lg border border-[#ded6ff] bg-white/90 p-8 shadow-[0_28px_80px_rgba(80,60,160,0.14)] backdrop-blur">
+            <div
+              className="absolute inset-x-0 top-0 h-1 rounded-t-lg bg-[linear-gradient(90deg,#8c5bff_0%,#78a9ff_52%,#79e4dd_100%)]"
+              aria-hidden="true"
+            />
             <div className="flex flex-wrap gap-2">
-              <StatusBadge
+              <StatusPill
                 label={getTradeStatusLabel(trade.tradeStatus)}
-                tone={getStatusTone(trade.tradeStatus)}
+                status={trade.tradeStatus}
               />
-              <StatusBadge
+              <StatusPill
                 label={getEscrowStatusLabel(trade.escrowStatus)}
-                tone={getStatusTone(trade.escrowStatus)}
+                status={trade.escrowStatus}
               />
-              <StatusBadge
-                label={getTradeTypeLabel(trade.tradeType)}
-                tone="info"
-              />
+              <TypePill label={getTradeTypeLabel(trade.tradeType)} />
             </div>
 
-            <div className="mt-6 grid grid-cols-3 gap-4 rounded-lg bg-zinc-50 p-5">
+            <div className="mt-6 grid grid-cols-3 gap-4 rounded-lg border border-[#eee8ff] bg-[#fbf9ff] p-5">
               <SummaryItem title="거래 ID" value={`#${trade.tradeId}`} />
               <SummaryItem title="재능 ID" value={`#${trade.talentId}`} />
               <SummaryItem
@@ -518,7 +587,7 @@ export default function TradeDetailPage() {
               />
             </div>
 
-            <div className="mt-6 grid grid-cols-3 gap-4 rounded-lg border border-zinc-100 p-5">
+            <div className="mt-6 grid grid-cols-3 gap-4 rounded-lg border border-[#eee8ff] bg-white/80 p-5">
               <SummaryItem
                 title="거래 상태"
                 value={getTradeStatusLabel(trade.tradeStatus)}
@@ -571,7 +640,7 @@ export default function TradeDetailPage() {
             ) : null}
 
             {!terminalTradeMessage && canCancelTrade ? (
-              <section className="rounded-lg border border-zinc-200 bg-white p-5">
+              <section className={sideCardClassName}>
                 <p className="font-black text-zinc-950">거래 취소</p>
                 <p className="mt-2 text-sm leading-6 text-zinc-600">
                   작업 진행 중인 거래만 참여자가 취소할 수 있습니다.
@@ -580,7 +649,7 @@ export default function TradeDetailPage() {
                   type="button"
                   disabled={isActionLoading}
                   onClick={handleCancelTrade}
-                  className="mt-5 h-10 w-full rounded-md border border-red-200 px-4 text-sm font-bold text-red-600 transition hover:bg-red-50 disabled:opacity-60"
+                  className="mt-5 h-11 w-full cursor-pointer rounded-lg border border-rose-200 bg-white px-4 text-sm font-black text-rose-600 transition hover:border-rose-300 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   거래 취소
                 </button>
@@ -588,7 +657,7 @@ export default function TradeDetailPage() {
             ) : null}
 
             {!terminalTradeMessage && canReviewResult ? (
-              <section className="rounded-lg border border-zinc-200 bg-white p-5">
+              <section className={sideCardClassName}>
                 <p className="font-black text-zinc-950">구매자 액션</p>
                 <p className="mt-2 text-sm leading-6 text-zinc-600">
                   결과물을 확인한 뒤 구매를 확정할 수 있습니다.
@@ -598,7 +667,7 @@ export default function TradeDetailPage() {
                     type="button"
                     disabled={isActionLoading || isSubmissionLoading}
                     onClick={handleLoadSubmission}
-                    className="h-10 rounded-md border border-zinc-300 px-4 text-sm font-bold text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-60"
+                    className="h-11 cursor-pointer rounded-lg border border-[#ded6ff] bg-white px-4 text-sm font-black text-zinc-700 transition hover:border-[#8c5bff] hover:bg-[#fbf9ff] hover:text-[#8c5bff] disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {isSubmissionLoading ? "조회 중" : "결과물 다시 조회"}
                   </button>
@@ -606,7 +675,7 @@ export default function TradeDetailPage() {
                     type="button"
                     disabled={isActionLoading || trade.tradeStatus !== "UNDER_REVIEW"}
                     onClick={handleConfirmTrade}
-                    className="h-10 rounded-md bg-zinc-950 px-4 text-sm font-bold text-white transition hover:bg-zinc-700 disabled:opacity-60"
+                    className="h-11 cursor-pointer rounded-lg bg-[linear-gradient(135deg,#8c5bff_0%,#8973ff_42%,#78a9ff_74%,#79e4dd_100%)] px-4 text-sm font-black text-white shadow-lg shadow-violet-400/20 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-violet-400/25 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-60"
                   >
                     구매 확정
                   </button>
@@ -615,7 +684,7 @@ export default function TradeDetailPage() {
             ) : null}
 
             {!terminalTradeMessage && canDisputeTrade ? (
-              <section className="rounded-lg border border-zinc-200 bg-white p-5">
+              <section className={sideCardClassName}>
                 <p className="font-black text-zinc-950">분쟁 신청</p>
                 <p className="mt-2 text-sm leading-6 text-zinc-600">
                   결과물이 약속과 다를 경우 5자 이상 200자 이하로 사유를
@@ -626,7 +695,7 @@ export default function TradeDetailPage() {
                   onChange={(event) => setDisputeReason(event.target.value)}
                   maxLength={200}
                   rows={4}
-                  className="form-input mt-4 min-h-24 resize-none"
+                  className={`${inputClassName} mt-4 min-h-24 resize-none`}
                 />
                 <button
                   type="button"
@@ -636,7 +705,7 @@ export default function TradeDetailPage() {
                     disputeReason.trim().length > 200
                   }
                   onClick={handleDisputeTrade}
-                  className="mt-3 h-10 w-full rounded-md border border-amber-300 bg-white px-4 text-sm font-bold text-amber-700 transition hover:bg-amber-50 disabled:opacity-60"
+                  className="mt-3 h-11 w-full cursor-pointer rounded-lg border border-amber-200 bg-white px-4 text-sm font-black text-amber-700 transition hover:border-amber-300 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   분쟁 신청
                 </button>
@@ -644,7 +713,7 @@ export default function TradeDetailPage() {
             ) : null}
 
             {!terminalTradeMessage && canSubmitResult ? (
-              <section className="rounded-lg border border-zinc-200 bg-white p-5">
+              <section className={sideCardClassName}>
                 <p className="font-black text-zinc-950">결과물 제출</p>
                 <p className="mt-2 text-sm leading-6 text-zinc-600">
                   파일을 선택하면 presigned URL로 업로드한 뒤 결과물을
@@ -656,7 +725,7 @@ export default function TradeDetailPage() {
                     <input
                       type="file"
                       onChange={handleSubmissionFileChange}
-                      className="mt-2 block w-full text-sm text-zinc-700 file:mr-4 file:h-10 file:rounded-md file:border-0 file:bg-zinc-950 file:px-4 file:text-sm file:font-bold file:text-white"
+                      className="mt-2 block w-full text-sm font-semibold text-zinc-700 file:mr-4 file:h-10 file:cursor-pointer file:rounded-lg file:border-0 file:bg-[#8c5bff] file:px-4 file:text-sm file:font-black file:text-white"
                     />
                   </label>
                   <label className="block text-sm font-semibold text-zinc-800">
@@ -666,7 +735,7 @@ export default function TradeDetailPage() {
                       onChange={(event) => setDescription(event.target.value)}
                       maxLength={200}
                       rows={4}
-                      className="form-input mt-2 min-h-24 resize-none"
+                      className={`${inputClassName} mt-2 min-h-24 resize-none`}
                     />
                   </label>
                   <button
@@ -676,7 +745,7 @@ export default function TradeDetailPage() {
                       selectedFile === null ||
                       description.trim().length === 0
                     }
-                    className="h-10 w-full rounded-md bg-zinc-950 px-4 text-sm font-bold text-white transition hover:bg-zinc-700 disabled:opacity-60"
+                    className="h-11 w-full cursor-pointer rounded-lg bg-[linear-gradient(135deg,#8c5bff_0%,#8973ff_42%,#78a9ff_74%,#79e4dd_100%)] px-4 text-sm font-black text-white shadow-lg shadow-violet-400/20 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-violet-400/25 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-60"
                   >
                     {isActionLoading ? "업로드 중" : "결과물 제출"}
                   </button>
@@ -692,7 +761,7 @@ export default function TradeDetailPage() {
             ) : null}
 
             {!isBuyer && !isSeller ? (
-              <section className="rounded-lg border border-zinc-200 bg-white p-5">
+              <section className={sideCardClassName}>
                 <p className="font-black text-zinc-950">권한 안내</p>
                 <p className="mt-2 text-sm leading-6 text-zinc-600">
                   이 거래의 구매자 또는 판매자만 거래 액션을 사용할 수
@@ -705,16 +774,20 @@ export default function TradeDetailPage() {
       ) : null}
 
       {shouldShowSubmissionSection ? (
-        <section className="mt-6 rounded-lg border border-zinc-200 bg-white p-6">
+        <section className="relative mx-auto mt-6 w-[1180px] overflow-hidden rounded-lg border border-[#ded6ff] bg-white/90 p-8 shadow-[0_28px_80px_rgba(80,60,160,0.14)] backdrop-blur">
+          <div
+            className="absolute inset-x-0 top-0 h-1 rounded-t-lg bg-[linear-gradient(90deg,#8c5bff_0%,#78a9ff_52%,#79e4dd_100%)]"
+            aria-hidden="true"
+          />
           <p className="font-black text-zinc-950">결과물 정보</p>
 
           {isSubmissionLoading ? (
-            <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 p-6 text-center text-sm font-semibold text-zinc-600">
+            <div className="mt-4 rounded-lg border border-[#eee8ff] bg-[#fbf9ff] p-6 text-center text-sm font-semibold text-zinc-600">
               결과물을 불러오는 중입니다.
             </div>
           ) : submission ? (
             <>
-              <div className="mt-4 grid grid-cols-4 gap-4">
+              <div className="mt-4 grid grid-cols-4 gap-4 rounded-lg border border-[#eee8ff] bg-[#fbf9ff] p-5">
                 <SummaryItem title="제출 ID" value={`#${submission.id}`} />
                 <SummaryItem
                   title="에스크로 ID"
@@ -733,27 +806,30 @@ export default function TradeDetailPage() {
                 href={submission.fileUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="mt-5 inline-flex h-10 items-center rounded-md border border-zinc-300 px-4 text-sm font-bold text-zinc-700 transition hover:bg-zinc-50"
+                className="mt-5 inline-flex h-11 items-center rounded-lg border border-[#ded6ff] bg-white px-5 text-sm font-black text-zinc-700 transition hover:border-[#8c5bff] hover:bg-[#fbf9ff] hover:text-[#8c5bff]"
               >
                 결과물 파일 열기
               </a>
             </>
           ) : (
-            <p className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 p-5 text-sm font-semibold text-zinc-600">
+            <p className="mt-4 rounded-lg border border-[#eee8ff] bg-[#fbf9ff] p-5 text-sm font-semibold text-zinc-600">
               {submissionMessage ?? "아직 제출된 결과물이 없습니다."}
             </p>
           )}
         </section>
       ) : null}
-    </div>
+      </div>
+    </main>
   );
 }
 
 function SummaryItem({ title, value }: { title: string; value: string }) {
   return (
-    <div>
-      <p className="text-sm text-zinc-500">{title}</p>
-      <p className="mt-1 break-words font-bold text-zinc-950">{value}</p>
+    <div className="rounded-md bg-white/80 p-3">
+      <p className="text-xs font-black text-[#8c5bff]">{title}</p>
+      <p className="mt-1 break-words text-base font-black text-zinc-950">
+        {value}
+      </p>
     </div>
   );
 }
@@ -766,7 +842,7 @@ function TradeActionNotice({
   description: string;
 }) {
   return (
-    <section className="rounded-lg border border-zinc-200 bg-white p-5">
+    <section className={sideCardClassName}>
       <p className="font-black text-zinc-950">{title}</p>
       <p className="mt-2 text-sm leading-6 text-zinc-600">{description}</p>
     </section>

@@ -478,22 +478,22 @@ export default function Home() {
           >
             <defs>
               <linearGradient id="flowConnectorLeft" x1="388" y1="0" x2="506" y2="0" gradientUnits="userSpaceOnUse">
-                <stop offset="0%" stopColor="#70d5d0" stopOpacity="0.46" />
-                <stop offset="48%" stopColor="#70d5d0" stopOpacity="0.78" />
-                <stop offset="100%" stopColor="#7d73e8" stopOpacity="0.86" />
+                <stop offset="0%" stopColor="#62d6cf" stopOpacity="0.64" />
+                <stop offset="48%" stopColor="#6fbfe9" stopOpacity="0.74" />
+                <stop offset="100%" stopColor="#8c5bff" stopOpacity="0.78" />
               </linearGradient>
               <linearGradient id="flowConnectorRight" x1="772" y1="0" x2="654" y2="0" gradientUnits="userSpaceOnUse">
-                <stop offset="0%" stopColor="#70d5d0" stopOpacity="0.46" />
-                <stop offset="46%" stopColor="#70d5d0" stopOpacity="0.76" />
-                <stop offset="100%" stopColor="#7d73e8" stopOpacity="0.86" />
+                <stop offset="0%" stopColor="#62d6cf" stopOpacity="0.7" />
+                <stop offset="48%" stopColor="#68c5ef" stopOpacity="0.82" />
+                <stop offset="100%" stopColor="#8c5bff" stopOpacity="0.84" />
               </linearGradient>
             </defs>
 
-            <path className="flowConnectorBase" stroke="url(#flowConnectorLeft)" d="M388 74 H442 V226 H506" />
-            <path className="flowConnectorBase flowConnectorMiddle" d="M388 260 H506" />
-            <path className="flowConnectorBase" stroke="url(#flowConnectorLeft)" d="M388 446 H442 V294 H506" />
-            <path className="flowConnectorBase" stroke="url(#flowConnectorRight)" d="M654 226 H718 V194 H772" />
-            <path className="flowConnectorBase" stroke="url(#flowConnectorRight)" d="M654 294 H718 V326 H772" />
+            <path className="flowConnectorBase flowConnectorDotted" stroke="url(#flowConnectorLeft)" d="M388 74 H442 Q464 74 464 96 V226 H506" />
+            <path className="flowConnectorBase flowConnectorDotted" stroke="url(#flowConnectorLeft)" d="M388 260 H506" />
+            <path className="flowConnectorBase flowConnectorDotted" stroke="url(#flowConnectorLeft)" d="M388 446 H442 Q464 446 464 424 V294 H506" />
+            <path className="flowConnectorBase flowConnectorSolid" stroke="url(#flowConnectorRight)" d="M654 226 H712 Q734 226 734 204 V194 H772" />
+            <path className="flowConnectorBase flowConnectorSolid" stroke="url(#flowConnectorRight)" d="M654 294 H712 Q734 294 734 316 V326 H772" />
 
             <circle className="flowConnectorNode flowConnectorNode-card" cx="388" cy="74" r="5" />
             <circle className="flowConnectorNode flowConnectorNode-card" cx="388" cy="260" r="5" />
@@ -557,14 +557,49 @@ export default function Home() {
       </section>
 
       <footer className="pageFooter">
-        <Link className="footerLogo" href="/" aria-label="Baton 홈">
-          <span className="brandGlyph footerGlyph" aria-hidden="true">
-            <i />
-            <i />
-          </span>
-          <strong>Baton</strong>
-        </Link>
-        <p>작은 재능 교환부터 첫 포트폴리오 완성까지 연결합니다.</p>
+        <div className="footerInner">
+          <div className="footerBrand">
+            <Link className="footerLogo" href="/" aria-label="Baton 홈">
+              <BrandLogoContent />
+            </Link>
+            <p className="footerTagline">재능을 교환하고 거래하는 매칭 플랫폼</p>
+            <p className="footerDescription">
+              본 서비스는 프로그래머스 데브코스 최종 프로젝트로 제작된 포트폴리오용 서비스입니다.
+            </p>
+          </div>
+
+          <nav className="footerNav" aria-label="푸터 메뉴">
+            <h2>서비스</h2>
+            <Link href="#service">서비스 소개</Link>
+            <span>이용약관</span>
+            <span>개인정보처리방침</span>
+            <span>고객지원</span>
+            <a href="https://github.com/" target="_blank" rel="noreferrer">
+              GitHub
+            </a>
+          </nav>
+
+          <div className="footerSupport">
+            <h2>고객지원</h2>
+            <p>
+              <span>이메일</span>
+              team03@baton.dev
+            </p>
+            <p>
+              <span>문의 가능 시간</span>
+              평일 10:00 ~ 18:00
+            </p>
+            <p>
+              <span>문의 채널</span>
+              GitHub Issue 문의 가능
+            </p>
+          </div>
+        </div>
+
+        <div className="footerBottom">
+          <p>© 2026 BATON Team. All rights reserved.</p>
+          <p>Powered by Programmers Devcourse NBE9-11-final-Team03</p>
+        </div>
       </footer>
 
       <style>{`
@@ -2616,34 +2651,155 @@ export default function Home() {
         .stickerGlyph::after { height: 15px !important; }
 
         .pageFooter {
-          padding: 54px 42px;
-          background: #171128;
+          position: relative;
+          overflow: hidden;
+          padding: 72px 42px 28px;
+          background:
+            radial-gradient(circle at 16% 0%, rgba(140, 91, 255, 0.24), transparent 30%),
+            radial-gradient(circle at 86% 18%, rgba(121, 228, 221, 0.14), transparent 28%),
+            linear-gradient(180deg, #171128 0%, #100c1d 100%);
           color: #ffffff;
+        }
+
+        .pageFooter::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          border-top: 1px solid rgba(255, 255, 255, 0.12);
+        }
+
+        .footerInner {
+          position: relative;
+          z-index: 1;
+          max-width: 1180px;
+          margin: 0 auto;
+          display: grid;
+          grid-template-columns: minmax(280px, 1.2fr) minmax(180px, 0.7fr) minmax(260px, 0.8fr);
+          gap: 72px;
+          align-items: start;
+        }
+
+        .footerBrand {
+          max-width: 440px;
+        }
+
+        .footerBrand .brandGlyph {
+          width: 32px;
+          height: 30px;
+        }
+
+        .footerBrand .brandGlyph::before,
+        .footerBrand .brandGlyph::after,
+        .footerBrand .brandGlyph i {
+          background: linear-gradient(180deg, #a68bff 0%, #78a9ff 100%);
+        }
+
+        .footerBrand .brandLogoText {
+          color: #ffffff;
+        }
+
+        .footerTagline {
+          margin: 24px 0 0;
+          color: #ffffff;
+          font-size: 18px;
+          font-weight: 900;
+          line-height: 1.55;
+          letter-spacing: -0.02em;
+        }
+
+        .footerDescription {
+          margin: 14px 0 0;
+          max-width: 410px;
+          color: rgba(255, 255, 255, 0.58);
+          font-size: 14px;
+          font-weight: 600;
+          line-height: 1.8;
+        }
+
+        .footerNav,
+        .footerSupport {
           display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 24px;
+          flex-direction: column;
+          align-items: flex-start;
+        }
+
+        .footerNav {
+          gap: 13px;
+        }
+
+        .footerSupport {
+          gap: 15px;
+        }
+
+        .footerNav h2,
+        .footerSupport h2 {
+          margin: 0 0 8px;
+          color: #ffffff;
+          font-size: 16px;
+          font-weight: 900;
+          letter-spacing: -0.02em;
+        }
+
+        .footerNav a,
+        .footerNav span {
+          color: rgba(255, 255, 255, 0.62);
+          font-size: 14px;
+          font-weight: 700;
+          transition: color 0.2s ease;
+        }
+
+        .footerNav a:hover {
+          color: #ffffff;
+        }
+
+        .footerSupport p {
+          margin: 0;
+          color: rgba(255, 255, 255, 0.72);
+          font-size: 14px;
+          font-weight: 700;
+          line-height: 1.6;
+        }
+
+        .footerSupport span {
+          display: block;
+          margin-bottom: 2px;
+          color: rgba(255, 255, 255, 0.42);
+          font-size: 12px;
+          font-weight: 900;
+          letter-spacing: 0.02em;
         }
 
         .footerLogo {
           display: inline-flex;
           align-items: center;
-          gap: 10px;
-          font-size: 26px;
-          font-weight: 800;
-          letter-spacing: -0.045em;
+          gap: 12px;
+          font-size: 30px;
+          font-weight: 900;
+          letter-spacing: -0.055em;
         }
 
-        .footerGlyph {
-          width: 28px;
-          height: 25px;
+        .footerLogo .brandLogoText {
+          display: inline !important;
         }
 
-        .pageFooter p {
+        .footerBottom {
+          position: relative;
+          z-index: 1;
+          max-width: 1180px;
+          margin: 56px auto 0;
+          padding-top: 24px;
+          border-top: 1px solid rgba(255, 255, 255, 0.12);
+          display: flex;
+          justify-content: space-between;
+          gap: 18px;
+        }
+
+        .footerBottom p {
           margin: 0;
-          color: rgba(255, 255, 255, 0.66);
-          font-size: 14px;
-          font-weight: 600;
+          color: rgba(255, 255, 255, 0.46);
+          font-size: 13px;
+          font-weight: 700;
         }
 
 
@@ -2843,7 +2999,7 @@ export default function Home() {
         .flowIcon-matching svg { color: #6b5cff; }
         .flowIcon-record svg { color: #111827; }
 
-        /* Flow connectors: solid foreground lines from each card into the Baton hub */
+        /* Flow connectors: dotted inputs and solid gradient outputs into the Baton hub */
         .flowConnectors {
           position: absolute;
           inset: 0;
@@ -2853,34 +3009,38 @@ export default function Home() {
           overflow: visible;
           pointer-events: none;
           filter:
-            drop-shadow(0 10px 18px rgba(107, 92, 255, 0.2))
-            drop-shadow(0 0 14px rgba(112, 213, 208, 0.22));
+            drop-shadow(0 10px 18px rgba(107, 92, 255, 0.16))
+            drop-shadow(0 0 14px rgba(112, 213, 208, 0.18));
         }
 
         .flowConnectorBase {
           fill: none;
-          stroke-width: 6;
           stroke-linecap: round;
           stroke-linejoin: round;
           opacity: 1;
           vector-effect: non-scaling-stroke;
         }
 
-        .flowConnectorMiddle {
-          stroke: rgba(112, 205, 211, 0.9);
+        .flowConnectorDotted {
+          stroke-width: 4.5;
+          stroke-dasharray: 1 10;
+        }
+
+        .flowConnectorSolid {
+          stroke-width: 8;
         }
 
         .flowConnectorNode {
           fill: #ffffff;
-          stroke: rgba(125, 115, 232, 0.68);
+          stroke: rgba(125, 115, 232, 0.48);
           stroke-width: 3;
-          filter: drop-shadow(0 6px 14px rgba(107, 92, 255, 0.24));
+          filter: drop-shadow(0 6px 14px rgba(107, 92, 255, 0.16));
           vector-effect: non-scaling-stroke;
         }
 
         .flowConnectorNode-card {
-          fill: #ecffff;
-          stroke: rgba(112, 213, 208, 0.86);
+          fill: #f5ffff;
+          stroke: rgba(98, 214, 207, 0.72);
         }
 
         .flowColumn.left .flowCard::after,
@@ -2978,6 +3138,20 @@ export default function Home() {
 
           .deviceRow {
             flex-wrap: wrap;
+          }
+
+          .footerInner {
+            grid-template-columns: 1fr 1fr;
+            gap: 44px;
+          }
+
+          .footerBrand {
+            grid-column: 1 / -1;
+            max-width: 620px;
+          }
+
+          .footerBottom {
+            flex-direction: column;
           }
         }
 
@@ -3134,6 +3308,23 @@ export default function Home() {
 
           .footer {
             flex-direction: column;
+          }
+
+          .pageFooter {
+            padding: 58px 22px 26px;
+          }
+
+          .footerInner {
+            grid-template-columns: 1fr;
+            gap: 34px;
+          }
+
+          .footerTagline {
+            font-size: 17px;
+          }
+
+          .footerBottom {
+            margin-top: 40px;
           }
         }
 
