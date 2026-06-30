@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { FeedbackModal } from "@/components/common/FeedbackModal";
 import { matchApi, talentApi, type TalentListRes } from "@/lib/api";
 import {
@@ -17,6 +17,14 @@ interface TalentDetailActionsProps {
   isLoggedIn: boolean;
 }
 
+type ProposalMessageMode = "credit" | "swap";
+
+const REQUEST_MESSAGE_MAX_LENGTH = 1000;
+
+function getTalentDisplayTitle(talent: TalentListRes) {
+  return talent.title?.trim() || `재능 #${talent.talentId}`;
+}
+
 export function TalentDetailActions({
   providerId,
   providerTalentId,
@@ -30,6 +38,12 @@ export function TalentDetailActions({
     number | null
   >(null);
   const [isTalentSelectOpen, setIsTalentSelectOpen] = useState(false);
+  const [proposalMessageMode, setProposalMessageMode] =
+    useState<ProposalMessageMode | null>(null);
+  const [proposalMessage, setProposalMessage] = useState("");
+  const [proposalMessageError, setProposalMessageError] = useState<
+    string | null
+  >(null);
   const [isSubmittingCreditRequest, setIsSubmittingCreditRequest] =
     useState(false);
   const [isSubmittingSwapRequest, setIsSubmittingSwapRequest] = useState(false);
@@ -48,6 +62,8 @@ export function TalentDetailActions({
       ) ?? null,
     [visibleMyTalents, selectedRequesterTalentId],
   );
+  const isSubmittingProposal =
+    isSubmittingCreditRequest || isSubmittingSwapRequest;
 
   useEffect(() => {
     if (!isLoggedIn) {
@@ -126,7 +142,37 @@ export function TalentDetailActions({
     };
   }, [isTalentSelectOpen]);
 
-  async function handleCreateCreditRequest() {
+  function openProposalMessageModal(mode: ProposalMessageMode) {
+    setProposalMessage("");
+    setProposalMessageError(null);
+    setMessage(null);
+    setProposalMessageMode(mode);
+  }
+
+  function closeProposalMessageModal() {
+    if (isSubmittingProposal) {
+      return;
+    }
+
+    setProposalMessageMode(null);
+    setProposalMessage("");
+    setProposalMessageError(null);
+  }
+
+  function handleProposalMessageChange(value: string) {
+    setProposalMessage(value);
+
+    if (value.length > REQUEST_MESSAGE_MAX_LENGTH) {
+      setProposalMessageError("요청 메시지는 1000자 이하로 입력해 주세요.");
+      return;
+    }
+
+    if (proposalMessageError) {
+      setProposalMessageError(null);
+    }
+  }
+
+  function handleOpenCreditRequestMessage() {
     if (!isLoggedIn) {
       setMessage("로그인 후 이용해 주세요.");
       return;
@@ -147,27 +193,10 @@ export function TalentDetailActions({
       return;
     }
 
-    setMessage(null);
-    setIsSubmittingCreditRequest(true);
-
-    try {
-      await matchApi.createProposal({
-        requesterTalentId: null,
-        providerId,
-        providerTalentId,
-        requestMessage: "크레딧으로 요청합니다.",
-      });
-      setIsSuccessModalOpen(true);
-    } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : "요청 전송에 실패했습니다.",
-      );
-    } finally {
-      setIsSubmittingCreditRequest(false);
-    }
+    openProposalMessageModal("credit");
   }
 
-  async function handleCreateSwapRequest() {
+  function handleOpenSwapRequestMessage() {
     if (!isLoggedIn) {
       setMessage("로그인 후 이용해 주세요.");
       return;
@@ -183,31 +212,92 @@ export function TalentDetailActions({
       return;
     }
 
+    if (
+      !Number.isInteger(providerId) ||
+      providerId <= 0 ||
+      !Number.isInteger(providerTalentId) ||
+      providerTalentId <= 0
+    ) {
+      setMessage("요청에 필요한 재능 정보를 확인할 수 없습니다.");
+      return;
+    }
+
+    setIsTalentSelectOpen(false);
+    openProposalMessageModal("swap");
+  }
+
+  async function handleSubmitProposalMessage() {
+    if (proposalMessageMode === null || isSubmittingProposal) {
+      return;
+    }
+
+    if (proposalMessageMode === "swap" && selectedRequesterTalentId === null) {
+      setProposalMessageError("교환에 사용할 내 재능을 선택해 주세요.");
+      return;
+    }
+
+    const requestMessage = proposalMessage.trim();
+
+    if (requestMessage.length === 0) {
+      setProposalMessageError("상대에게 전달할 요청 내용을 입력해 주세요.");
+      return;
+    }
+
+    if (
+      proposalMessage.length > REQUEST_MESSAGE_MAX_LENGTH ||
+      requestMessage.length > REQUEST_MESSAGE_MAX_LENGTH
+    ) {
+      setProposalMessageError("요청 메시지는 1000자 이하로 입력해 주세요.");
+      return;
+    }
+
     setMessage(null);
-    setIsSubmittingSwapRequest(true);
+    setProposalMessageError(null);
+
+    const isCreditRequest = proposalMessageMode === "credit";
+    const requesterTalentId = isCreditRequest ? null : selectedRequesterTalentId;
+
+    if (isCreditRequest) {
+      setIsSubmittingCreditRequest(true);
+    } else {
+      setIsSubmittingSwapRequest(true);
+    }
 
     try {
       await matchApi.createProposal({
-        requesterTalentId: selectedRequesterTalentId,
+        requesterTalentId,
         providerId,
         providerTalentId,
-        requestMessage: "내 재능으로 교환을 제안합니다.",
+        requestMessage,
       });
 
-      const userId = getStoredUserId();
-      if (userId !== null) {
-        setStoredLastTalentId(userId, selectedRequesterTalentId);
+      if (!isCreditRequest && requesterTalentId !== null) {
+        const userId = getStoredUserId();
+        if (userId !== null) {
+          setStoredLastTalentId(userId, requesterTalentId);
+        }
       }
 
+      setProposalMessageMode(null);
+      setProposalMessage("");
+      setProposalMessageError(null);
       setIsSuccessModalOpen(true);
     } catch (error) {
-      setMessage(
+      const nextMessage =
         error instanceof Error
           ? error.message
-          : "교환 제안 전송에 실패했습니다.",
-      );
+          : isCreditRequest
+            ? "요청 전송에 실패했습니다."
+            : "교환 제안 전송에 실패했습니다.";
+
+      setMessage(nextMessage);
+      setProposalMessageError(nextMessage);
     } finally {
-      setIsSubmittingSwapRequest(false);
+      if (isCreditRequest) {
+        setIsSubmittingCreditRequest(false);
+      } else {
+        setIsSubmittingSwapRequest(false);
+      }
     }
   }
 
@@ -233,7 +323,7 @@ export function TalentDetailActions({
         <div className="mt-5 grid grid-cols-1 gap-3 lg:grid-cols-[0.9fr_1.1fr_0.75fr]">
           <button
             type="button"
-            onClick={handleCreateCreditRequest}
+            onClick={handleOpenCreditRequestMessage}
             disabled={isSubmittingCreditRequest}
             className="h-14 rounded-2xl bg-zinc-950 px-5 text-sm font-black text-white shadow-[0_14px_28px_rgba(24,24,27,0.18)] transition hover:-translate-y-0.5 hover:bg-zinc-800 disabled:translate-y-0 disabled:opacity-60"
           >
@@ -253,7 +343,7 @@ export function TalentDetailActions({
                 {isLoadingMyTalents
                   ? "내 재능 불러오는 중"
                   : selectedTalent
-                    ? selectedTalent.title
+                    ? getTalentDisplayTitle(selectedTalent)
                     : "선택 가능한 내 재능 없음"}
               </span>
               <span className="shrink-0 text-lg text-[#8c5bff]">⌄</span>
@@ -288,7 +378,7 @@ export function TalentDetailActions({
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="truncate text-sm font-black">
-                            {talent.title}
+                            {getTalentDisplayTitle(talent)}
                           </p>
                           <p className="mt-1 text-xs font-bold text-zinc-500">
                             {talent.categoryName} ·{" "}
@@ -316,7 +406,7 @@ export function TalentDetailActions({
               isLoadingMyTalents ||
               selectedRequesterTalentId === null
             }
-            onClick={handleCreateSwapRequest}
+            onClick={handleOpenSwapRequestMessage}
             className="h-14 rounded-2xl border border-[#d9ccff] bg-white px-5 text-sm font-black text-[#6f3cff] shadow-sm shadow-violet-950/[0.04] transition hover:-translate-y-0.5 hover:border-[#8c5bff] hover:bg-[#f8f5ff] disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-400"
           >
             {isSubmittingSwapRequest ? "제안 중..." : "교환 제안"}
@@ -335,6 +425,22 @@ export function TalentDetailActions({
         </p>
       ) : null}
 
+      {proposalMessageMode ? (
+        <ProposalMessageModal
+          mode={proposalMessageMode}
+          message={proposalMessage}
+          errorMessage={proposalMessageError}
+          isSubmitting={
+            proposalMessageMode === "credit"
+              ? isSubmittingCreditRequest
+              : isSubmittingSwapRequest
+          }
+          onChange={handleProposalMessageChange}
+          onClose={closeProposalMessageModal}
+          onSubmit={handleSubmitProposalMessage}
+        />
+      ) : null}
+
       {isSuccessModalOpen ? (
         <FeedbackModal
           title="요청이 전송되었습니다"
@@ -343,5 +449,109 @@ export function TalentDetailActions({
         />
       ) : null}
     </>
+  );
+}
+
+function ProposalMessageModal({
+  mode,
+  message,
+  errorMessage,
+  isSubmitting,
+  onChange,
+  onClose,
+  onSubmit,
+}: {
+  mode: ProposalMessageMode;
+  message: string;
+  errorMessage: string | null;
+  isSubmitting: boolean;
+  onChange: (value: string) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+}) {
+  const title =
+    mode === "credit" ? "크레딧 요청 메시지" : "교환 제안 메시지";
+  const submitLabel =
+    mode === "credit" ? "크레딧 요청 보내기" : "교환 제안 보내기";
+  const messageLength = message.length;
+  const isOverLimit = messageLength > REQUEST_MESSAGE_MAX_LENGTH;
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    onSubmit();
+  }
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="proposal-message-modal-title"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/45 p-6 backdrop-blur-sm"
+    >
+      <form
+        onSubmit={handleSubmit}
+        className="relative w-full max-w-[520px] overflow-hidden rounded-2xl border border-[#ded6ff] bg-white/95 p-6 shadow-[0_28px_80px_rgba(80,60,160,0.24)] sm:p-7"
+      >
+        <div
+          className="absolute inset-x-0 top-0 h-1 bg-[linear-gradient(90deg,#8c5bff_0%,#78a9ff_52%,#79e4dd_100%)]"
+          aria-hidden="true"
+        />
+
+        <h2
+          id="proposal-message-modal-title"
+          className="text-xl font-black text-zinc-950"
+        >
+          {title}
+        </h2>
+        <p className="mt-2 text-sm font-semibold leading-6 text-zinc-600">
+          상대에게 전달할 요청 내용을 입력해 주세요.
+        </p>
+
+        <label className="mt-5 block text-sm font-black text-zinc-900">
+          메시지
+          <textarea
+            value={message}
+            onChange={(event) => onChange(event.target.value)}
+            rows={7}
+            className="mt-2 w-full resize-none rounded-2xl border border-[#d9ccff] bg-white px-4 py-3 text-sm font-semibold leading-6 text-zinc-800 outline-none transition placeholder:text-zinc-400 focus:border-[#8c5bff] focus:ring-4 focus:ring-[#f4f0ff]"
+            placeholder="원하는 작업 내용, 일정, 참고 사항을 간단히 작성해 주세요."
+          />
+        </label>
+
+        <div className="mt-1.5 flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+          {errorMessage ? (
+            <p className="min-w-0 flex-1 text-xs font-semibold text-red-600">
+              {errorMessage}
+            </p>
+          ) : null}
+          <span
+            className={`ml-auto shrink-0 text-xs font-semibold ${
+              isOverLimit ? "text-red-600" : "text-zinc-500"
+            }`}
+          >
+            {messageLength.toLocaleString("en-US")}/
+            {REQUEST_MESSAGE_MAX_LENGTH.toLocaleString("en-US")}
+          </span>
+        </div>
+
+        <div className="mt-6 grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            disabled={isSubmitting}
+            onClick={onClose}
+            className="h-12 rounded-xl border border-zinc-300 bg-white text-sm font-black text-zinc-700 transition hover:border-zinc-500 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            취소
+          </button>
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="h-12 rounded-xl bg-[linear-gradient(135deg,#8c5bff_0%,#8973ff_48%,#79e4dd_100%)] text-sm font-black text-white shadow-lg shadow-violet-400/20 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-violet-400/25 disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isSubmitting ? "전송 중..." : submitLabel}
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }

@@ -20,6 +20,10 @@ const profileMenuItems = [
   { href: "/credits", label: "크레딧 지갑" },
 ];
 
+const adminMenuItems = [
+  { href: "/admin", label: "관리자 대시보드" },
+];
+
 export function ProfileMenu({
   profileImageUrl,
   isAdmin,
@@ -66,6 +70,8 @@ export function ProfileMenu({
     onLogout();
   }
 
+  const menuItems = isAdmin ? adminMenuItems : profileMenuItems;
+
   return (
     <div ref={containerRef} className="relative">
       <button
@@ -96,7 +102,7 @@ export function ProfileMenu({
           role="menu"
           className="absolute right-0 top-12 z-50 w-48 overflow-hidden rounded-lg border border-[#d9ccff] bg-white py-2 shadow-[0_18px_42px_rgba(80,60,160,0.16)]"
         >
-          {profileMenuItems.map((item) => (
+          {menuItems.map((item) => (
             <Link
               key={item.href}
               href={item.href}
@@ -107,16 +113,6 @@ export function ProfileMenu({
               {item.label}
             </Link>
           ))}
-          {isAdmin ? (
-            <Link
-              href="/admin"
-              role="menuitem"
-              onClick={() => setIsOpen(false)}
-              className="block px-4 py-2.5 text-sm font-semibold text-zinc-700 transition hover:bg-[#f4f0ff] hover:text-[#8c5bff]"
-            >
-              관리자
-            </Link>
-          ) : null}
           <div className="my-1 border-t border-zinc-100" />
           <button
             type="button"

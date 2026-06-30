@@ -4,41 +4,24 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { BrandLogo, BrandLogoContent } from "@/components/layout/BrandLogo";
+import {
+  getHeaderProfileImageUrl,
+  type HeaderAuthState,
+  readHeaderAuthState,
+} from "@/components/layout/headerAuth";
 import { ProfileMenu } from "@/components/layout/ProfileMenu";
 import { NotificationDropdown } from "@/components/notification/NotificationDropdown";
 import { authApi } from "@/lib/api";
-import type { UserRole } from "@/lib/api";
 import {
   clearAuthSession,
-  getStoredNickname,
-  getStoredProfileImageUrl,
-  getStoredUserRole,
-  isLoggedIn as getIsLoggedIn,
   subscribeAuthChanged,
 } from "@/lib/auth";
-
-interface HeaderAuthState {
-  isLoggedIn: boolean;
-  nickname: string | null;
-  profileImageUrl: string | null;
-  role: UserRole | null;
-}
 
 interface HeaderNavItem {
   href: string;
   label: string;
   isActive: boolean;
 }
-
-function readHeaderAuthState(): HeaderAuthState {
-  return {
-    isLoggedIn: getIsLoggedIn(),
-    nickname: getStoredNickname(),
-    profileImageUrl: getStoredProfileImageUrl(),
-    role: getStoredUserRole(),
-  };
-}
-
 
 export function Header() {
   const pathname = usePathname();
@@ -88,17 +71,19 @@ export function Header() {
   const isChatsActive = pathname === "/chats" || pathname.startsWith("/chats/");
   const isCreditsActive = pathname === "/credits" || pathname.startsWith("/credits/");
   const isAdminActive = pathname === "/admin" || pathname.startsWith("/admin/");
+  const isAdmin = authState.role === "ADMIN";
 
   const navItems: HeaderNavItem[] = [
     { href: "/talents", label: "재능 둘러보기", isActive: isTalentActive },
-    { href: "/talents/new", label: "재능 등록", isActive: isTalentNewActive },
-    { href: "/matches", label: "매칭 추천", isActive: isMatchesActive },
-    { href: "/trades", label: "거래", isActive: isTradesActive },
-    { href: "/chats", label: "채팅", isActive: isChatsActive },
-    { href: "/credits", label: "크레딧", isActive: isCreditsActive },
-    ...(authState.role === "ADMIN"
+    ...(isAdmin
       ? [{ href: "/admin", label: "관리자", isActive: isAdminActive }]
-      : []),
+      : [
+          { href: "/talents/new", label: "재능 등록", isActive: isTalentNewActive },
+          { href: "/matches", label: "매칭 추천", isActive: isMatchesActive },
+          { href: "/trades", label: "거래", isActive: isTradesActive },
+          { href: "/chats", label: "채팅", isActive: isChatsActive },
+          { href: "/credits", label: "크레딧", isActive: isCreditsActive },
+        ]),
   ];
 
   return (
@@ -128,8 +113,8 @@ export function Header() {
                 <NotificationDropdown />
                 <ProfileMenu
                   nickname={authState.nickname}
-                  profileImageUrl={authState.profileImageUrl}
-                  isAdmin={authState.role === "ADMIN"}
+                  profileImageUrl={getHeaderProfileImageUrl(authState)}
+                  isAdmin={isAdmin}
                   onLogout={handleLogout}
                 />
               </>
@@ -318,24 +303,20 @@ export function Header() {
           }
         }
 
-        @media (max-width: 980px) {
+        @media (max-width: 1023px) {
           .siteHeader {
-            height: auto !important;
+            height: 64px !important;
           }
 
           .headerInner {
-            min-height: 72px;
-            grid-template-columns: auto auto;
-            justify-content: space-between;
+            min-height: 64px;
+            grid-template-columns: minmax(0, 1fr) auto;
+            justify-content: normal;
+            gap: 12px;
           }
 
           .navMenu {
-            order: 3;
-            grid-column: 1 / -1;
-            width: 100%;
-            justify-content: center;
-            padding-bottom: 14px;
-            gap: 18px;
+            display: none;
           }
 
           .headerActions {

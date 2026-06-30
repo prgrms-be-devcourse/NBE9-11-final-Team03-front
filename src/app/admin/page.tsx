@@ -11,12 +11,13 @@ import {
   Search,
   Users,
 } from "lucide-react";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { Listbox } from "@/components/common/Listbox";
 import {
   adminApi,
+  categoryApi,
   type AdminActionLogRes,
   type AdminActionTargetType,
   type AdminActionType,
@@ -27,6 +28,7 @@ import {
   type AdminTalentRes,
   type AdminTradeRes,
   type AdminUserRes,
+  type CategoryRes,
   type DisputeVerdict,
   type ReportReason,
   type ReportStatus,
@@ -66,49 +68,49 @@ const tabs: {
   description: string;
   Icon: typeof LayoutDashboard;
 }[] = [
-  {
-    value: "overview",
-    label: "요약",
-    description: "서비스 운영 지표",
-    Icon: LayoutDashboard,
-  },
-  {
-    value: "users",
-    label: "사용자",
-    description: "계정 조회와 상태 변경",
-    Icon: Users,
-  },
-  {
-    value: "talents",
-    label: "재능",
-    description: "게시글 조회와 노출 관리",
-    Icon: FileText,
-  },
-  {
-    value: "reports",
-    label: "신고",
-    description: "신고 조회와 처리",
-    Icon: AlertTriangle,
-  },
-  {
-    value: "trades",
-    label: "거래",
-    description: "거래 상태와 참여자 조회",
-    Icon: ClipboardList,
-  },
-  {
-    value: "disputes",
-    label: "분쟁",
-    description: "분쟁 거래 판정",
-    Icon: Gavel,
-  },
-  {
-    value: "logs",
-    label: "로그",
-    description: "관리자 조치 이력",
-    Icon: History,
-  },
-];
+    {
+      value: "overview",
+      label: "요약",
+      description: "서비스 운영 지표",
+      Icon: LayoutDashboard,
+    },
+    {
+      value: "users",
+      label: "사용자",
+      description: "계정 조회와 상태 변경",
+      Icon: Users,
+    },
+    {
+      value: "talents",
+      label: "재능",
+      description: "게시글 조회와 노출 관리",
+      Icon: FileText,
+    },
+    {
+      value: "reports",
+      label: "신고",
+      description: "신고 조회와 처리",
+      Icon: AlertTriangle,
+    },
+    {
+      value: "trades",
+      label: "거래",
+      description: "거래 상태와 참여자 조회",
+      Icon: ClipboardList,
+    },
+    {
+      value: "disputes",
+      label: "분쟁",
+      description: "분쟁 거래 판정",
+      Icon: Gavel,
+    },
+    {
+      value: "logs",
+      label: "로그",
+      description: "관리자 조치 이력",
+      Icon: History,
+    },
+  ];
 
 const userStatusOptions: UserStatus[] = [
   "ACTIVE",
@@ -252,42 +254,49 @@ const reportStatusBreakdownTones: Record<ReportStatus, BreakdownTone> = {
 
 const breakdownToneClassNames: Record<
   BreakdownTone,
-  { card: string; dot: string; bar: string }
+  { card: string; dot: string; bar: string; accent: string }
 > = {
   lime: {
-    card: "border-lime-200 bg-lime-50",
+    card: "border-lime-200/80 bg-gradient-to-br from-lime-50 via-white to-white",
     dot: "bg-lime-500",
-    bar: "bg-lime-500",
+    bar: "from-lime-500 to-emerald-400",
+    accent: "text-lime-700",
   },
   gray: {
-    card: "border-zinc-200 bg-zinc-50",
+    card: "border-zinc-200/80 bg-gradient-to-br from-zinc-50 via-white to-white",
     dot: "bg-zinc-400",
-    bar: "bg-zinc-400",
+    bar: "from-zinc-400 to-zinc-300",
+    accent: "text-zinc-600",
   },
   orange: {
-    card: "border-orange-200 bg-orange-50",
+    card: "border-orange-200/80 bg-gradient-to-br from-orange-50 via-white to-white",
     dot: "bg-orange-500",
-    bar: "bg-orange-500",
+    bar: "from-orange-500 to-amber-400",
+    accent: "text-orange-700",
   },
   red: {
-    card: "border-red-200 bg-red-50",
+    card: "border-red-200/80 bg-gradient-to-br from-red-50 via-white to-white",
     dot: "bg-red-500",
-    bar: "bg-red-500",
+    bar: "from-red-500 to-rose-400",
+    accent: "text-red-700",
   },
   yellow: {
-    card: "border-yellow-200 bg-yellow-50",
+    card: "border-yellow-200/80 bg-gradient-to-br from-yellow-50 via-white to-white",
     dot: "bg-yellow-500",
-    bar: "bg-yellow-500",
+    bar: "from-yellow-500 to-amber-300",
+    accent: "text-yellow-700",
   },
   sky: {
-    card: "border-sky-200 bg-sky-50",
+    card: "border-sky-200/80 bg-gradient-to-br from-sky-50 via-white to-white",
     dot: "bg-sky-500",
-    bar: "bg-sky-500",
+    bar: "from-sky-500 to-cyan-400",
+    accent: "text-sky-700",
   },
   violet: {
-    card: "border-[#d9ccff] bg-[#f4f0ff]",
+    card: "border-[#d9ccff]/80 bg-gradient-to-br from-[#f4f0ff] via-white to-white",
     dot: "bg-[#8c5bff]",
-    bar: "bg-[#8c5bff]",
+    bar: "from-[#8c5bff] to-[#6fd6e8]",
+    accent: "text-[#6f3cff]",
   },
 };
 
@@ -344,7 +353,7 @@ export default function AdminPage() {
       <div className="fixed-container relative py-10 sm:py-14 lg:py-16">
         <header className="border-b border-[#ded6ff] pb-8 text-center">
           <div className="mx-auto max-w-3xl">
-            <h1 className="baton-page-title mt-3">
+            <h1 className="baton-page-title mt-3 !font-bold">
               관리자
             </h1>
             <p className="mx-auto mt-4 max-w-2xl text-sm font-semibold leading-7 text-zinc-500 sm:mt-5 sm:text-lg sm:leading-8">
@@ -366,19 +375,20 @@ export default function AdminPage() {
                 key={tab.value}
                 type="button"
                 onClick={() => setActiveTab(tab.value)}
-                className={`min-h-[82px] cursor-pointer rounded-lg border px-4 py-3 text-left transition hover:-translate-y-0.5 ${
-                  selected
-                    ? "border-[#8c5bff] bg-[#8c5bff] text-white shadow-lg shadow-violet-400/20"
-                    : "border-[#ded6ff] bg-white text-zinc-600 shadow-sm shadow-violet-950/[0.03] hover:border-[#d9ccff] hover:bg-[#fbf9ff] hover:text-[#8c5bff]"
+                className={`grid min-h-[138px] cursor-pointer grid-rows-[58px_1fr] overflow-hidden rounded-lg border p-0 text-center transition hover:-translate-y-0.5 ${selected
+                  ? "border-[#8c5bff] bg-[#8c5bff] text-white shadow-lg shadow-violet-400/20"
+                  : "border-[#ded6ff] bg-white text-zinc-700 shadow-sm shadow-violet-950/[0.03] hover:border-[#d9ccff] hover:bg-[#fbf9ff] hover:text-[#8c5bff]"
                 }`}
               >
-                <span className="flex items-center gap-2 text-sm font-black">
-                  <Icon className="h-4 w-4" aria-hidden="true" />
-                  {tab.label}
+                <span
+                  className={`flex h-full items-center justify-center gap-3 border-b px-5 text-lg font-black leading-none ${selected ? "border-white/20" : "border-[#f0ebff]"
+                  }`}
+                >
+                  <Icon className="h-6 w-6 shrink-0" aria-hidden="true" />
+                  <span className="truncate">{tab.label}</span>
                 </span>
                 <span
-                  className={`mt-2 block text-xs font-semibold ${
-                    selected ? "text-white/75" : "text-zinc-400"
+                  className={`flex h-full items-center justify-center whitespace-nowrap px-5 py-4 text-sm font-bold leading-none ${selected ? "text-white/85" : "text-zinc-500"
                   }`}
                 >
                   {tab.description}
@@ -685,6 +695,7 @@ function AdminUsersTab() {
 
 function AdminTalentsTab() {
   const [talents, setTalents] = useState<AdminTalentRes[]>([]);
+  const [categories, setCategories] = useState<CategoryRes[]>([]);
   const [status, setStatus] = useState<TalentStatus | "">("");
   const [categoryId, setCategoryId] = useState("");
   const [keyword, setKeyword] = useState("");
@@ -696,6 +707,17 @@ function AdminTalentsTab() {
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState("");
+  const categoryValues = useMemo(
+    () => categories.map((category) => String(category.categoryId)),
+    [categories],
+  );
+  const categoryLabelById = useMemo(
+    () =>
+      new Map(
+        categories.map((category) => [String(category.categoryId), category.name]),
+      ),
+    [categories],
+  );
 
   const loadTalents = useCallback(async () => {
     setIsLoading(true);
@@ -731,6 +753,35 @@ function AdminTalentsTab() {
 
     return () => window.clearTimeout(timeoutId);
   }, [loadTalents]);
+
+  useEffect(() => {
+    let ignore = false;
+
+    async function loadCategories(): Promise<void> {
+      try {
+        const response = await categoryApi.getList();
+        const nextCategories = [...(Array.isArray(response) ? response : [])].sort(
+          (left, right) =>
+            left.sortOrder - right.sortOrder ||
+            left.categoryId - right.categoryId,
+        );
+
+        if (!ignore) {
+          setCategories(nextCategories);
+        }
+      } catch {
+        if (!ignore) {
+          setCategories([]);
+        }
+      }
+    }
+
+    void loadCategories();
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   async function handleUpdateStatus(
     talent: AdminTalentRes,
@@ -786,13 +837,14 @@ function AdminTalentsTab() {
             setStatus(value as TalentStatus | "");
           }}
         />
-        <TextFilter
-          label="카테고리 ID"
+        <SelectFilter
+          label="카테고리"
           value={categoryId}
-          inputMode="numeric"
+          values={categoryValues}
+          getLabel={(value) => categoryLabelById.get(value) ?? value}
           onChange={(value) => {
             setPage(0);
-            setCategoryId(onlyDigits(value));
+            setCategoryId(value);
           }}
         />
         <TextFilter
@@ -816,24 +868,31 @@ function AdminTalentsTab() {
         {talents.map((talent) => (
           <article
             key={talent.talentId}
-            className="rounded-lg border border-[#ded6ff] bg-white p-5 shadow-sm shadow-violet-950/[0.03] sm:px-7"
+            className="rounded-lg border border-[#ded6ff] bg-white p-5 shadow-sm shadow-violet-950/[0.03] sm:py-6 sm:pl-12 sm:pr-8 2xl:pl-14 2xl:pr-10"
           >
-            <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,0.78fr)_minmax(300px,0.72fr)_minmax(340px,0.72fr)] xl:items-center">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="line-clamp-1 text-xl font-black text-zinc-950">
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(300px,1fr)_476px_176px] xl:items-center">
+              <div className="relative min-w-0 text-left xl:pl-12">
+                <div className="relative flex min-w-0 items-center">
+                  <span className="absolute left-0 top-1/2 hidden -translate-x-12 -translate-y-1/2 xl:block">
+                    <StatusChip tone={talent.status === "ACTIVE" ? "success" : "danger"}>
+                      {talentStatusLabels[talent.status]}
+                    </StatusChip>
+                  </span>
+                  <p className="min-w-0 truncate whitespace-nowrap text-xl font-black leading-tight text-zinc-950">
                     {talent.title}
                   </p>
-                  <StatusChip tone={talent.status === "ACTIVE" ? "success" : "default"}>
+                </div>
+                <div className="mt-2 xl:hidden">
+                  <StatusChip tone={talent.status === "ACTIVE" ? "success" : "danger"}>
                     {talentStatusLabels[talent.status]}
                   </StatusChip>
                 </div>
-                <p className="mt-1 text-sm font-semibold text-zinc-500">
+                <p className="mt-2 min-w-0 truncate whitespace-nowrap text-sm font-semibold leading-6 text-zinc-500">
                   재능 #{talent.talentId} · 작성자 #{talent.authorId} · {talent.categoryName}
                 </p>
               </div>
 
-              <div className="grid min-w-0 grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+              <div className="grid min-w-0 grid-cols-2 gap-2 text-sm sm:grid-cols-4 xl:w-[476px] xl:justify-self-center">
                 <SmallMetric label="크레딧" value={formatCredit(talent.creditPrice)} />
                 <SmallMetric
                   label="기간"
@@ -843,10 +902,11 @@ function AdminTalentsTab() {
                 <SmallMetric label="완료" value={`${talent.completeCount}건`} />
               </div>
 
-              <div className="grid min-w-0 grid-cols-2 gap-2">
+              <div className="grid min-w-0 grid-cols-2 gap-2 xl:w-[176px] xl:justify-self-end">
                 {talentStatusOptions.map((nextStatus) => (
                   <ActionButton
                     key={nextStatus}
+                    size="compact"
                     disabled={
                       processingTalentId === talent.talentId ||
                       talent.status === nextStatus
@@ -1471,8 +1531,8 @@ function AdminPanel({
     <section className="rounded-lg border border-[#ded6ff] bg-white p-5 shadow-sm shadow-violet-950/[0.04] sm:p-6">
       <div className="mb-5 flex flex-col gap-4 border-b border-[#f0ebff] pb-5 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h2 className="text-xl font-black text-zinc-950">{title}</h2>
-          <p className="mt-2 text-sm font-semibold leading-6 text-zinc-500">
+          <h2 className="text-2xl font-black text-zinc-950 sm:text-3xl">{title}</h2>
+          <p className="mt-3 text-base font-semibold leading-7 text-zinc-500 sm:text-lg sm:leading-8">
             {description}
           </p>
         </div>
@@ -1553,9 +1613,8 @@ function TextFilter({
           placeholder={placeholder}
           inputMode={inputMode}
           onChange={(event) => onChange(event.target.value)}
-          className={`h-11 w-full rounded-lg border border-[#d9ccff] bg-white px-3 text-sm font-semibold text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-[#8c5bff] focus:ring-4 focus:ring-[#f4f0ff] ${
-            inputMode ? "" : "pl-9"
-          }`}
+          className={`h-11 w-full rounded-lg border border-[#d9ccff] bg-white px-3 text-sm font-semibold text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-[#8c5bff] focus:ring-4 focus:ring-[#f4f0ff] ${inputMode ? "" : "pl-9"
+            }`}
         />
       </div>
     </label>
@@ -1661,7 +1720,7 @@ function StatusChip({
 
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-black ${toneClassName}`}
+      className={`inline-flex shrink-0 items-center whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-black ${toneClassName}`}
     >
       {children}
     </span>
@@ -1671,8 +1730,8 @@ function StatusChip({
 function SummaryCard({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-lg border border-[#ded6ff] bg-[#fbf9ff] p-5 text-center">
-      <p className="text-sm font-black text-[#8c5bff]">{label}</p>
-      <p className="mt-3 text-3xl font-black text-zinc-950">
+      <p className="text-base font-black text-[#8c5bff] sm:text-lg">{label}</p>
+      <p className="mt-3 text-3xl font-black text-zinc-950 sm:text-4xl">
         {formatNumber(value)}
       </p>
     </div>
@@ -1700,14 +1759,19 @@ function StatusBreakdown({
   const total = entries.reduce((sum, [, value]) => sum + value, 0);
 
   return (
-    <div className="rounded-lg border border-[#ded6ff] bg-white p-5 shadow-sm shadow-violet-950/[0.04]">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-base font-black text-zinc-950">{title}</p>
-        <span className="rounded-full border border-[#d9ccff] bg-[#f4f0ff] px-3 py-1 text-xs font-black text-[#8c5bff]">
+    <section className="rounded-[28px] border border-[#ded6ff] bg-white/95 p-5 shadow-[0_18px_48px_rgba(80,60,160,0.08)] sm:p-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h3 className="text-xl font-black tracking-[-0.035em] text-zinc-950 sm:text-2xl">
+            {title}
+          </h3>
+        </div>
+        <span className="shrink-0 rounded-full border border-[#d9ccff] bg-[#f4f0ff] px-4 py-2 text-sm font-black text-[#6f3cff] shadow-sm shadow-violet-950/[0.04]">
           총 {formatNumber(total)}
         </span>
       </div>
-      <div className="mt-4 grid gap-3">
+
+      <div className="mt-5 grid gap-2.5">
         {entries.length > 0 ? (
           entries.map(([key, value]) => {
             const percent = total > 0 ? Math.round((value / total) * 100) : 0;
@@ -1715,48 +1779,64 @@ function StatusBreakdown({
             const barWidth = value > 0 ? Math.max(percent, 4) : 0;
 
             return (
-              <div key={key} className={`rounded-lg border p-4 ${tone.card}`}>
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                  <span className="flex min-w-0 items-center gap-2 text-base font-black text-zinc-800">
+              <article
+                key={key}
+                className={`rounded-[18px] border px-4 py-3.5 shadow-sm shadow-zinc-950/[0.03] transition hover:-translate-y-0.5 hover:shadow-[0_14px_28px_rgba(80,60,160,0.08)] sm:px-5 sm:py-4 ${tone.card}`}
+              >
+                <div className="flex min-w-0 items-center justify-between gap-4">
+                  <div className="flex min-w-0 items-center gap-2.5">
                     <span
-                      className={`h-2.5 w-2.5 shrink-0 rounded-full ${tone.dot}`}
+                      className={`h-2.5 w-2.5 shrink-0 rounded-full ${tone.dot} shadow-sm`}
                       aria-hidden="true"
                     />
-                    <span className="truncate">{getLabel(key)}</span>
-                  </span>
-                  <span className="flex shrink-0 items-end gap-2">
-                    <span className="text-2xl font-black leading-none text-zinc-950">
-                      {formatNumber(value)}
+                    <p className="truncate text-base font-extrabold tracking-[-0.02em] text-zinc-900 sm:text-lg">
+                      {getLabel(key)}
+                    </p>
+                  </div>
+
+                  <div className="grid shrink-0 grid-cols-[auto_2.875rem_auto_3rem] items-baseline gap-x-1 text-sm font-bold leading-6 text-zinc-500 sm:text-base">
+                    <span className="whitespace-nowrap text-right">
+                      전체 {formatNumber(total)}건 중
                     </span>
-                    <span className="rounded-full bg-white/80 px-2 py-0.5 text-xs font-black text-zinc-500">
+                    <span className="whitespace-nowrap text-right font-extrabold tabular-nums text-zinc-800">
+                      {formatNumber(value)}건
+                    </span>
+                    <span className="text-center text-zinc-300"></span>
+                    <span
+                      className={`whitespace-nowrap text-right font-extrabold tabular-nums ${tone.accent}`}
+                    >
                       {percent}%
                     </span>
-                  </span>
+                  </div>
                 </div>
-                <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/85">
+
+                <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-white/80 shadow-inner">
                   <div
-                    className={`h-full rounded-full ${tone.bar}`}
+                    className={`h-full rounded-full bg-gradient-to-r ${tone.bar}`}
                     style={{ width: `${barWidth}%` }}
                   />
                 </div>
-              </div>
+              </article>
             );
           })
         ) : (
-          <p className="rounded-lg border border-dashed border-zinc-200 bg-zinc-50 px-4 py-6 text-center text-sm font-semibold text-zinc-400">
+          <p className="rounded-[22px] border border-dashed border-[#d9ccff] bg-[#fbf9ff] px-4 py-10 text-center text-sm font-black text-zinc-400">
             데이터 없음
           </p>
         )}
       </div>
-    </div>
+    </section>
   );
 }
 
 function SmallMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex min-h-[66px] flex-col justify-center rounded-lg bg-zinc-50 px-3 py-2.5">
-      <p className="text-xs font-bold text-zinc-400">{label}</p>
-      <p className="mt-1 whitespace-nowrap text-sm font-semibold leading-tight text-zinc-950 sm:text-base">
+    <div className="flex min-h-[66px] min-w-0 flex-col justify-center overflow-hidden rounded-lg bg-zinc-50 px-3 py-2.5 text-center">
+      <p className="w-full truncate text-xs font-bold text-zinc-400">{label}</p>
+      <p
+        title={value}
+        className="mt-1 w-full min-w-0 truncate whitespace-nowrap text-sm font-semibold leading-tight tracking-tight text-zinc-950 sm:text-[15px]"
+      >
         {value}
       </p>
     </div>

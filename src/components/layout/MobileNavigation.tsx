@@ -7,13 +7,16 @@ import {
   type LucideIcon,
   MessageCircle,
   PlusCircle,
+  ShieldCheck,
   Sparkles,
   UserPlus,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import type { UserRole } from "@/lib/api";
 import {
+  getStoredUserRole,
   isLoggedIn as getIsLoggedIn,
   subscribeAuthChanged,
 } from "@/lib/auth";
@@ -25,11 +28,23 @@ interface MobileNavItem {
   isActive: (pathname: string) => boolean;
 }
 
+interface MobileAuthState {
+  isLoggedIn: boolean;
+  role: UserRole | null;
+}
+
 function isTalentActive(pathname: string): boolean {
   return (
     pathname === "/talents" ||
     (pathname.startsWith("/talents/") && pathname !== "/talents/new")
   );
+}
+
+function readMobileAuthState(): MobileAuthState {
+  return {
+    isLoggedIn: getIsLoggedIn(),
+    role: getStoredUserRole(),
+  };
 }
 
 const signedInItems: MobileNavItem[] = [
@@ -88,13 +103,31 @@ const signedOutItems: MobileNavItem[] = [
   },
 ];
 
+const adminItems: MobileNavItem[] = [
+  {
+    href: "/talents",
+    label: "재능",
+    icon: BriefcaseBusiness,
+    isActive: isTalentActive,
+  },
+  {
+    href: "/admin",
+    label: "관리자",
+    icon: ShieldCheck,
+    isActive: (pathname) => pathname === "/admin" || pathname.startsWith("/admin/"),
+  },
+];
+
 export function MobileNavigation() {
   const pathname = usePathname();
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [authState, setAuthState] = useState<MobileAuthState>({
+    isLoggedIn: false,
+    role: null,
+  });
 
   useEffect(() => {
     function syncAuthState(): void {
-      setIsLoggedIn(getIsLoggedIn());
+      setAuthState(readMobileAuthState());
     }
 
     const timeoutId = window.setTimeout(syncAuthState, 0);
@@ -106,8 +139,16 @@ export function MobileNavigation() {
     };
   }, []);
 
-  const items = isLoggedIn ? signedInItems : signedOutItems;
-  const gridClassName = items.length === 3 ? "grid-cols-3" : "grid-cols-5";
+  const items = authState.isLoggedIn
+    ? authState.role === "ADMIN"
+      ? adminItems
+      : signedInItems
+    : signedOutItems;
+  const gridClassName = items.length === 2
+    ? "grid-cols-2"
+    : items.length === 3
+      ? "grid-cols-3"
+      : "grid-cols-5";
 
   return (
     <nav

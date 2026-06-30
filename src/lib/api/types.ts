@@ -398,9 +398,11 @@ export type TradeEscrowStatus =
 
 export interface TradeRes {
   tradeId: number;
+  title?: string | null;
   matchId: number | null;
-  tradeGroupId: number | null;
+  tradeGroupId?: number | null;
   talentId: number;
+  talentTitle?: string | null;
   buyerId: number;
   sellerId: number;
   buyerNickname?: string | null;
@@ -418,7 +420,8 @@ export interface TradeRes {
 
 export interface TradeListRes {
   tradeId: number;
-  tradeGroupId: number | null;
+  title?: string | null;
+  tradeGroupId?: number | null;
   talentId: number;
   talentTitle?: string | null;
   buyerId: number;
@@ -483,6 +486,14 @@ export interface CreditTransactionRes {
   defaultReason: string;
   detailReason: string | null;
   createdAt: string;
+}
+
+export interface CreditTransactionSearchParams {
+  cursor?: number | null;
+  size?: number;
+  type?: CreditTransactionType;
+  from?: string;
+  to?: string;
 }
 
 export interface AdminPageRes<T> {
