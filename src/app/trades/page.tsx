@@ -259,17 +259,17 @@ export default function TradesPage() {
     <main className="relative min-h-[calc(100dvh-64px)] overflow-hidden bg-white">
       <div className="pointer-events-none absolute left-1/2 top-[-220px] h-[420px] w-[720px] -translate-x-1/2 rounded-full bg-[#f4f0ff] blur-3xl" />
 
-      <div className="fixed-container relative py-16">
+      <div className="fixed-container relative py-10 sm:py-14 lg:py-16">
         <header className="text-center">
-          <h1 className="mt-3 text-6xl font-black tracking-normal text-zinc-950">
+          <h1 className="baton-page-title mt-3">
             MY TRADE
           </h1>
-          <p className="mx-auto mt-5 max-w-2xl text-base font-semibold leading-7 text-zinc-500">
+          <p className="mx-auto mt-4 max-w-2xl text-sm font-semibold leading-7 text-zinc-500 sm:mt-5 sm:text-lg sm:leading-8">
             진행 중인 교환, 검토 중인 결과물, 완료된 협업 기록을 한곳에서 확인하세요.
           </p>
         </header>
 
-        <div className="mt-14 mb-10 flex flex-wrap gap-2 rounded-lg border border-[#ded6ff] bg-white/90 p-2 shadow-sm shadow-violet-950/[0.03]">
+        <div className="mt-10 mb-8 flex gap-2 overflow-x-auto rounded-lg border border-[#ded6ff] bg-white/90 p-2 shadow-sm shadow-violet-950/[0.03] [scrollbar-width:none] sm:mt-14 sm:mb-10 sm:flex-wrap sm:overflow-visible">
           {statusOptions.map((option) => {
             const isActive = selectedStatus === option.value;
 
@@ -278,7 +278,7 @@ export default function TradesPage() {
                 key={option.value || "all"}
                 type="button"
                 onClick={() => setSelectedStatus(option.value)}
-                className={`h-11 cursor-pointer rounded-md px-5 text-sm font-black transition ${isActive
+                className={`h-11 shrink-0 cursor-pointer rounded-md px-5 text-sm font-black transition ${isActive
                   ? "bg-[#8c5bff] text-white shadow-lg shadow-violet-400/20"
                   : "text-zinc-600 hover:bg-[#f4f0ff] hover:text-[#8c5bff]"
                 }`}
@@ -361,7 +361,7 @@ function TradeGroupCard({
 
   return (
     <section className="overflow-hidden rounded-lg border border-[#ded6ff] bg-white/95 shadow-sm shadow-violet-950/[0.04] transition hover:-translate-y-0.5 hover:border-[#c8b7ff] hover:shadow-xl hover:shadow-violet-950/[0.08]">
-      <div className="h-1 bg-[linear-gradient(90deg,#8c5bff_0%,#7f75ff_100%)]" />
+      <div className="h-[3px] bg-[linear-gradient(90deg,rgba(140,91,255,0.68)_0%,rgba(120,169,255,0.48)_54%,rgba(121,228,221,0.58)_100%)]" />
       <div className="p-6">
         <div className="mb-5 flex flex-col gap-4 border-b border-slate-200 pb-5 md:flex-row md:items-start md:justify-between">
           <div className="min-w-0">
@@ -463,7 +463,7 @@ function TradeListCard({
       href={`/trades/${trade.tradeId}`}
       className="block overflow-hidden rounded-lg border border-[#ded6ff] bg-white/95 shadow-sm shadow-violet-950/[0.04] transition hover:-translate-y-0.5 hover:border-[#c8b7ff] hover:shadow-xl hover:shadow-violet-950/[0.08]"
     >
-      <div className="h-1 bg-[linear-gradient(90deg,#8c5bff_0%,#7f75ff_100%)]" />
+      <div className="h-[3px] bg-[linear-gradient(90deg,rgba(140,91,255,0.68)_0%,rgba(120,169,255,0.48)_54%,rgba(121,228,221,0.58)_100%)]" />
       <div className="grid gap-5 p-6 md:grid-cols-[1fr_150px_170px] md:items-center">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">

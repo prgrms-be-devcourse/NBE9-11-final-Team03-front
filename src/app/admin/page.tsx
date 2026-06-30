@@ -88,13 +88,13 @@ export default function AdminPage() {
         description="현재 백엔드에서 제공되는 분쟁 처리와 조치 로그를 관리합니다."
       />
 
-      <div className="mb-6 flex gap-2 rounded-lg border border-zinc-200 bg-white p-1">
+      <div className="mb-6 flex gap-2 overflow-x-auto rounded-lg border border-zinc-200 bg-white p-1 [scrollbar-width:none] sm:overflow-visible">
         {tabs.map((tab) => (
           <button
             key={tab.value}
             type="button"
             onClick={() => setActiveTab(tab.value)}
-            className={`flex h-10 flex-1 items-center justify-center gap-2 rounded-md px-4 text-sm font-bold transition ${
+            className={`flex h-10 min-w-28 flex-1 shrink-0 items-center justify-center gap-2 rounded-md px-4 text-sm font-bold transition sm:min-w-0 ${
               activeTab === tab.value
                 ? "bg-zinc-950 text-white"
                 : tab.isReady
@@ -226,7 +226,7 @@ function AdminDisputesTab() {
             key={dispute.tradeId}
             className="rounded-lg border border-zinc-200 bg-white p-5"
           >
-            <div className="flex items-start justify-between gap-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <p className="font-black text-zinc-950">
                   거래 #{dispute.tradeId} · 재능 #{dispute.talentId}
@@ -239,7 +239,7 @@ function AdminDisputesTab() {
                   {dispute.disputeReason ?? "분쟁 사유가 없습니다."}
                 </p>
               </div>
-              <div className="grid w-36 gap-2">
+              <div className="grid w-full gap-2 sm:w-36">
                 <button
                   type="button"
                   disabled={processingTradeId === dispute.tradeId}
@@ -361,7 +361,7 @@ function AdminActionLogsTab() {
         {logs.map((log) => (
           <article
             key={log.logId}
-            className="grid grid-cols-[120px_1fr_160px] gap-4 rounded-lg border border-zinc-200 bg-white p-4"
+            className="grid grid-cols-1 gap-3 rounded-lg border border-zinc-200 bg-white p-4 sm:grid-cols-[120px_1fr_160px] sm:gap-4"
           >
             <p className="font-black text-zinc-950">#{log.logId}</p>
             <div>
@@ -372,7 +372,7 @@ function AdminActionLogsTab() {
                 관리자 #{log.adminId} · {log.reason ?? "사유 없음"}
               </p>
             </div>
-            <p className="text-right text-sm font-semibold text-zinc-500">
+            <p className="text-sm font-semibold text-zinc-500 sm:text-right">
               {formatDate(log.createdAt)}
             </p>
           </article>
@@ -417,7 +417,7 @@ function AdminPanel({ children }: { children: React.ReactNode }) {
 
 function FilterRow({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mb-5 grid grid-cols-4 gap-3 rounded-lg border border-zinc-200 bg-white p-4">
+    <div className="mb-5 grid grid-cols-1 gap-3 rounded-lg border border-zinc-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-4">
       {children}
     </div>
   );

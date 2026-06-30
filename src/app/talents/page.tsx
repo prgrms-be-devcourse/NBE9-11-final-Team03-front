@@ -17,6 +17,7 @@ import {
   categoryApi,
   talentApi,
   type CategoryRes,
+  type TalentDetailRes,
   type TalentListRes,
   type TalentSortType,
 } from "@/lib/api";
@@ -44,9 +45,9 @@ const shelfFilters = [
 const categoryVisuals = {
   development: {
     Icon: Code2,
-    tile: "from-[#fff8e7] via-[#fff3d6] to-[#fef7ed]",
-    panel: "from-[#f59e0b] to-[#ea580c]",
-    accent: "bg-[#0f766e]",
+    tileBg: "bg-[#fff8e7]",
+    panelBg: "bg-[#f97316]",
+    lineBg: "bg-[#f97316]",
     badge: "text-[#b45309]",
     hover: "group-hover:text-[#c2410c]",
     price: "text-[#ea580c]",
@@ -57,9 +58,9 @@ const categoryVisuals = {
   },
   design: {
     Icon: Palette,
-    tile: "from-[#f7fee7] via-[#ecfccb] to-[#f0fdfa]",
-    panel: "from-[#84cc16] to-[#10b981]",
-    accent: "bg-[#f59e0b]",
+    tileBg: "bg-[#f7fee7]",
+    panelBg: "bg-[#5ec85a]",
+    lineBg: "bg-[#22c55e]",
     badge: "text-[#3f6212]",
     hover: "group-hover:text-[#4d7c0f]",
     price: "text-[#4d7c0f]",
@@ -70,9 +71,9 @@ const categoryVisuals = {
   },
   document: {
     Icon: FileText,
-    tile: "from-[#fff1f2] via-[#ffe4e6] to-[#fff7ed]",
-    panel: "from-[#e11d48] to-[#fb7185]",
-    accent: "bg-[#f59e0b]",
+    tileBg: "bg-[#fff1f2]",
+    panelBg: "bg-[#f05267]",
+    lineBg: "bg-[#f43f5e]",
     badge: "text-[#9f1239]",
     hover: "group-hover:text-[#be123c]",
     price: "text-[#be123c]",
@@ -83,9 +84,9 @@ const categoryVisuals = {
   },
   default: {
     Icon: Sparkles,
-    tile: "from-[#fff7ed] via-[#fefce8] to-[#ecfeff]",
-    panel: "from-[#f59e0b] to-[#0f766e]",
-    accent: "bg-[#f97316]",
+    tileBg: "bg-[#fff7ed]",
+    panelBg: "bg-[#f97316]",
+    lineBg: "bg-[#f97316]",
     badge: "text-[#9a3412]",
     hover: "group-hover:text-[#b45309]",
     price: "text-[#b45309]",
@@ -145,6 +146,22 @@ function getCategoryVisual(categoryName: string) {
   }
 
   return categoryVisuals.default;
+}
+
+function getTalentAuthorNickname(talent: TalentListRes): string | null {
+  const nickname =
+    talent.author?.nickname ??
+    talent.nickname ??
+    talent.authorNickname ??
+    talent.sellerNickname ??
+    talent.providerNickname ??
+    talent.userNickname;
+
+  return nickname?.trim() || null;
+}
+
+function getTalentDetailAuthorNickname(talent: TalentDetailRes): string | null {
+  return talent.author?.nickname?.trim() || null;
 }
 
 function TalentSortMenu({
@@ -250,6 +267,10 @@ export default function TalentsPage() {
     string | null
   >(null);
   const [talents, setTalents] = useState<TalentListRes[]>([]);
+  const [authorNamesByTalentId, setAuthorNamesByTalentId] = useState<
+    Record<number, string | null>
+  >({});
+  const requestedAuthorIdsRef = useRef<Set<number>>(new Set());
   const [nextCursor, setNextCursor] = useState<number | null>(null);
   const [hasNext, setHasNext] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
@@ -345,6 +366,60 @@ export default function TalentsPage() {
     };
   }, [categoryId, shelfFilter, sortBy]);
 
+  useEffect(() => {
+    const targets = talents.filter((talent) => {
+      if (getTalentAuthorNickname(talent)) {
+        return false;
+      }
+
+      if (requestedAuthorIdsRef.current.has(talent.talentId)) {
+        return false;
+      }
+
+      return true;
+    });
+
+    if (targets.length === 0) {
+      return;
+    }
+
+    targets.forEach((talent) => {
+      requestedAuthorIdsRef.current.add(talent.talentId);
+    });
+
+    let ignore = false;
+
+    async function loadTalentAuthors() {
+      const settledAuthors = await Promise.allSettled(
+        targets.map((talent) => talentApi.getDetail(talent.talentId)),
+      );
+
+      if (ignore) {
+        return;
+      }
+
+      setAuthorNamesByTalentId((previous) => {
+        const next = { ...previous };
+
+        settledAuthors.forEach((result, index) => {
+          const talentId = targets[index].talentId;
+          next[talentId] =
+            result.status === "fulfilled"
+              ? getTalentDetailAuthorNickname(result.value)
+              : null;
+        });
+
+        return next;
+      });
+    }
+
+    void loadTalentAuthors();
+
+    return () => {
+      ignore = true;
+    };
+  }, [talents]);
+
   async function handleLoadMore() {
     setErrorMessage(null);
     setIsMoreLoading(true);
@@ -406,12 +481,12 @@ export default function TalentsPage() {
     <main className="relative min-h-[calc(100dvh-64px)] overflow-visible bg-white">
       <div className="pointer-events-none absolute left-1/2 top-[-220px] h-[420px] w-[720px] -translate-x-1/2 rounded-full bg-[#f4f0ff] blur-3xl" />
 
-      <div className="fixed-container relative py-16">
+      <div className="fixed-container relative py-10 sm:py-14 lg:py-16">
         <header className="text-center">
-          <h1 className="mt-3 text-6xl font-black tracking-normal text-zinc-950">
+          <h1 className="baton-page-title mt-3">
             TALENT MATCHING
           </h1>
-          <p className="mx-auto mt-5 max-w-2xl text-base font-semibold leading-7 text-zinc-500">
+          <p className="mx-auto mt-4 max-w-2xl text-sm font-semibold leading-7 text-zinc-500 sm:mt-5 sm:text-lg sm:leading-8">
             내 재능과 어울리는 교환 상대를 찾아보세요.
             <br />
             상세 정보를 확인하고 바로 교환을 제안할 수 있어요.
@@ -420,7 +495,7 @@ export default function TalentsPage() {
 
         <nav
           aria-label="재능 카테고리"
-          className="mt-20 flex items-center gap-10 overflow-x-auto border-b border-slate-400/55 pb-5 text-[15px] font-black text-zinc-950 [scrollbar-width:none]"
+          className="mt-12 flex items-center gap-7 overflow-x-auto border-b border-slate-400/55 pb-5 text-sm font-black text-zinc-950 [scrollbar-width:none] sm:mt-16 sm:gap-10 sm:text-[15px] lg:mt-20"
         >
           <button
             type="button"
@@ -461,14 +536,14 @@ export default function TalentsPage() {
           </div>
         ) : null}
 
-        <section className="mt-7 flex flex-wrap items-center justify-between gap-5">
-          <div className="flex items-center gap-3">
+        <section className="mt-7 flex flex-col gap-5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          <div className="flex w-full items-center gap-2 overflow-x-auto [scrollbar-width:none] sm:w-auto sm:gap-3">
             {shelfFilters.map((filter) => (
               <button
                 key={filter.value}
                 type="button"
                 onClick={() => handleShelfFilterChange(filter.value)}
-                className={`h-[58px] min-w-[86px] cursor-pointer rounded-xl border px-7 text-base font-black transition ${shelfFilter === filter.value
+                className={`h-12 min-w-[76px] cursor-pointer rounded-xl border px-5 text-sm font-black transition sm:h-[58px] sm:min-w-[86px] sm:px-7 sm:text-base ${shelfFilter === filter.value
                   ? "border-[#8c5bff] bg-[#8c5bff] text-white"
                   : "border-[#ded6ff] bg-white/90 text-zinc-500 hover:border-[#d9ccff] hover:bg-[#fbf9ff] hover:text-[#8c5bff]"
                   }`}
@@ -478,8 +553,8 @@ export default function TalentsPage() {
             ))}
           </div>
 
-          <div className="flex items-center gap-3">
-            <label className="relative block w-[260px]">
+          <div className="flex w-full items-center gap-3 sm:w-auto">
+            <label className="relative block w-full sm:w-[260px]">
               <span className="sr-only">재능 검색</span>
               <Search
                 className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400"
@@ -495,7 +570,7 @@ export default function TalentsPage() {
           </div>
         </section>
 
-        <section className="mt-24 flex items-center justify-between">
+        <section className="mt-14 flex flex-wrap items-center justify-between gap-4 sm:mt-20 lg:mt-24">
           <p className="text-base font-semibold text-zinc-500">
             {countLabel}
           </p>
@@ -509,7 +584,7 @@ export default function TalentsPage() {
         </section>
 
         {isInitialLoading ? (
-          <div className="mt-8 grid grid-cols-4 gap-x-6 gap-y-12">
+          <div className="mt-8 grid grid-cols-1 gap-x-6 gap-y-12 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {Array.from({ length: 8 }).map((_, index) => (
               <div key={index} className="animate-pulse">
                 <div className="aspect-square bg-zinc-100" />
@@ -537,9 +612,17 @@ export default function TalentsPage() {
 
         {!isInitialLoading && !errorMessage && filteredTalents.length > 0 ? (
           <>
-            <div className="mt-8 grid grid-cols-4 gap-x-6 gap-y-14">
+            <div className="mt-8 grid grid-cols-1 gap-x-6 gap-y-14 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {filteredTalents.map((talent) => (
-                <TalentProductCard key={talent.talentId} talent={talent} />
+                <TalentProductCard
+                  key={talent.talentId}
+                  talent={talent}
+                  authorNickname={
+                    getTalentAuthorNickname(talent) ??
+                    authorNamesByTalentId[talent.talentId] ??
+                    null
+                  }
+                />
               ))}
             </div>
             {hasNext ? (
@@ -561,25 +644,27 @@ export default function TalentsPage() {
   );
 }
 
-function TalentProductCard({ talent }: { talent: TalentListRes }) {
+function TalentProductCard({
+  talent,
+  authorNickname,
+}: {
+  talent: TalentListRes;
+  authorNickname: string | null;
+}) {
   const visual = getCategoryVisual(talent.categoryName);
   const CategoryIcon = visual.Icon;
   const newTalent = isNewTalent(talent.createdAt);
   const bestTalent = talent.completeCount > 0 || talent.avgRating >= 4.5;
+  const displayAuthorNickname = authorNickname ?? "등록자 정보 없음";
 
   return (
     <Link
       href={`/talents/${talent.talentId}`}
       className="group block text-left"
     >
-      <div
-        className={`relative aspect-square overflow-hidden bg-gradient-to-br ${visual.tile}`}
-      >
+      <div className={`relative aspect-square overflow-hidden ${visual.tileBg}`}>
         <div
-          className={`absolute -right-10 -top-10 h-36 w-36 rounded-[44px] bg-gradient-to-br ${visual.panel} opacity-90 blur-[1px] transition group-hover:scale-105`}
-        />
-        <div
-          className={`absolute right-[20%] top-[22%] h-16 w-16 rounded-full ${visual.accent} opacity-[0.42] blur-xl`}
+          className={`absolute right-0 top-0 h-[40%] w-[40%] rounded-bl-[48px] ${visual.panelBg} transition group-hover:scale-[1.02]`}
         />
         <div className="absolute left-8 top-[76px] z-20 flex h-10 w-16 items-center justify-center rounded-t-[18px] rounded-b-none border border-b-0 border-white/88 bg-white/76 backdrop-blur">
           <CategoryIcon className={`h-7 w-7 ${visual.badge}`} aria-hidden="true" />
@@ -589,7 +674,7 @@ function TalentProductCard({ talent }: { talent: TalentListRes }) {
             {visual.headline}
           </span>
           <div
-            className={`mt-5 h-2 w-20 rounded-full bg-gradient-to-r ${visual.panel}`}
+            className={`mt-5 h-2 w-20 rounded-full ${visual.lineBg}`}
             aria-hidden="true"
           />
         </div>
@@ -614,10 +699,16 @@ function TalentProductCard({ talent }: { talent: TalentListRes }) {
           ★ {formatRating(talent.avgRating)} · 완료 {talent.completeCount}건 ·
           조회 {talent.viewCount}
         </p>
+        <p className="mt-2 text-sm font-semibold text-zinc-500">
+          등록자{" "}
+          <span className="font-black text-zinc-700">
+            {displayAuthorNickname}
+          </span>
+        </p>
 
         <div className="mt-4 flex items-center gap-2">
           <span
-            className={`h-2 w-8 rounded-full bg-gradient-to-r ${visual.panel}`}
+            className={`h-2 w-8 rounded-full ${visual.lineBg}`}
             aria-hidden="true"
           />
           <span className="text-xs font-semibold text-zinc-400">

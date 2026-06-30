@@ -4,7 +4,6 @@ import { Code2, FileText, Palette, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
-import { StatusBadge } from "@/components/common/StatusBadge";
 import { UserProfileModal } from "@/components/profile/UserProfileModal";
 import {
   ApiError,
@@ -210,15 +209,6 @@ export function MatchRecommendationPanel() {
     return () => window.clearTimeout(timeoutId);
   }, [loadAutoRecommendations]);
 
-  async function handleRefresh() {
-    if (!hasStoredAccessToken()) {
-      setErrorMessage("로그인 후 이용해 주세요.");
-      return;
-    }
-
-    await loadAutoRecommendations();
-  }
-
   async function handleOpenDetail(item: RecommendationItem) {
     setErrorMessage(null);
     setStatusMessage("");
@@ -310,14 +300,14 @@ export function MatchRecommendationPanel() {
         </p>
       ) : null}
 
-      <div className="mb-8 flex items-center justify-between border-b border-slate-400/55 pb-6">
+      <div className="mb-8 flex flex-col gap-3 border-b border-slate-400/55 pb-6 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="mt-2 text-2xl font-black text-zinc-950">
             내 재능과 연결 가능한 추천 상대
           </h2>
         </div>
 
-        <p className="text-sm font-bold text-zinc-500">
+        <p className="text-sm font-bold text-zinc-500 sm:text-right">
           등록한 재능을 기준으로 자동 조회된 결과입니다.
         </p>
       </div>
@@ -354,7 +344,7 @@ export function MatchRecommendationPanel() {
       ) : null}
 
       {isHydrated && !isLoadingList && recommendationItems.length > 0 ? (
-        <div className="grid grid-cols-1 gap-x-6 gap-y-14 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-x-6 gap-y-14 sm:grid-cols-2 xl:grid-cols-4">
           {recommendationItems.map((item) => (
             <RecommendationCard
               key={getRecommendationItemKey(item)}
@@ -431,10 +421,10 @@ function RecommendationCard({
         <div
           className={`absolute right-[20%] top-[22%] h-16 w-16 rounded-full ${visual.accent} opacity-[0.42] blur-xl`}
         />
-        <div className="absolute left-8 top-[52px] z-20 flex h-12 w-16 items-center justify-center rounded-t-[18px] rounded-b-none border border-b-0 border-white/88 bg-white/86">
+        <div className="absolute left-8 top-[76px] z-20 flex h-10 w-16 items-center justify-center rounded-t-[18px] rounded-b-none border border-b-0 border-white/88 bg-white/76 backdrop-blur">
           <CategoryIcon className={`h-7 w-7 ${visual.badge}`} aria-hidden="true" />
         </div>
-        <div className="absolute inset-x-8 top-[100px] bottom-8 z-10 rounded-b-[24px] rounded-tr-[24px] border border-t-0 border-white/88 bg-white/76 p-6 shadow-xl shadow-orange-950/10 backdrop-blur">
+        <div className="absolute inset-x-8 top-[116px] bottom-8 z-10 rounded-b-[24px] rounded-tr-[24px] border border-t-0 border-white/88 bg-white/76 p-6 shadow-xl shadow-orange-950/10 backdrop-blur">
           <span className="block text-[42px] font-black leading-none tracking-normal text-zinc-950">
             {visual.headline}
           </span>
@@ -777,14 +767,6 @@ function ProviderAvatar({
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-xs text-zinc-500">{label}</p>
-      <p className="mt-1 font-semibold text-zinc-950">{value}</p>
-    </div>
-  );
-}
 
 function getDisplayName(nickname: string | null | undefined): string {
   return nickname?.trim() || "프로필";

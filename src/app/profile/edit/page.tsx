@@ -189,7 +189,7 @@ export default function ProfileEditPage() {
   }
 
   return (
-    <div className="mx-auto w-[760px] py-10">
+    <div className="fixed-container max-w-[760px] py-10">
       <SectionTitle
         title="프로필 수정"
         description="프로필 이미지, 소개, 관심 카테고리, 포트폴리오 링크를 관리합니다."
@@ -351,7 +351,7 @@ function CategoryCheckboxGroup({
   return (
     <div>
       <p className="text-sm font-semibold text-zinc-800">{title}</p>
-      <div className="mt-2 grid grid-cols-3 gap-2">
+      <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3">
         {categories.map((category) => {
           const categoryId = getCategoryId(category);
           const isSelected = selectedIds.includes(categoryId);

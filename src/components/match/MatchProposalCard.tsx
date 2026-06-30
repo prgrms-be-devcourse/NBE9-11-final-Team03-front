@@ -158,12 +158,12 @@ export function MatchProposalCard({
         </div>
 
         {canRespond ? (
-          <div className="mt-5 flex justify-end gap-2">
+          <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
             <button
               type="button"
               disabled={isProcessing}
               onClick={() => onAccept?.(proposal as MatchProposalReceivedRes)}
-              className="h-10 cursor-pointer rounded-lg border border-transparent bg-[linear-gradient(135deg,#8c5bff_0%,#8467ff_48%,#7f75ff_100%)] px-5 text-sm font-black text-white shadow-lg shadow-violet-400/[0.18] transition hover:-translate-y-0.5 hover:bg-[linear-gradient(135deg,#8250ff_0%,#7f62ff_48%,#796fff_100%)] hover:shadow-xl hover:shadow-violet-400/[0.22] disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-60"
+              className="h-10 w-full cursor-pointer rounded-lg border border-transparent bg-[linear-gradient(135deg,#8c5bff_0%,#8467ff_48%,#7f75ff_100%)] px-5 text-sm font-black text-white shadow-lg shadow-violet-400/[0.18] transition hover:-translate-y-0.5 hover:bg-[linear-gradient(135deg,#8250ff_0%,#7f62ff_48%,#796fff_100%)] hover:shadow-xl hover:shadow-violet-400/[0.22] disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-60 sm:w-auto"
             >
               {isProcessing ? "수락 중..." : "수락"}
             </button>
@@ -171,7 +171,7 @@ export function MatchProposalCard({
               type="button"
               disabled={isProcessing}
               onClick={() => onReject?.(proposal.proposalId)}
-              className="h-10 cursor-pointer rounded-lg border border-rose-200 bg-white px-5 text-sm font-black text-rose-600 transition hover:border-rose-300 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+              className="h-10 w-full cursor-pointer rounded-lg border border-rose-200 bg-white px-5 text-sm font-black text-rose-600 transition hover:border-rose-300 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
             >
               거절
             </button>

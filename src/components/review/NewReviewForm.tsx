@@ -5,7 +5,7 @@ import { SectionTitle } from "@/components/common/SectionTitle";
 
 export function NewReviewForm() {
   return (
-    <div className="mx-auto w-[720px] py-10">
+    <div className="fixed-container max-w-[720px] py-10">
       <SectionTitle
         title="리뷰 작성"
         description="리뷰 기능이 준비되면 완료된 거래에 대한 후기를 남길 수 있습니다."

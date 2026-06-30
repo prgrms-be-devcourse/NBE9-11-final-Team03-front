@@ -23,7 +23,7 @@ export function FeedbackModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/45 px-6 backdrop-blur-sm"
       onClick={(event) => event.stopPropagation()}
     >
-      <div className="relative w-[460px] overflow-hidden rounded-lg border border-[#ded6ff] bg-white/95 p-8 text-center shadow-[0_28px_80px_rgba(80,60,160,0.24)]">
+      <div className="relative w-full max-w-[460px] overflow-hidden rounded-lg border border-[#ded6ff] bg-white/95 p-6 text-center shadow-[0_28px_80px_rgba(80,60,160,0.24)] sm:p-8">
         <div
           className="absolute inset-x-0 top-0 h-1 bg-[linear-gradient(90deg,#8c5bff_0%,#78a9ff_52%,#79e4dd_100%)]"
           aria-hidden="true"
@@ -33,7 +33,7 @@ export function FeedbackModal({
         </div>
         <h2
           id="feedback-modal-title"
-          className="mt-6 text-3xl font-black tracking-normal text-zinc-950"
+          className="mt-6 text-2xl font-black tracking-normal text-zinc-950 sm:text-3xl"
         >
           {title}
         </h2>

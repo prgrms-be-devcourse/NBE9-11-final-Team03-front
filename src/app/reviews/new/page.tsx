@@ -4,7 +4,13 @@ import { NewReviewForm } from "@/components/review/NewReviewForm";
 
 export default function NewReviewPage() {
   return (
-    <Suspense fallback={<div className="mx-auto w-[720px] py-12"><LoadingState /></div>}>
+    <Suspense
+      fallback={
+        <div className="fixed-container max-w-[720px] py-12">
+          <LoadingState />
+        </div>
+      }
+    >
       <NewReviewForm />
     </Suspense>
   );

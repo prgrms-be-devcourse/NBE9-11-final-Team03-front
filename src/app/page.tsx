@@ -166,8 +166,8 @@ const flowRight = [
 
 const landingNavItems = [
   { href: "/talents", label: "재능 둘러보기" },
-  { href: "/talents/new", label: "등록하기" },
-  { href: "/matches", label: "매칭" },
+  { href: "/talents/new", label: "재능 등록" },
+  { href: "/matches", label: "매칭 추천" },
   { href: "/trades", label: "거래" },
   { href: "/chats", label: "채팅" },
   { href: "/credits", label: "크레딧" },
@@ -244,7 +244,7 @@ export default function Home() {
     <main className="handlyPage">
       <header className="siteHeader">
         <div className="headerInner">
-          <Link className="brandLogo" href="/" aria-label="Baton 홈">
+          <Link className="brandLogo" href="/" aria-label="Baton 홈" draggable={false}>
             <BrandLogoContent />
           </Link>
 
@@ -269,6 +269,40 @@ export default function Home() {
 
       <section className="heroSection">
         <div className="heroNoise" />
+        <div className="mobileHeroCompact">
+          <p className="mobileHeroEyebrow">SMART COLLABORATION</p>
+          <h1>협업을 다루는 새로운 방식</h1>
+          <p className="mobileHeroDesc">
+            재능을 스마트하게 연결하고, 첫 협업의 기준을 제시합니다.
+          </p>
+          <div className="mobileHeroActions">
+            <Link href="/talents" className="mobileHeroSecondary">
+              재능 둘러보기
+            </Link>
+            <a href="#start" className="mobileHeroPrimary" onClick={scrollToStart}>
+              무료 시작
+            </a>
+          </div>
+          <div className="mobileLaptopPreview" aria-hidden="true">
+            <div className="mobileLaptopScreen">
+              <div className="mobileLaptopSide" />
+              <div className="mobileLaptopBoard">
+                <span />
+                <span />
+                <span />
+                <span />
+                <span />
+                <span />
+              </div>
+            </div>
+            <div className="mobileLaptopBase" />
+          </div>
+          <div className="mobileSlideDots" aria-hidden="true">
+            <span className="active" />
+            <span />
+            <span />
+          </div>
+        </div>
         <FloatingIcon className="floatIcon slack" icon={<SiSlack />} />
         <FloatingIcon className="floatIcon google" icon={<SiGoogle />} />
         <FloatingIcon className="floatIcon notion" icon={<SiNotion />} />
@@ -617,12 +651,7 @@ export default function Home() {
           overflow-x: hidden;
           background: #ffffff;
           color: #15151f;
-          font-family:
-            Pretendard,
-            -apple-system,
-            BlinkMacSystemFont,
-            "Segoe UI",
-            sans-serif;
+          font-family: var(--font-baton);
         }
 
         a {
@@ -664,7 +693,7 @@ export default function Home() {
           gap: 10px;
           font-size: 19px;
           font-weight: 900;
-          letter-spacing: -0.04em;
+          letter-spacing: 0;
         }
 
         .brandMark {
@@ -803,7 +832,7 @@ export default function Home() {
           margin: 0;
           font-size: clamp(42px, 5.2vw, 68px);
           line-height: 1.12;
-          letter-spacing: -0.07em;
+          letter-spacing: 0;
           font-weight: 700;
         }
 
@@ -822,6 +851,10 @@ export default function Home() {
           gap: 10px;
           margin-top: 30px;
           flex-wrap: wrap;
+        }
+
+        .mobileHeroCompact {
+          display: none;
         }
 
         .laptopStage {
@@ -1222,7 +1255,7 @@ export default function Home() {
           margin: 0;
           font-size: clamp(34px, 4.3vw, 56px);
           line-height: 1.22;
-          letter-spacing: -0.07em;
+          letter-spacing: 0;
           font-weight: 700;
         }
 
@@ -1280,7 +1313,7 @@ export default function Home() {
           margin: 0;
           font-size: 18px;
           line-height: 1.48;
-          letter-spacing: -0.04em;
+          letter-spacing: 0;
         }
 
         .storyCard h3 span {
@@ -1380,7 +1413,7 @@ export default function Home() {
         .serviceCard h3 {
           margin: 0;
           font-size: 22px;
-          letter-spacing: -0.05em;
+          letter-spacing: 0;
           font-weight: 700;
         }
 
@@ -1518,7 +1551,7 @@ export default function Home() {
           color: #15151f;
           font-size: 18px;
           font-weight: 900;
-          letter-spacing: -0.04em;
+          letter-spacing: 0;
         }
 
         .productIcon {
@@ -1600,7 +1633,7 @@ export default function Home() {
           margin: 0;
           font-size: 42px;
           line-height: 1;
-          letter-spacing: -0.06em;
+          letter-spacing: 0;
           font-weight: 700;
         }
 
@@ -1668,7 +1701,7 @@ export default function Home() {
           margin: 0;
           font-size: clamp(30px, 3.4vw, 44px);
           line-height: 1.25;
-          letter-spacing: -0.06em;
+          letter-spacing: 0;
           font-weight: 700;
         }
 
@@ -1744,7 +1777,7 @@ export default function Home() {
         .experienceCard h3 {
           margin: 0;
           font-size: 21px;
-          letter-spacing: -0.05em;
+          letter-spacing: 0;
           font-weight: 700;
         }
 
@@ -1957,7 +1990,7 @@ export default function Home() {
         .flowCard h3 {
           margin: 0 0 8px;
           font-size: 24px;
-          letter-spacing: -0.055em;
+          letter-spacing: 0;
           font-weight: 700;
         }
 
@@ -2012,7 +2045,7 @@ export default function Home() {
         .hubCore strong {
           font-size: 27px;
           line-height: 1.15;
-          letter-spacing: -0.055em;
+          letter-spacing: 0;
           text-align: center;
         }
 
@@ -2051,7 +2084,7 @@ export default function Home() {
           margin: 0;
           font-size: clamp(70px, 10vw, 136px);
           line-height: 0.84;
-          letter-spacing: -0.08em;
+          letter-spacing: 0;
           font-weight: 700;
         }
 
@@ -2332,7 +2365,7 @@ export default function Home() {
           color: #15151f;
           font-size: 20px;
           font-weight: 700;
-          letter-spacing: -0.015em;
+          letter-spacing: 0;
         }
 
         .brandLogoText {
@@ -2340,7 +2373,7 @@ export default function Home() {
           font-size: 20px;
           font-weight: 700;
           line-height: 1;
-          letter-spacing: -0.015em;
+          letter-spacing: 0;
           font-kerning: normal;
         }
 
@@ -2483,7 +2516,7 @@ export default function Home() {
           z-index: 2;
           font-size: clamp(76px, 11vw, 148px) !important;
           line-height: 0.82 !important;
-          letter-spacing: -0.085em !important;
+          letter-spacing: 0;
           color: #ffffff;
           text-shadow: 0 20px 44px rgba(62, 36, 140, 0.16);
         }
@@ -2705,7 +2738,7 @@ export default function Home() {
           font-size: 18px;
           font-weight: 900;
           line-height: 1.55;
-          letter-spacing: -0.02em;
+          letter-spacing: 0;
         }
 
         .footerDescription {
@@ -2738,7 +2771,7 @@ export default function Home() {
           color: #ffffff;
           font-size: 16px;
           font-weight: 900;
-          letter-spacing: -0.02em;
+          letter-spacing: 0;
         }
 
         .footerNav a,
@@ -2776,7 +2809,7 @@ export default function Home() {
           gap: 12px;
           font-size: 30px;
           font-weight: 900;
-          letter-spacing: -0.055em;
+          letter-spacing: 0;
         }
 
         .footerLogo .brandLogoText {
@@ -3383,11 +3416,11 @@ export default function Home() {
           align-items: center !important;
           gap: 8px !important;
           color: #15151f !important;
-          font-family: Arial, Helvetica, sans-serif !important;
+          font-family: var(--font-baton) !important;
           font-size: 20px !important;
           font-weight: 700 !important;
           line-height: 1 !important;
-          letter-spacing: -0.015em !important;
+          letter-spacing: 0;
           text-decoration: none !important;
           white-space: nowrap !important;
         }
@@ -3395,11 +3428,11 @@ export default function Home() {
         .siteHeader .brandLogoText,
         .siteHeader .brandLogo strong {
           color: #15151f !important;
-          font-family: Arial, Helvetica, sans-serif !important;
+          font-family: var(--font-baton) !important;
           font-size: 20px !important;
           font-weight: 700 !important;
           line-height: 1 !important;
-          letter-spacing: -0.015em !important;
+          letter-spacing: 0;
           font-kerning: normal !important;
         }
 
@@ -3439,6 +3472,281 @@ export default function Home() {
 
         .siteHeader .brandGlyph i:last-child {
           display: none !important;
+        }
+
+        @media (max-width: 760px) {
+          .handlyPage {
+            overflow-x: hidden !important;
+            width: 100% !important;
+            max-width: 100vw !important;
+          }
+
+          .siteHeader {
+            height: 60px !important;
+            overflow: hidden !important;
+          }
+
+          .siteHeader .headerInner {
+            min-height: 60px !important;
+            height: 60px !important;
+            padding: 0 18px !important;
+            display: grid !important;
+            grid-template-columns: minmax(0, 1fr) auto !important;
+            gap: 12px !important;
+          }
+
+          .siteHeader .brandLogo {
+            min-width: 0 !important;
+            max-width: 160px !important;
+            overflow: hidden !important;
+          }
+
+          .siteHeader .brandLogoText,
+          .siteHeader .brandLogo strong {
+            display: inline !important;
+            font-size: 20px !important;
+            line-height: 1 !important;
+          }
+
+          .siteHeader .navMenu {
+            display: none !important;
+          }
+
+          .siteHeader .headerActions {
+            display: inline-flex !important;
+            justify-self: end !important;
+            gap: 8px !important;
+          }
+
+          .siteHeader .ghostBtn {
+            display: none !important;
+          }
+
+          .siteHeader .purpleBtn {
+            height: 34px !important;
+            padding: 0 14px !important;
+            font-size: 12px !important;
+            white-space: nowrap !important;
+          }
+
+          .heroSection {
+            min-height: auto !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+          }
+
+          .heroContent,
+          .laptopStage,
+          .floatIcon,
+          .floatingPanel {
+            display: none !important;
+          }
+
+          .mobileHeroCompact {
+            position: relative !important;
+            z-index: 4 !important;
+            display: flex !important;
+            width: 100% !important;
+            max-width: 100vw !important;
+            min-height: calc(100dvh - 60px) !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            justify-content: flex-start !important;
+            padding: 46px 18px 72px !important;
+            text-align: center !important;
+            overflow: hidden !important;
+          }
+
+          .mobileHeroEyebrow {
+            margin: 0 0 12px !important;
+            color: #6b5cff !important;
+            font-size: 12px !important;
+            font-weight: 900 !important;
+            line-height: 1.2 !important;
+            letter-spacing: 0.12em !important;
+          }
+
+          .mobileHeroCompact h1 {
+            width: min(100%, 350px) !important;
+            margin: 0 auto !important;
+            color: #15151f !important;
+            font-size: clamp(34px, 9.4vw, 42px) !important;
+            line-height: 1.18 !important;
+            font-weight: 900 !important;
+            letter-spacing: 0 !important;
+            word-break: keep-all !important;
+            overflow-wrap: normal !important;
+          }
+
+          .mobileHeroDesc {
+            max-width: 320px !important;
+            margin: 18px auto 0 !important;
+            color: rgba(21, 21, 31, 0.66) !important;
+            font-size: 15px !important;
+            line-height: 1.65 !important;
+            font-weight: 700 !important;
+            word-break: keep-all !important;
+          }
+
+          .mobileHeroActions {
+            width: min(100%, 320px) !important;
+            margin: 24px auto 0 !important;
+            display: grid !important;
+            grid-template-columns: 1fr !important;
+            gap: 10px !important;
+          }
+
+          .mobileHeroSecondary,
+          .mobileHeroPrimary {
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            width: 100% !important;
+            height: 46px !important;
+            padding: 0 18px !important;
+            border-radius: 999px !important;
+            font-size: 14px !important;
+            font-weight: 900 !important;
+            line-height: 1 !important;
+            text-decoration: none !important;
+            white-space: nowrap !important;
+          }
+
+          .mobileHeroSecondary {
+            background: #ffffff !important;
+            color: #15151f !important;
+            box-shadow: 0 14px 30px rgba(37, 36, 60, 0.1) !important;
+          }
+
+          .mobileHeroPrimary {
+            background: linear-gradient(135deg, #8c5bff 0%, #6d7cff 100%) !important;
+            color: #ffffff !important;
+            box-shadow: 0 16px 34px rgba(120, 92, 255, 0.24) !important;
+          }
+
+          .mobileLaptopPreview {
+            position: relative !important;
+            width: min(100%, 360px) !important;
+            margin: 38px auto 0 !important;
+            padding: 8px 8px 0 !important;
+            border-radius: 18px 18px 8px 8px !important;
+            background: linear-gradient(180deg, #2f3440 0%, #080a10 100%) !important;
+            box-shadow:
+              inset 0 1px 0 rgba(255, 255, 255, 0.32),
+              0 22px 48px rgba(38, 52, 88, 0.22),
+              0 0 0 4px rgba(255, 255, 255, 0.42) !important;
+          }
+
+          .mobileLaptopScreen {
+            display: grid !important;
+            grid-template-columns: 74px 1fr !important;
+            aspect-ratio: 16 / 10.5 !important;
+            overflow: hidden !important;
+            border-radius: 10px 10px 4px 4px !important;
+            background: #ffffff !important;
+            border: 1px solid rgba(255, 255, 255, 0.15) !important;
+          }
+
+          .mobileLaptopSide {
+            position: relative !important;
+            background: linear-gradient(180deg, #fbfaff 0%, #f4f6ff 100%) !important;
+            border-right: 1px solid #e8ecfb !important;
+          }
+
+          .mobileLaptopSide::before {
+            content: "" !important;
+            position: absolute !important;
+            left: 14px !important;
+            top: 24px !important;
+            width: 44px !important;
+            height: 7px !important;
+            border-radius: 999px !important;
+            background: #dce3f3 !important;
+            box-shadow:
+              0 26px 0 #edf1fb,
+              0 52px 0 #edf1fb,
+              0 78px 0 #edf1fb !important;
+          }
+
+          .mobileLaptopSide::after {
+            content: "" !important;
+            position: absolute !important;
+            left: 14px !important;
+            bottom: 24px !important;
+            width: 48px !important;
+            height: 40px !important;
+            border-radius: 13px !important;
+            background: linear-gradient(135deg, #8c5bff, #63d6d0) !important;
+          }
+
+          .mobileLaptopBoard {
+            display: grid !important;
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 10px !important;
+            padding: 38px 16px 16px !important;
+            background:
+              linear-gradient(90deg, transparent 0 48%, rgba(245, 247, 252, 0.9) 48% 66%, transparent 66%),
+              #ffffff !important;
+          }
+
+          .mobileLaptopBoard span {
+            min-height: 42px !important;
+            border-radius: 12px !important;
+            border: 1px solid #e2e8f4 !important;
+            background:
+              linear-gradient(90deg, #dfe5f0 0 42%, transparent 42%),
+              rgba(255, 255, 255, 0.88) !important;
+          }
+
+          .mobileLaptopBoard span:nth-child(1),
+          .mobileLaptopBoard span:nth-child(4) {
+            background: linear-gradient(135deg, #8c5bff, #63d6d0) !important;
+            border-color: transparent !important;
+          }
+
+          .mobileLaptopBase {
+            position: relative !important;
+            left: 50% !important;
+            width: 100% !important;
+            height: 28px !important;
+            border-radius: 0 0 18px 18px !important;
+            transform: translateX(-50%) !important;
+            background: linear-gradient(180deg, #eef3fa 0%, #b8c2d0 100%) !important;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95) !important;
+          }
+
+          .mobileSlideDots {
+            display: inline-flex !important;
+            gap: 10px !important;
+            margin-top: 28px !important;
+          }
+
+          .mobileSlideDots span {
+            width: 10px !important;
+            height: 10px !important;
+            border-radius: 999px !important;
+            background: #c5c9d3 !important;
+          }
+
+          .mobileSlideDots .active {
+            width: 42px !important;
+            background: #8c5bff !important;
+          }
+        }
+
+        @media (max-width: 380px) {
+          .mobileHeroCompact h1 {
+            width: min(100%, 320px) !important;
+            font-size: 31px !important;
+          }
+
+          .mobileHeroDesc {
+            font-size: 14px !important;
+          }
+
+          .mobileLaptopPreview {
+            width: min(100%, 330px) !important;
+          }
         }
       `}</style>
     </main>

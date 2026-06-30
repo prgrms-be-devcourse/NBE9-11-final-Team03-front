@@ -55,7 +55,8 @@ function shouldAttemptReissue(path: string): boolean {
     !path.includes("/api/v1/auth/signup") &&
     !path.includes("/api/v1/auth/reissue") &&
     !path.includes("/api/v1/auth/email-send") &&
-    !path.includes("/api/v1/auth/email-verification")
+    !path.includes("/api/v1/auth/email-verification") &&
+    !path.includes("/api/v1/auth/check-nickname")
   );
 }
 

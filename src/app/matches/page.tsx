@@ -38,12 +38,12 @@ export default function MatchesPage() {
     <main className="relative min-h-[calc(100dvh-64px)] overflow-hidden bg-white">
       <div className="pointer-events-none absolute left-1/2 top-[-220px] h-[420px] w-[720px] -translate-x-1/2 rounded-full bg-[#f4f0ff] blur-3xl" />
 
-      <div className="fixed-container relative py-16">
+      <div className="fixed-container relative py-10 sm:py-14 lg:py-16">
         <header className="text-center">
-          <h1 className="mt-3 text-6xl font-black tracking-normal text-zinc-950">
+          <h1 className="baton-page-title mt-3">
             MATCH YOUR TALENT
           </h1>
-          <p className="mx-auto mt-5 max-w-2xl text-base font-semibold leading-7 text-zinc-500">
+          <p className="mx-auto mt-4 max-w-2xl text-sm font-semibold leading-7 text-zinc-500 sm:mt-5 sm:text-lg sm:leading-8">
             등록한 재능의 카테고리를 기준으로 교환 가능성이 높은 상대를 추천합니다.
             <br />
             상세를 확인한 뒤 바로 제안 메시지를 보낼 수 있어요.
@@ -73,7 +73,7 @@ function MatchesTabContent() {
     <>
       <nav
         aria-label="매칭 메뉴"
-        className="mt-20 grid grid-cols-3 gap-3 border-b border-slate-400/55 pb-6"
+        className="mt-12 grid grid-cols-1 gap-3 border-b border-slate-400/55 pb-6 sm:mt-16 md:grid-cols-3 lg:mt-20"
       >
         {tabs.map((tab) => {
           const isActive = tab.value === activeTab;
@@ -83,7 +83,7 @@ function MatchesTabContent() {
               key={tab.value}
               type="button"
               onClick={() => handleTabChange(tab.value)}
-              className={`group h-[82px] cursor-pointer rounded-lg border px-5 text-left transition hover:-translate-y-0.5 ${isActive
+              className={`group min-h-[76px] cursor-pointer rounded-lg border px-5 py-4 text-left transition hover:-translate-y-0.5 sm:min-h-[82px] ${isActive
                 ? "border-[#8c5bff] bg-[#8c5bff] text-white shadow-lg shadow-violet-400/20"
                 : "border-[#ded6ff] bg-white/90 text-zinc-600 shadow-sm shadow-violet-950/[0.03] hover:border-[#d9ccff] hover:bg-[#fbf9ff] hover:text-[#8c5bff] hover:shadow-lg hover:shadow-violet-950/[0.06]"
                 }`}

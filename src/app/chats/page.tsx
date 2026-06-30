@@ -463,15 +463,15 @@ export default function ChatsPage() {
   }
 
   return (
-    <main className="relative min-h-[calc(100dvh-64px)] overflow-hidden bg-white">
+    <main className="relative min-h-[calc(100dvh-64px)] overflow-x-hidden bg-white">
       <div className="pointer-events-none absolute left-1/2 top-[-220px] h-[420px] w-[720px] -translate-x-1/2 rounded-full bg-[#f4f0ff] blur-3xl" />
 
-      <div className="fixed-container relative py-10">
-        <header className="mx-auto mb-12 max-w-3xl text-center">
-          <h1 className="mt-4 text-5xl font-black tracking-normal text-zinc-950">
-            CHATING
+      <div className="fixed-container relative py-10 sm:py-14">
+        <header className="mx-auto mb-8 max-w-3xl text-center sm:mb-12">
+          <h1 className="baton-page-title mt-4">
+            CHATTING
           </h1>
-          <p className="mx-auto mt-5 max-w-2xl text-lg font-semibold leading-8 text-zinc-600">
+          <p className="mx-auto mt-4 max-w-2xl text-sm font-semibold leading-7 text-zinc-500 sm:mt-5 sm:text-lg sm:leading-8">
             매칭과 거래에서 이어진 대화를 한 곳에서 확인하고 실시간으로 메시지를 주고받으세요.
           </p>
           <div
@@ -484,12 +484,12 @@ export default function ChatsPage() {
           </div>
         </header>
 
-        <div className="relative grid h-[720px] min-h-0 grid-cols-[340px_1fr] overflow-hidden rounded-lg border border-[#ded6ff] bg-white/95 shadow-[0_28px_80px_rgba(80,60,160,0.12)] backdrop-blur">
+        <div className="relative grid min-h-[680px] overflow-hidden rounded-lg border border-[#ded6ff] bg-white/95 shadow-[0_28px_80px_rgba(80,60,160,0.12)] backdrop-blur lg:h-[720px] lg:min-h-0 lg:grid-cols-[340px_1fr]">
           <div
             className="absolute inset-x-0 top-0 h-1 bg-[linear-gradient(90deg,#8c5bff_0%,#78a9ff_52%,#79e4dd_100%)]"
             aria-hidden="true"
           />
-          <aside className="flex min-h-0 flex-col border-r border-[#eee8ff] bg-[#fbf9ff]/70">
+          <aside className="flex min-h-0 max-h-[360px] flex-col border-b border-[#eee8ff] bg-[#fbf9ff]/70 lg:max-h-none lg:border-b-0 lg:border-r">
           <div className="border-b border-[#eee8ff] px-5 py-5">
             <p className="text-sm font-black text-zinc-950">대화 목록</p>
             <p className="mt-1 text-xs font-bold text-zinc-400">
@@ -539,7 +539,7 @@ export default function ChatsPage() {
           </div>
         </aside>
 
-        <section className="flex min-h-0 min-w-0 flex-col">
+        <section className="flex min-h-[560px] min-w-0 flex-col lg:min-h-0">
           <div className="border-b border-[#eee8ff] px-6 py-5">
             {!hasCheckedUserId ? (
               <p className="text-xs font-semibold text-zinc-500">
@@ -581,7 +581,7 @@ export default function ChatsPage() {
             </div>
           ) : null}
 
-          <div className="min-h-0 flex-1 overflow-y-auto bg-[#fbf9ff]/60 px-6 py-6 [scrollbar-gutter:stable]">
+          <div className="min-h-0 flex-1 overflow-y-auto bg-[#fbf9ff]/60 px-4 py-5 [scrollbar-gutter:stable] sm:px-6 sm:py-6">
             <div className="mx-auto flex max-w-[720px] flex-col gap-4">
               {currentRoom === null ? (
                 isEnteringRoom ? (
@@ -632,8 +632,8 @@ export default function ChatsPage() {
             </div>
           </div>
 
-          <div className="border-t border-[#eee8ff] bg-white/95 px-6 py-4">
-            <form onSubmit={handleSubmit} className="flex items-center gap-3">
+          <div className="border-t border-[#eee8ff] bg-white/95 px-4 py-4 sm:px-6">
+            <form onSubmit={handleSubmit} className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <label htmlFor="chat-message" className="sr-only">
                 메시지 입력
               </label>
@@ -669,7 +669,7 @@ export default function ChatsPage() {
                   messageInput.trim().length === 0 ||
                   isSending
                 }
-                className="inline-flex h-12 cursor-pointer items-center gap-2 rounded-lg bg-[#8c5bff] px-5 text-sm font-black text-white shadow-[0_14px_28px_rgba(140,91,255,0.22)] transition hover:bg-[#7c4eff] disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:shadow-none"
+                className="inline-flex h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-[#8c5bff] px-5 text-sm font-black text-white shadow-[0_14px_28px_rgba(140,91,255,0.22)] transition hover:bg-[#7c4eff] disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:shadow-none sm:w-auto"
               >
                 <Send className="size-4" aria-hidden="true" />
                 {isSending ? "전송 중" : "보내기"}
@@ -798,7 +798,7 @@ function MessageBubble({
         ) : null}
 
         <div
-          className={`max-w-[72%] rounded-2xl px-4 py-3 shadow-sm ${isMine
+          className={`max-w-[86%] rounded-2xl px-4 py-3 shadow-sm sm:max-w-[72%] ${isMine
               ? "bg-[#8c5bff] text-white shadow-[0_12px_24px_rgba(140,91,255,0.18)]"
               : "border border-[#eee8ff] bg-white text-zinc-900"
             }`}

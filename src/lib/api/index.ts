@@ -59,6 +59,8 @@ import type {
   TradeSubmissionReq,
   TradeSubmissionRes,
   TradeStatus,
+  UserCheckNicknameReq,
+  UserCheckNicknameRes,
   UserLoginReq,
   UserLoginRes,
   UserSignupReq,
@@ -129,6 +131,15 @@ export const authApi = {
 
   verifyEmail(payload: EmailVerificationReq): Promise<void> {
     return apiFetch<void>("/api/v1/auth/email-verification", {
+      method: "POST",
+      body: payload,
+    });
+  },
+
+  checkNickname(
+    payload: UserCheckNicknameReq,
+  ): Promise<UserCheckNicknameRes> {
+    return apiFetch<UserCheckNicknameRes>("/api/v1/auth/check-nickname", {
       method: "POST",
       body: payload,
     });

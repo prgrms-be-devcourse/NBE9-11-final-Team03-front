@@ -213,12 +213,12 @@ export default function NewTalentPage() {
         aria-hidden="true"
       />
 
-      <div className="fixed-container relative pb-72 pt-16">
+      <div className="fixed-container relative pb-28 pt-10 sm:pb-40 sm:pt-14 lg:pb-72 lg:pt-16">
         <header className="mx-auto max-w-3xl text-center">
-          <h1 className="mt-4 text-5xl font-black tracking-normal text-zinc-950">
+          <h1 className="baton-page-title mt-4">
             내 재능 등록하기
           </h1>
-          <p className="mx-auto mt-5 max-w-2xl text-lg font-semibold leading-8 text-zinc-600">
+          <p className="mx-auto mt-4 max-w-2xl text-sm font-semibold leading-7 text-zinc-500 sm:mt-5 sm:text-lg sm:leading-8">
             내가 제공할 수 있는 일을 선명하게 정리하고, 좋은 교환 상대를 만날 준비를 시작해요.
           </p>
         </header>
@@ -226,7 +226,7 @@ export default function NewTalentPage() {
         <form
           onSubmit={handleSubmit(onSubmit)}
           noValidate
-          className="relative mx-auto mt-12 w-[880px] overflow-visible rounded-lg border border-[#ded6ff] bg-white/90 p-8 shadow-[0_28px_80px_rgba(80,60,160,0.14)] backdrop-blur"
+          className="relative mx-auto mt-8 w-full max-w-[880px] overflow-visible rounded-lg border border-[#ded6ff] bg-white/90 p-5 shadow-[0_28px_80px_rgba(80,60,160,0.14)] backdrop-blur sm:mt-12 sm:p-8"
         >
           <div
             className="absolute inset-x-0 top-0 h-1 rounded-t-lg bg-[linear-gradient(90deg,#8c5bff_0%,#78a9ff_52%,#79e4dd_100%)]"
@@ -291,7 +291,7 @@ export default function NewTalentPage() {
               />
             </Field>
 
-            <div className="grid grid-cols-2 gap-5">
+            <div className="grid gap-5 md:grid-cols-2">
               <Field
                 label="예상 작업 기간"
                 error={errors.estimatedHours?.message}

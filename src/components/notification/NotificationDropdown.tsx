@@ -146,7 +146,7 @@ export function NotificationDropdown() {
         ) : null}
       </button>
       {isOpen ? (
-        <div className="absolute right-0 z-40 mt-3 w-[400px] overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-2xl shadow-zinc-950/15">
+        <div className="absolute right-0 z-40 mt-3 w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-2xl shadow-zinc-950/15 sm:w-[400px]">
           <div className="flex items-start justify-between gap-4 border-b border-zinc-100 px-6 py-4">
             <div>
               <p className="text-lg font-black text-zinc-950">최근 알림</p>

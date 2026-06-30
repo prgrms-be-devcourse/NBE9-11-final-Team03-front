@@ -91,8 +91,8 @@ export function Header() {
 
   const navItems: HeaderNavItem[] = [
     { href: "/talents", label: "재능 둘러보기", isActive: isTalentActive },
-    { href: "/talents/new", label: "등록하기", isActive: isTalentNewActive },
-    { href: "/matches", label: "매칭", isActive: isMatchesActive },
+    { href: "/talents/new", label: "재능 등록", isActive: isTalentNewActive },
+    { href: "/matches", label: "매칭 추천", isActive: isMatchesActive },
     { href: "/trades", label: "거래", isActive: isTradesActive },
     { href: "/chats", label: "채팅", isActive: isChatsActive },
     { href: "/credits", label: "크레딧", isActive: isCreditsActive },
@@ -105,7 +105,7 @@ export function Header() {
     <>
       <header className="siteHeader">
         <div className="headerInner">
-          <Link className="brandLogo" href="/" aria-label="Baton 홈">
+          <Link className="brandLogo" href="/" aria-label="Baton 홈" draggable={false}>
             <BrandLogoContent />
           </Link>
 
@@ -178,8 +178,9 @@ export function Header() {
           color: #15151f;
           font-size: 20px;
           font-weight: 700;
-          letter-spacing: -0.045em;
+          letter-spacing: 0;
           text-decoration: none;
+          line-height: 1;
         }
 
         .brandLogo {
@@ -191,7 +192,7 @@ export function Header() {
           font-size: 20px;
           font-weight: 700;
           line-height: 1;
-          letter-spacing: -0.045em;
+          letter-spacing: 0;
         }
 
         .brandGlyph {
@@ -344,13 +345,13 @@ export function Header() {
 
         @media (max-width: 760px) {
           .headerInner {
+            min-height: 60px !important;
             padding: 0 18px !important;
+            grid-template-columns: minmax(0, 1fr) auto !important;
           }
 
           .navMenu {
-            overflow-x: auto;
-            justify-content: flex-start;
-            padding-left: 4px;
+            display: none;
           }
 
           .ghostBtn {
@@ -359,11 +360,6 @@ export function Header() {
         }
 
         @media (max-width: 480px) {
-          .brandLogoContent strong,
-        .brandLogoText {
-            display: none;
-          }
-
           .purpleBtn {
             height: 34px;
             padding: 0 12px;
