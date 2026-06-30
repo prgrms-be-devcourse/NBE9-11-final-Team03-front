@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
+import { LoginRequiredState } from "@/components/common/LoginRequiredState";
 import { MatchProposalCard } from "@/components/match/MatchProposalCard";
 import {
   chatApi,
@@ -12,6 +13,10 @@ import {
   type MatchProposalSentRes,
 } from "@/lib/api";
 import { hasStoredAccessToken } from "@/lib/auth";
+import {
+  isAuthRequiredError,
+  isAuthRequiredMessage,
+} from "@/lib/auth-required";
 
 interface MatchProposalInboxProps {
   type: "received" | "sent";
@@ -64,7 +69,9 @@ export function MatchProposalInbox({ type }: MatchProposalInboxProps) {
         setReceivedProposals([]);
         setSentProposals([]);
         setErrorMessage(
-          error instanceof Error
+          isAuthRequiredError(error)
+            ? "로그인 후 이용해 주세요."
+            : error instanceof Error
             ? error.message
             : "제안 목록을 불러오지 못했습니다.",
         );
@@ -152,6 +159,7 @@ export function MatchProposalInbox({ type }: MatchProposalInboxProps) {
     type === "received"
       ? "새로운 교환 요청이 도착하면 이곳에서 바로 확인할 수 있어요."
       : "추천 조회에서 보낸 교환 요청의 진행 상태가 이곳에 표시됩니다.";
+  const isLoginRequired = isAuthRequiredMessage(errorMessage);
 
   return (
     <section>
@@ -169,7 +177,12 @@ export function MatchProposalInbox({ type }: MatchProposalInboxProps) {
         </div>
       ) : null}
 
-      {errorMessage ? (
+      {isLoginRequired ? (
+        <LoginRequiredState
+          className="mb-5"
+          description="받은 제안과 보낸 제안은 로그인 후 확인할 수 있어요."
+        />
+      ) : errorMessage ? (
         <div className="mb-5">
           <ErrorState message={errorMessage} />
         </div>

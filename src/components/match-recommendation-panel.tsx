@@ -4,6 +4,7 @@ import { Code2, FileText, Palette, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
+import { LoginRequiredState } from "@/components/common/LoginRequiredState";
 import { UserProfileModal } from "@/components/profile/UserProfileModal";
 import {
   ApiError,
@@ -18,6 +19,10 @@ import {
   hasStoredAccessToken,
   setStoredLastTalentId,
 } from "@/lib/auth";
+import {
+  isAuthRequiredError,
+  isAuthRequiredMessage,
+} from "@/lib/auth-required";
 import {
   formatCredit,
   formatEstimatedDuration,
@@ -183,7 +188,9 @@ export function MatchRecommendationPanel() {
       setSelectedRecommendationContext(null);
       setStatusMessage("");
       setErrorMessage(
-        error instanceof ApiError && error.status === 404
+        isAuthRequiredError(error)
+          ? "로그인 후 이용해 주세요."
+          : error instanceof ApiError && error.status === 404
           ? MY_TALENTS_API_ERROR_MESSAGE
           : error instanceof Error
             ? error.message || RECOMMENDATION_API_ERROR_MESSAGE
@@ -292,6 +299,8 @@ export function MatchRecommendationPanel() {
     setIsProfileModalOpen(true);
   }
 
+  const isLoginRequired = isAuthRequiredMessage(errorMessage);
+
   return (
     <>
       {statusMessage ? (
@@ -312,7 +321,12 @@ export function MatchRecommendationPanel() {
         </p>
       </div>
 
-      {errorMessage ? (
+      {isLoginRequired ? (
+        <LoginRequiredState
+          className="mb-5"
+          description="매칭 추천과 교환 제안은 로그인 후 이용할 수 있어요."
+        />
+      ) : errorMessage ? (
         <div className="mb-5">
           <ErrorState message={errorMessage} />
         </div>

@@ -2,10 +2,19 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
+import {
+  ArrowRight,
+  Coins,
+  Pencil,
+  ReceiptText,
+  ShieldCheck,
+  UserX,
+  Wallet,
+} from "lucide-react";
 import { EmptyState } from "@/components/common/EmptyState";
+import { LoginRequiredState } from "@/components/common/LoginRequiredState";
 import { ErrorState } from "@/components/common/ErrorState";
-import { SectionTitle } from "@/components/common/SectionTitle";
 import {
   authApi,
   creditApi,
@@ -26,6 +35,15 @@ const TRADE_STATUS_LABELS: Record<TradeStatus, string> = {
   COMPLETED: "완료",
   CANCELLED: "취소",
   DISPUTED: "분쟁",
+};
+
+const TRADE_STATUS_TONES: Record<TradeStatus, string> = {
+  IN_PROGRESS: "border-orange-200 bg-orange-50 text-orange-700",
+  UNDER_REVIEW: "border-violet-200 bg-violet-50 text-[#8c5bff]",
+  AWAITING_PARTNER: "border-sky-200 bg-sky-50 text-sky-700",
+  COMPLETED: "border-lime-200 bg-lime-50 text-lime-700",
+  CANCELLED: "border-yellow-200 bg-yellow-50 text-yellow-700",
+  DISPUTED: "border-red-200 bg-red-50 text-red-700",
 };
 
 export default function MyPage() {
@@ -108,23 +126,42 @@ export default function MyPage() {
 
   if (isLoading) {
     return (
-      <div className="fixed-container py-10">
-        <div className="rounded-lg border border-zinc-200 bg-white p-8 text-center text-sm font-semibold text-zinc-600">
-          마이페이지 정보를 확인하는 중입니다.
+      <main className="min-h-[calc(100dvh-64px)] bg-white">
+        <div className="fixed-container py-10 sm:py-14 lg:py-16">
+          <div className="rounded-lg border border-[#ded6ff] bg-white p-8 text-center text-sm font-semibold text-zinc-600 shadow-sm shadow-violet-950/[0.04]">
+            마이페이지 정보를 확인하는 중입니다.
+          </div>
         </div>
-      </div>
+      </main>
     );
   }
 
   if (!hasStoredAccessToken()) {
     return (
-      <div className="fixed-container py-12">
-        <EmptyState
-          title="로그인 후 이용해 주세요."
-          actionLabel="로그인"
-          actionHref="/login"
+      <main className="relative min-h-[calc(100dvh-64px)] overflow-visible bg-[linear-gradient(135deg,#fbfdff_0%,#edf5ff_46%,#f4efff_100%)]">
+        <div
+          className="pointer-events-none absolute left-1/2 top-20 h-[420px] w-[720px] -translate-x-1/2 rounded-full bg-[#8c5bff]/12 blur-3xl"
+          aria-hidden="true"
         />
-      </div>
+        <div
+          className="pointer-events-none absolute right-[8%] top-48 h-52 w-52 rounded-full bg-[#79e4dd]/20 blur-3xl"
+          aria-hidden="true"
+        />
+
+        <div className="fixed-container relative pb-28 pt-10 sm:pb-40 sm:pt-14 lg:pb-72 lg:pt-16">
+          <header className="mx-auto max-w-3xl text-center">
+            <h1 className="baton-page-title mt-3 !font-bold">MY PAGE</h1>
+            <p className="mx-auto mt-4 max-w-2xl text-sm font-semibold leading-7 text-zinc-500 sm:mt-5 sm:text-lg sm:leading-8">
+              프로필, 크레딧, 최근 거래 상태를 한 곳에서 확인합니다.
+            </p>
+          </header>
+
+          <LoginRequiredState
+            className="mx-auto mt-8 w-full max-w-[880px] bg-white/90 shadow-[0_28px_80px_rgba(80,60,160,0.14)] backdrop-blur sm:mt-12"
+            description="마이페이지는 로그인 후 이용할 수 있어요. 로그인하면 프로필, 크레딧, 최근 거래 상태를 바로 확인할 수 있습니다."
+          />
+        </div>
+      </main>
     );
   }
 
@@ -132,138 +169,209 @@ export default function MyPage() {
   const escrowBalanceValue = balance?.escrowBalance ?? 0;
 
   return (
-    <div className="fixed-container py-10">
-      <SectionTitle
-        title="마이페이지"
-        description="프로필, 크레딧, 최근 거래 상태를 한 곳에서 확인합니다."
-      />
+    <main className="min-h-[calc(100dvh-64px)] bg-white">
+      <div className="fixed-container py-10 sm:py-14 lg:py-16">
+        <header className="mx-auto max-w-3xl text-center">
+          <h1 className="baton-page-title mt-3 !font-bold">
+            MY PAGE
+          </h1>
+          <p className="mx-auto mt-4 max-w-2xl text-sm font-semibold leading-7 text-zinc-500 sm:mt-5 sm:text-lg sm:leading-8">
+            프로필, 크레딧, 최근 거래 상태를 한 곳에서 확인합니다.
+          </p>
+        </header>
 
-      {errorMessage ? (
-        <div className="mb-5">
-          <ErrorState message={errorMessage} />
-        </div>
-      ) : null}
+        {errorMessage ? (
+          <div className="mx-auto mt-8 max-w-4xl">
+            <ErrorState message={errorMessage} />
+          </div>
+        ) : null}
 
-      <section className="rounded-lg border border-zinc-200 bg-white p-6">
-        <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex min-w-0 items-center gap-4">
-            {profile?.profileImageUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={profile.profileImageUrl}
-                alt="내 프로필 이미지"
-                className="h-16 w-16 rounded-full object-cover ring-1 ring-zinc-200"
-              />
+        <section className="mt-10 rounded-lg border border-[#ded6ff] bg-white p-5 shadow-sm shadow-violet-950/[0.04] sm:p-6 lg:mt-12">
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+            <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-center">
+              {profile?.profileImageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={profile.profileImageUrl}
+                  alt="내 프로필 이미지"
+                  className="size-20 rounded-full object-cover ring-2 ring-[#ded6ff]"
+                />
+              ) : (
+                <div className="flex size-20 items-center justify-center rounded-full border border-[#ded6ff] bg-[#f4f0ff] text-2xl font-black text-[#8c5bff]">
+                  {(profile?.nickname ?? "나").slice(0, 1)}
+                </div>
+              )}
+              <div className="min-w-0">
+                <p className="text-xs font-black uppercase tracking-[0.28em] text-[#8c5bff]">
+                  Profile
+                </p>
+                <h2 className="mt-2 truncate text-3xl font-black text-zinc-950">
+                  {profile?.nickname ?? "내 프로필"}
+                </h2>
+                <p className="mt-2 line-clamp-2 text-sm leading-6 text-zinc-600">
+                  {profile?.introduction ?? "프로필 소개를 등록해 주세요."}
+                </p>
+                <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-[#ded6ff] bg-white px-3 py-1.5 text-sm font-black text-[#8c5bff] shadow-sm shadow-violet-950/[0.04]">
+                  <ShieldCheck className="size-4" aria-hidden="true" />
+                  신뢰 점수 {profile?.trustScore ?? "-"}
+                </div>
+              </div>
+            </div>
+            <div className="grid shrink-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:w-[300px]">
+              <Link
+                href="/profile/edit"
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-[#ded6ff] px-4 text-sm font-black text-[#8c5bff] transition hover:bg-[#f4f0ff]"
+              >
+                <Pencil className="size-4" aria-hidden="true" />
+                프로필 수정
+              </Link>
+              <button
+                type="button"
+                onClick={() => setIsWithdrawModalOpen(true)}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-red-200 px-4 text-sm font-black text-red-600 transition hover:bg-red-50"
+              >
+                <UserX className="size-4" aria-hidden="true" />
+                회원 탈퇴
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
+          <Summary
+            title="사용 가능 크레딧"
+            description="바로 요청에 사용할 수 있는 잔액"
+            value={formatCredit(balanceValue)}
+            icon={<Wallet className="size-5" aria-hidden="true" />}
+          />
+          <Summary
+            title="에스크로 예치 중"
+            description="거래 완료 전 안전하게 보관 중"
+            value={formatCredit(escrowBalanceValue)}
+            icon={<ShieldCheck className="size-5" aria-hidden="true" />}
+          />
+          <Summary
+            title="총 보유"
+            description="사용 가능 금액과 예치금을 합산"
+            value={formatCredit(balanceValue + escrowBalanceValue)}
+            icon={<Coins className="size-5" aria-hidden="true" />}
+          />
+        </section>
+
+        <section className="mt-8 rounded-lg border border-[#ded6ff] bg-white shadow-sm shadow-violet-950/[0.04]">
+          <div className="flex flex-col gap-4 border-b border-[#eee9ff] px-5 py-5 sm:flex-row sm:items-end sm:justify-between sm:px-6">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.28em] text-[#8c5bff]">
+                Trade
+              </p>
+              <h2 className="mt-2 text-2xl font-black text-zinc-950">
+                최근 거래
+              </h2>
+              <p className="mt-2 text-sm font-semibold text-zinc-500">
+                진행 중인 거래와 검토 상태를 확인하세요.
+              </p>
+            </div>
+            <Link
+              href="/trades"
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-[#ded6ff] px-4 text-sm font-black text-[#8c5bff] transition hover:bg-[#f4f0ff]"
+            >
+              <span>전체 보기</span>
+              <ArrowRight className="size-4" aria-hidden="true" />
+            </Link>
+          </div>
+          <div className="p-5 sm:p-6">
+            {trades.length === 0 ? (
+              <EmptyState title="아직 거래가 없습니다." />
             ) : (
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-zinc-100 text-lg font-black text-zinc-500">
-                {(profile?.nickname ?? "나").slice(0, 1)}
+              <div className="grid gap-3">
+                {trades.map((trade) => (
+                  <Link
+                    key={trade.tradeId}
+                    href={`/trades/${trade.tradeId}`}
+                    className="grid cursor-pointer gap-4 rounded-lg border border-[#ded6ff] bg-white p-4 transition hover:-translate-y-0.5 hover:border-[#8c5bff] hover:shadow-lg hover:shadow-violet-950/[0.06] sm:p-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <ReceiptText
+                          className="size-5 text-[#8c5bff]"
+                          aria-hidden="true"
+                        />
+                        <p className="truncate text-lg font-black text-zinc-950">
+                          거래 #{trade.tradeId} · 재능 #{trade.talentId}
+                        </p>
+                        <span
+                          className={`inline-flex h-8 items-center rounded-full border px-3 text-xs font-black ${TRADE_STATUS_TONES[trade.tradeStatus]}`}
+                        >
+                          {TRADE_STATUS_LABELS[trade.tradeStatus]}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-sm font-semibold text-zinc-500">
+                        {formatDate(trade.updatedAt)}
+                      </p>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2 lg:w-[280px]">
+                      <MiniMetric
+                        label="상태"
+                        value={TRADE_STATUS_LABELS[trade.tradeStatus]}
+                      />
+                      <MiniMetric
+                        label="크레딧"
+                        value={formatCredit(trade.creditPrice)}
+                      />
+                    </div>
+                  </Link>
+                ))}
               </div>
             )}
-            <div className="min-w-0">
-              <h1 className="truncate text-2xl font-black text-zinc-950">
-                {profile?.nickname ?? "내 프로필"}
-              </h1>
-              <p className="mt-2 line-clamp-2 text-sm leading-6 text-zinc-600">
-                {profile?.introduction ?? "프로필 소개를 등록해 주세요."}
-              </p>
-              <p className="mt-1 text-xs font-semibold text-zinc-500">
-                신뢰 점수 {profile?.trustScore ?? "-"}
-              </p>
-            </div>
           </div>
-          <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
-            <Link
-              href="/profile/edit"
-              className="inline-flex h-10 items-center justify-center rounded-md border border-zinc-300 px-4 text-sm font-bold text-zinc-700 transition hover:bg-zinc-50"
-            >
-              프로필 수정
-            </Link>
-            <button
-              type="button"
-              onClick={() => setIsWithdrawModalOpen(true)}
-              className="h-10 rounded-md border border-red-200 px-4 text-sm font-bold text-red-600 transition hover:bg-red-50"
-            >
-              회원 탈퇴
-            </button>
-          </div>
-        </div>
-      </section>
+        </section>
 
-      <section className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Summary title="사용 가능 크레딧" value={formatCredit(balanceValue)} />
-        <Summary
-          title="에스크로 예치 중"
-          value={formatCredit(escrowBalanceValue)}
-        />
-        <Summary
-          title="총 보유"
-          value={formatCredit(balanceValue + escrowBalanceValue)}
-        />
-      </section>
+        {isWithdrawModalOpen ? (
+          <WithdrawConfirmModal
+            isSubmitting={isWithdrawing}
+            onCancel={() => setIsWithdrawModalOpen(false)}
+            onConfirm={handleWithdraw}
+          />
+        ) : null}
+      </div>
+    </main>
+  );
+}
 
-      <section className="mt-8 rounded-lg border border-zinc-200 bg-white">
-        <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-4">
-          <div>
-            <h2 className="text-base font-black text-zinc-950">최근 거래</h2>
-            <p className="mt-1 text-sm text-zinc-500">
-              진행 중인 거래와 검토 상태를 확인하세요.
-            </p>
-          </div>
-          <Link
-            href="/trades"
-            className="text-sm font-black text-teal-700 transition hover:text-teal-900"
-          >
-            전체 보기
-          </Link>
+function Summary({
+  title,
+  description,
+  value,
+  icon,
+}: {
+  title: string;
+  description: string;
+  value: string;
+  icon: ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border border-[#ded6ff] bg-[#fbf9ff] p-5 shadow-sm shadow-violet-950/[0.03]">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm font-black text-[#8c5bff]">{title}</p>
+          <p className="mt-1 text-xs font-semibold leading-5 text-zinc-500">
+            {description}
+          </p>
         </div>
-        <div className="p-5">
-          {trades.length === 0 ? (
-            <EmptyState title="아직 거래가 없습니다." />
-          ) : (
-            <div className="grid gap-3">
-              {trades.map((trade) => (
-                <Link
-                  key={trade.tradeId}
-                  href={`/trades/${trade.tradeId}`}
-                  className="grid grid-cols-1 gap-3 rounded-lg border border-zinc-200 p-4 transition hover:border-teal-300 hover:bg-teal-50/40 sm:grid-cols-[1fr_120px_140px] sm:items-center sm:gap-4"
-                >
-                  <div>
-                    <p className="font-black text-zinc-950">
-                      거래 #{trade.tradeId} · 재능 #{trade.talentId}
-                    </p>
-                    <p className="mt-1 text-sm text-zinc-500">
-                      {formatDate(trade.updatedAt)}
-                    </p>
-                  </div>
-                  <p className="text-sm font-bold text-zinc-700">
-                    {TRADE_STATUS_LABELS[trade.tradeStatus]}
-                  </p>
-                  <p className="text-sm font-black text-zinc-950 sm:text-right">
-                    {formatCredit(trade.creditPrice)}
-                  </p>
-                </Link>
-              ))}
-            </div>
-          )}
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-white text-[#8c5bff] ring-1 ring-[#ded6ff]">
+          {icon}
         </div>
-      </section>
-
-      {isWithdrawModalOpen ? (
-        <WithdrawConfirmModal
-          isSubmitting={isWithdrawing}
-          onCancel={() => setIsWithdrawModalOpen(false)}
-          onConfirm={handleWithdraw}
-        />
-      ) : null}
+      </div>
+      <p className="mt-5 text-2xl font-black text-zinc-950">{value}</p>
     </div>
   );
 }
 
-function Summary({ title, value }: { title: string; value: string }) {
+function MiniMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-zinc-200 bg-white p-5">
-      <p className="text-sm text-zinc-500">{title}</p>
-      <p className="mt-2 text-xl font-black text-zinc-950">{value}</p>
+    <div className="rounded-md bg-[#fafafa] px-4 py-3">
+      <p className="text-xs font-black text-zinc-400">{label}</p>
+      <p className="mt-1 truncate text-sm font-black text-zinc-950">{value}</p>
     </div>
   );
 }

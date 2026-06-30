@@ -11,6 +11,7 @@ import {
 import { MessageCircle, Send } from "lucide-react";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
+import { LoginRequiredState } from "@/components/common/LoginRequiredState";
 import {
   chatApi,
   type ChatMessageRes,
@@ -21,6 +22,7 @@ import {
   connectChatSocket,
   type ChatSocketConnection,
 } from "@/lib/api/chatSocket";
+import { isAuthRequiredMessage } from "@/lib/auth-required";
 
 function readStoredUserId(): number | null {
   if (typeof window === "undefined") {
@@ -468,20 +470,12 @@ export default function ChatsPage() {
 
       <div className="fixed-container relative py-10 sm:py-14">
         <header className="mx-auto mb-8 max-w-3xl text-center sm:mb-12">
-          <h1 className="baton-page-title mt-4">
+          <h1 className="baton-page-title mt-3 !font-bold">
             CHATTING
           </h1>
           <p className="mx-auto mt-4 max-w-2xl text-sm font-semibold leading-7 text-zinc-500 sm:mt-5 sm:text-lg sm:leading-8">
             매칭과 거래에서 이어진 대화를 한 곳에서 확인하고 실시간으로 메시지를 주고받으세요.
           </p>
-          <div
-            className={`mx-auto mt-5 inline-flex rounded-full px-4 py-2 text-sm font-black ${isConnectedToSocket
-              ? "border border-emerald-200 bg-emerald-50 text-emerald-700"
-              : "border border-[#ded6ff] bg-white/90 text-zinc-500"
-            }`}
-          >
-            {isConnectedToSocket ? "WebSocket 연결됨" : "WebSocket 연결 대기"}
-          </div>
         </header>
 
         <div className="relative grid min-h-[680px] overflow-hidden rounded-lg border border-[#ded6ff] bg-white/95 shadow-[0_28px_80px_rgba(80,60,160,0.12)] backdrop-blur lg:h-[720px] lg:min-h-0 lg:grid-cols-[340px_1fr]">
@@ -490,199 +484,229 @@ export default function ChatsPage() {
             aria-hidden="true"
           />
           <aside className="flex min-h-0 max-h-[360px] flex-col border-b border-[#eee8ff] bg-[#fbf9ff]/70 lg:max-h-none lg:border-b-0 lg:border-r">
-          <div className="border-b border-[#eee8ff] px-5 py-5">
-            <p className="text-sm font-black text-zinc-950">대화 목록</p>
-            <p className="mt-1 text-xs font-bold text-zinc-400">
-              총 {chatRooms.length}{hasNextRooms ? "+" : ""}개 대화
-            </p>
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto [overscroll-behavior-y:contain] [scrollbar-gutter:stable]">
-            {isLoadingRooms ? (
-              <div className="px-5 py-8 text-center text-sm font-semibold text-zinc-500">
-                채팅방 목록을 불러오는 중입니다.
-              </div>
-            ) : null}
-
-            {!isLoadingRooms && chatRooms.length > 0 ? (
-              <div className="divide-y divide-[#eee8ff]">
-                {chatRooms.map((room) => (
-                  <ChatRoomListButton
-                    key={room.roomId}
-                    room={room}
-                    isActive={currentRoomId === room.roomId}
-                    onSelect={() => handleSelectRoom(room.roomId)}
-                  />
-                ))}
-                {hasNextRooms ? (
-                  <div className="p-4">
-                    <button
-                      type="button"
-                      disabled={isLoadingMoreRooms}
-                      onClick={handleLoadMoreRooms}
-                      className="h-10 w-full cursor-pointer rounded-lg border border-[#ded6ff] bg-white text-sm font-black text-zinc-700 transition hover:border-[#8c5bff] hover:bg-[#fbf9ff] hover:text-[#8c5bff] disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {isLoadingMoreRooms ? "불러오는 중" : "더 보기"}
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-
-            {!isLoadingRooms && chatRooms.length === 0 ? (
-              <div className="px-5 py-5">
-                <EmptyState
-                  title="아직 채팅방이 없습니다."
-                  description="매칭 제안이 수락되거나 거래가 시작되면 채팅방이 생성됩니다."
-                />
-              </div>
-            ) : null}
-          </div>
-        </aside>
-
-        <section className="flex min-h-[560px] min-w-0 flex-col lg:min-h-0">
-          <div className="border-b border-[#eee8ff] px-6 py-5">
-            {!hasCheckedUserId ? (
-              <p className="text-xs font-semibold text-zinc-500">
-                사용자 정보를 확인하는 중입니다.
+            <div className="border-b border-[#eee8ff] px-5 py-5">
+              <p className="text-sm font-black text-zinc-950">대화 목록</p>
+              <p className="mt-1 text-xs font-bold text-zinc-400">
+                총 {chatRooms.length}{hasNextRooms ? "+" : ""}개 대화
               </p>
-            ) : currentUserId === null ? (
-              <p className="text-sm font-semibold text-amber-700">
-                로그인 후 이용해 주세요.
-              </p>
-            ) : currentRoom ? (
-              <div className="flex items-center justify-between gap-4">
-                <div className="min-w-0">
-                  <p className="truncate text-lg font-black text-zinc-950">
-                    {currentOpponentName}
-                  </p>
-                  <p className="mt-1 truncate text-sm font-semibold text-zinc-500">
-                    {currentTalentTitle}
-                  </p>
-                </div>
-                <span className="shrink-0 rounded-full border border-[#d9ccff] bg-[#f4f0ff] px-3 py-1 text-xs font-black text-[#8c5bff]">
-                  {getRoomStatusLabel(currentRoom.status)}
-                </span>
-              </div>
-            ) : (
-              <div>
-                <p className="text-lg font-black text-zinc-950">
-                  채팅방을 선택해 주세요
-                </p>
-                <p className="mt-1 text-sm font-semibold text-zinc-500">
-                  왼쪽 목록에서 대화를 선택하면 메시지를 확인할 수 있습니다.
-                </p>
-              </div>
-            )}
-          </div>
-
-          {errorMessage ? (
-            <div className="px-6 pt-4">
-              <ErrorState message={errorMessage} />
             </div>
-          ) : null}
+            <div className="min-h-0 flex-1 overflow-y-auto [overscroll-behavior-y:contain] [scrollbar-gutter:stable]">
+              {isLoadingRooms ? (
+                <div className="px-5 py-8 text-center text-sm font-semibold text-zinc-500">
+                  채팅방 목록을 불러오는 중입니다.
+                </div>
+              ) : null}
 
-          <div className="min-h-0 flex-1 overflow-y-auto bg-[#fbf9ff]/60 px-4 py-5 [scrollbar-gutter:stable] sm:px-6 sm:py-6">
-            <div className="mx-auto flex max-w-[720px] flex-col gap-4">
-              {currentRoom === null ? (
-                isEnteringRoom ? (
-                  <div className="rounded-lg border border-zinc-200 bg-white p-8 text-center text-sm font-semibold text-zinc-600">
-                    채팅방에 입장하는 중입니다.
-                  </div>
-                ) : (
+              {!isLoadingRooms && chatRooms.length > 0 ? (
+                <div className="divide-y divide-[#eee8ff]">
+                  {chatRooms.map((room) => (
+                    <ChatRoomListButton
+                      key={room.roomId}
+                      room={room}
+                      isActive={currentRoomId === room.roomId}
+                      onSelect={() => handleSelectRoom(room.roomId)}
+                    />
+                  ))}
+                  {hasNextRooms ? (
+                    <div className="p-4">
+                      <button
+                        type="button"
+                        disabled={isLoadingMoreRooms}
+                        onClick={handleLoadMoreRooms}
+                        className="h-10 w-full cursor-pointer rounded-lg border border-[#ded6ff] bg-white text-sm font-black text-zinc-700 transition hover:border-[#8c5bff] hover:bg-[#fbf9ff] hover:text-[#8c5bff] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {isLoadingMoreRooms ? "불러오는 중" : "더 보기"}
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {!isLoadingRooms && chatRooms.length === 0 ? (
+                <div className="px-5 py-5">
                   <EmptyState
-                    title="채팅방을 선택해 주세요"
-                    description="왼쪽 채팅방 목록에서 대화를 선택하면 메시지를 확인할 수 있어요."
+                    title="아직 채팅방이 없습니다."
+                    description="매칭 제안이 수락되거나 거래가 시작되면 채팅방이 생성됩니다."
                   />
-                )
-              ) : isLoadingMessages ? (
-                <div className="rounded-lg border border-zinc-200 bg-white p-8 text-center text-sm font-semibold text-zinc-600">
-                  메시지를 불러오는 중입니다.
                 </div>
-              ) : messages.length === 0 ? (
-                <EmptyState
-                  title="아직 메시지가 없어요"
-                  description="첫 메시지를 보내 대화를 시작해 보세요."
-                />
-              ) : (
-                messages.map((message, index) => {
-                  const previousMessage = messages[index - 1];
-                  const shouldShowDateDivider =
-                    previousMessage === undefined ||
-                    !isSameDate(previousMessage.createdAt, message.createdAt);
-
-                  return (
-                    <Fragment key={message.id}>
-                      {shouldShowDateDivider ? (
-                        <DateDivider date={message.createdAt} />
-                      ) : null}
-                      <MessageBubble
-                        message={message}
-                        isMine={message.senderId === currentUserId}
-                        senderLabel={getMessageSenderLabel({
-                          senderId: message.senderId,
-                          currentUserId,
-                          opponentName: currentOpponentName,
-                        })}
-                      />
-                    </Fragment>
-                  );
-                })
-              )}
-              <div ref={bottomRef} />
+              ) : null}
             </div>
-          </div>
+          </aside>
 
-          <div className="border-t border-[#eee8ff] bg-white/95 px-4 py-4 sm:px-6">
-            <form onSubmit={handleSubmit} className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <label htmlFor="chat-message" className="sr-only">
-                메시지 입력
-              </label>
-              <div className="flex h-12 flex-1 items-center gap-3 rounded-lg border border-[#ded6ff] bg-white px-4 transition focus-within:border-[#8c5bff] focus-within:ring-4 focus-within:ring-[#f4f0ff]">
-                <MessageCircle
-                  className="size-5 text-[#8c5bff]"
-                  aria-hidden="true"
-                />
-                <input
-                  id="chat-message"
-                  value={messageInput}
-                  onChange={(event) => setMessageInput(event.target.value)}
-                  maxLength={1000}
+          <section className="flex min-h-[560px] min-w-0 flex-col lg:min-h-0">
+            <div className="border-b border-[#eee8ff] px-6 py-5">
+              {!hasCheckedUserId ? (
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-xs font-semibold text-zinc-500">
+                    사용자 정보를 확인하는 중입니다.
+                  </p>
+                  <SocketStatusBadge isConnected={isConnectedToSocket} />
+                </div>
+              ) : currentUserId === null ? (
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm font-semibold text-amber-700">
+                    로그인 후 이용해 주세요.
+                  </p>
+                  <SocketStatusBadge isConnected={isConnectedToSocket} />
+                </div>
+              ) : currentRoom ? (
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <p className="truncate text-lg font-black text-zinc-950">
+                      {currentOpponentName}
+                    </p>
+                    <p className="mt-1 truncate text-sm font-semibold text-zinc-500">
+                      {currentTalentTitle}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                    <span className="rounded-full border border-[#d9ccff] bg-[#f4f0ff] px-3 py-1 text-xs font-black text-[#8c5bff]">
+                      {getRoomStatusLabel(currentRoom.status)}
+                    </span>
+                    <SocketStatusBadge isConnected={isConnectedToSocket} />
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-lg font-black text-zinc-950">
+                      채팅방을 선택해 주세요
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-zinc-500">
+                      왼쪽 목록에서 대화를 선택하면 메시지를 확인할 수 있습니다.
+                    </p>
+                  </div>
+                  <SocketStatusBadge isConnected={isConnectedToSocket} />
+                </div>
+              )}
+            </div>
+
+            {isAuthRequiredMessage(errorMessage) ? (
+              <div className="px-6 pt-4">
+                <LoginRequiredState description="채팅은 로그인 후 이용할 수 있어요." />
+              </div>
+            ) : errorMessage ? (
+              <div className="px-6 pt-4">
+                <ErrorState message={errorMessage} />
+              </div>
+            ) : null}
+
+            <div className="min-h-0 flex-1 overflow-y-auto bg-[#fbf9ff]/60 px-4 py-5 [scrollbar-gutter:stable] sm:px-6 sm:py-6">
+              <div className="mx-auto flex max-w-[720px] flex-col gap-4">
+                {currentRoom === null ? (
+                  isEnteringRoom ? (
+                    <div className="rounded-lg border border-zinc-200 bg-white p-8 text-center text-sm font-semibold text-zinc-600">
+                      채팅방에 입장하는 중입니다.
+                    </div>
+                  ) : (
+                    <EmptyState
+                      title="채팅방을 선택해 주세요"
+                      description="왼쪽 채팅방 목록에서 대화를 선택하면 메시지를 확인할 수 있어요."
+                    />
+                  )
+                ) : isLoadingMessages ? (
+                  <div className="rounded-lg border border-zinc-200 bg-white p-8 text-center text-sm font-semibold text-zinc-600">
+                    메시지를 불러오는 중입니다.
+                  </div>
+                ) : messages.length === 0 ? (
+                  <EmptyState
+                    title="아직 메시지가 없어요"
+                    description="첫 메시지를 보내 대화를 시작해 보세요."
+                  />
+                ) : (
+                  messages.map((message, index) => {
+                    const previousMessage = messages[index - 1];
+                    const shouldShowDateDivider =
+                      previousMessage === undefined ||
+                      !isSameDate(previousMessage.createdAt, message.createdAt);
+
+                    return (
+                      <Fragment key={message.id}>
+                        {shouldShowDateDivider ? (
+                          <DateDivider date={message.createdAt} />
+                        ) : null}
+                        <MessageBubble
+                          message={message}
+                          isMine={message.senderId === currentUserId}
+                          senderLabel={getMessageSenderLabel({
+                            senderId: message.senderId,
+                            currentUserId,
+                            opponentName: currentOpponentName,
+                          })}
+                        />
+                      </Fragment>
+                    );
+                  })
+                )}
+                <div ref={bottomRef} />
+              </div>
+            </div>
+
+            <div className="border-t border-[#eee8ff] bg-white/95 px-4 py-4 sm:px-6">
+              <form onSubmit={handleSubmit} className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <label htmlFor="chat-message" className="sr-only">
+                  메시지 입력
+                </label>
+                <div className="flex h-12 flex-1 items-center gap-3 rounded-lg border border-[#ded6ff] bg-white px-4 transition focus-within:border-[#8c5bff] focus-within:ring-4 focus-within:ring-[#f4f0ff]">
+                  <MessageCircle
+                    className="size-5 text-[#8c5bff]"
+                    aria-hidden="true"
+                  />
+                  <input
+                    id="chat-message"
+                    value={messageInput}
+                    onChange={(event) => setMessageInput(event.target.value)}
+                    maxLength={1000}
+                    disabled={
+                      currentRoom === null ||
+                      currentUserId === null ||
+                      !isConnectedToSocket
+                    }
+                    className="field h-full flex-1 border-0 bg-transparent text-sm font-semibold text-zinc-950 outline-none placeholder:text-zinc-400 disabled:bg-transparent"
+                    placeholder={
+                      isConnectedToSocket
+                        ? "메시지를 입력해 주세요."
+                        : "WebSocket 연결 후 메시지를 입력할 수 있습니다."
+                    }
+                  />
+                </div>
+                <button
+                  type="submit"
                   disabled={
                     currentRoom === null ||
                     currentUserId === null ||
-                    !isConnectedToSocket
+                    !isConnectedToSocket ||
+                    messageInput.trim().length === 0 ||
+                    isSending
                   }
-                  className="field h-full flex-1 border-0 bg-transparent text-sm font-semibold text-zinc-950 outline-none placeholder:text-zinc-400 disabled:bg-transparent"
-                  placeholder={
-                    isConnectedToSocket
-                      ? "메시지를 입력해 주세요."
-                      : "WebSocket 연결 후 메시지를 입력할 수 있습니다."
-                  }
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={
-                  currentRoom === null ||
-                  currentUserId === null ||
-                  !isConnectedToSocket ||
-                  messageInput.trim().length === 0 ||
-                  isSending
-                }
-                className="inline-flex h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-[#8c5bff] px-5 text-sm font-black text-white shadow-[0_14px_28px_rgba(140,91,255,0.22)] transition hover:bg-[#7c4eff] disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:shadow-none sm:w-auto"
-              >
-                <Send className="size-4" aria-hidden="true" />
-                {isSending ? "전송 중" : "보내기"}
-              </button>
-            </form>
-            <p className="mt-2 text-right text-xs font-semibold text-zinc-400">
-              {messageInput.length}/1000
-            </p>
-          </div>
-        </section>
+                  className="inline-flex h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-[#8c5bff] px-5 text-sm font-black text-white shadow-[0_14px_28px_rgba(140,91,255,0.22)] transition hover:bg-[#7c4eff] disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:shadow-none sm:w-auto"
+                >
+                  <Send className="size-4" aria-hidden="true" />
+                  {isSending ? "전송 중" : "보내기"}
+                </button>
+              </form>
+              <p className="mt-2 text-right text-xs font-semibold text-zinc-400">
+                {messageInput.length}/1000
+              </p>
+            </div>
+          </section>
         </div>
       </div>
     </main>
+  );
+}
+
+function SocketStatusBadge({ isConnected }: { isConnected: boolean }) {
+  return (
+    <span
+      className={`inline-flex h-9 shrink-0 items-center justify-center rounded-full border px-4 text-xs font-black sm:text-sm ${
+        isConnected
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+          : "border-[#ded6ff] bg-white text-zinc-500"
+      }`}
+    >
+      {isConnected ? "WebSocket 연결됨" : "WebSocket 연결 대기"}
+    </span>
   );
 }
 
@@ -799,8 +823,8 @@ function MessageBubble({
 
         <div
           className={`max-w-[86%] rounded-2xl px-4 py-3 shadow-sm sm:max-w-[72%] ${isMine
-              ? "bg-[#8c5bff] text-white shadow-[0_12px_24px_rgba(140,91,255,0.18)]"
-              : "border border-[#eee8ff] bg-white text-zinc-900"
+            ? "bg-[#8c5bff] text-white shadow-[0_12px_24px_rgba(140,91,255,0.18)]"
+            : "border border-[#eee8ff] bg-white text-zinc-900"
             }`}
         >
           <p className="whitespace-pre-wrap break-words text-sm font-semibold leading-6">

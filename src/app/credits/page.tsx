@@ -12,11 +12,13 @@ import {
 } from "lucide-react";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
+import { LoginRequiredState } from "@/components/common/LoginRequiredState";
 import {
   creditApi,
   type CreditBalanceRes,
   type CreditTransactionRes,
 } from "@/lib/api";
+import { isAuthRequiredMessage } from "@/lib/auth-required";
 import { formatCredit, formatDate } from "@/utils/format";
 
 const CREDIT_ACCOUNT_NOT_FOUND_MESSAGE =
@@ -122,6 +124,7 @@ export default function CreditsPage() {
 
   const balanceValue = balance?.balance ?? 0;
   const escrowBalanceValue = balance?.escrowBalance ?? 0;
+  const isLoginRequired = isAuthRequiredMessage(errorMessage);
 
   async function handleLoadMore() {
     if (!hasNext || nextCursor === null || isLoadingMore) {
@@ -156,7 +159,7 @@ export default function CreditsPage() {
 
       <div className="fixed-container relative py-10 sm:py-14 lg:py-16">
         <header className="mx-auto max-w-3xl text-center">
-          <h1 className="baton-page-title mt-4">
+          <h1 className="baton-page-title mt-3 !font-bold">
             CREDIT WALLET
           </h1>
           <p className="mx-auto mt-4 max-w-2xl text-sm font-semibold leading-7 text-zinc-500 sm:mt-5 sm:text-lg sm:leading-8">
@@ -166,7 +169,12 @@ export default function CreditsPage() {
           </p>
         </header>
 
-        {errorMessage ? (
+        {isLoginRequired ? (
+          <LoginRequiredState
+            className="mx-auto mt-8 max-w-4xl"
+            description="크레딧 잔액과 사용 내역은 로그인 후 확인할 수 있어요."
+          />
+        ) : errorMessage ? (
           <div className="mx-auto mt-8 max-w-4xl">
             <ErrorState message={errorMessage} />
           </div>

@@ -6,9 +6,18 @@ import { useEffect, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { FeedbackModal } from "@/components/common/FeedbackModal";
+import { LoginRequiredState } from "@/components/common/LoginRequiredState";
 import { Listbox, type ListboxOption } from "@/components/common/Listbox";
 import { categoryApi, talentApi } from "@/lib/api";
-import { setStoredLastTalentId } from "@/lib/auth";
+import {
+  getStoredUserId,
+  hasStoredAccessToken,
+  setStoredLastTalentId,
+} from "@/lib/auth";
+import {
+  isAuthRequiredError,
+  isAuthRequiredMessage,
+} from "@/lib/auth-required";
 
 const schema = z.object({
   title: z.string().min(5, "제목은 5자 이상 입력해 주세요."),
@@ -62,12 +71,7 @@ function getCategoryErrorMessage(error: unknown) {
   const message =
     error instanceof Error ? error.message : "카테고리를 불러오지 못했습니다.";
 
-  if (
-    message.includes("401") ||
-    message.includes("403") ||
-    message.toLowerCase().includes("unauthorized") ||
-    message.toLowerCase().includes("forbidden")
-  ) {
+  if (isAuthRequiredError(error)) {
     return "로그인 후 카테고리를 조회할 수 있습니다.";
   }
 
@@ -86,6 +90,9 @@ export default function NewTalentPage() {
   const router = useRouter();
   const [message, setMessage] = useState("");
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
+  const [authStatus, setAuthStatus] = useState<
+    "checking" | "authenticated" | "required"
+  >("checking");
   const [categoryOptions, setCategoryOptions] = useState<
     ListboxOption<string>[]
   >([]);
@@ -119,6 +126,17 @@ export default function NewTalentPage() {
     let ignore = false;
 
     async function loadCategories() {
+      const userId = getStoredUserId();
+
+      if (!hasStoredAccessToken() || userId === null) {
+        setAuthStatus("required");
+        setCategoryOptions([]);
+        setCategoryError(null);
+        setIsCategoryLoading(false);
+        return;
+      }
+
+      setAuthStatus("authenticated");
       setIsCategoryLoading(true);
       setCategoryError(null);
 
@@ -153,6 +171,10 @@ export default function NewTalentPage() {
 
         setCategoryOptions([]);
         setCategoryError(getCategoryErrorMessage(error));
+
+        if (isAuthRequiredError(error)) {
+          setAuthStatus("required");
+        }
       } finally {
         if (!ignore) {
           setIsCategoryLoading(false);
@@ -170,10 +192,10 @@ export default function NewTalentPage() {
   async function onSubmit(values: FormValues) {
     setMessage("");
 
-    const storedUserId = localStorage.getItem("baton_user_id");
-    const userId = storedUserId === null ? NaN : Number(storedUserId);
+    const userId = getStoredUserId();
 
-    if (!Number.isInteger(userId) || userId <= 0) {
+    if (!hasStoredAccessToken() || userId === null) {
+      setAuthStatus("required");
       setMessage("로그인 후 이용해 주세요.");
       return;
     }
@@ -194,6 +216,12 @@ export default function NewTalentPage() {
 
       setIsSuccessModalOpen(true);
     } catch (error) {
+      if (isAuthRequiredError(error)) {
+        setAuthStatus("required");
+        setMessage("로그인 후 이용해 주세요.");
+        return;
+      }
+
       setMessage(
         error instanceof Error
           ? error.message
@@ -201,6 +229,11 @@ export default function NewTalentPage() {
       );
     }
   }
+
+  const isLoginRequired =
+    authStatus === "required" ||
+    isAuthRequiredMessage(categoryError) ||
+    isAuthRequiredMessage(message);
 
   return (
     <main className="relative min-h-[calc(100dvh-64px)] overflow-visible bg-[linear-gradient(135deg,#fbfdff_0%,#edf5ff_46%,#f4efff_100%)]">
@@ -215,161 +248,178 @@ export default function NewTalentPage() {
 
       <div className="fixed-container relative pb-28 pt-10 sm:pb-40 sm:pt-14 lg:pb-72 lg:pt-16">
         <header className="mx-auto max-w-3xl text-center">
-          <h1 className="baton-page-title mt-4">
-            내 재능 등록하기
+          <h1 className="baton-page-title mt-3 !font-bold">
+            CREATE TALENT
           </h1>
           <p className="mx-auto mt-4 max-w-2xl text-sm font-semibold leading-7 text-zinc-500 sm:mt-5 sm:text-lg sm:leading-8">
             내가 제공할 수 있는 일을 선명하게 정리하고, 좋은 교환 상대를 만날 준비를 시작해요.
           </p>
         </header>
 
-        <form
-          onSubmit={handleSubmit(onSubmit)}
-          noValidate
-          className="relative mx-auto mt-8 w-full max-w-[880px] overflow-visible rounded-lg border border-[#ded6ff] bg-white/90 p-5 shadow-[0_28px_80px_rgba(80,60,160,0.14)] backdrop-blur sm:mt-12 sm:p-8"
-        >
-          <div
-            className="absolute inset-x-0 top-0 h-1 rounded-t-lg bg-[linear-gradient(90deg,#8c5bff_0%,#78a9ff_52%,#79e4dd_100%)]"
-            aria-hidden="true"
+        {authStatus === "checking" ? (
+          <div className="relative mx-auto mt-8 w-full max-w-[880px] rounded-lg border border-[#ded6ff] bg-white/90 p-8 text-center text-sm font-black text-zinc-500 shadow-[0_28px_80px_rgba(80,60,160,0.14)] backdrop-blur sm:mt-12">
+            로그인 상태를 확인하는 중입니다...
+          </div>
+        ) : null}
+
+        {isLoginRequired ? (
+          <LoginRequiredState
+            className="mx-auto mt-8 w-full max-w-[880px] bg-white/90 shadow-[0_28px_80px_rgba(80,60,160,0.14)] backdrop-blur sm:mt-12"
+            description="재능 등록은 로그인 후 이용할 수 있어요. 로그인하면 바로 등록을 이어갈 수 있습니다."
           />
+        ) : null}
 
-          <div className="grid gap-6">
-            <Field label="제목" error={errors.title?.message}>
-              <input {...register("title")} className={inputClassName} />
-            </Field>
+        {authStatus === "authenticated" && !isLoginRequired ? (
+          <form
+            onSubmit={handleSubmit(onSubmit)}
+            noValidate
+            className="relative mx-auto mt-8 w-full max-w-[880px] overflow-visible rounded-lg border border-[#ded6ff] bg-white/90 p-5 shadow-[0_28px_80px_rgba(80,60,160,0.14)] backdrop-blur sm:mt-12 sm:p-8"
+          >
+            <div
+              className="absolute inset-x-0 top-0 h-1 rounded-t-lg bg-[linear-gradient(90deg,#8c5bff_0%,#78a9ff_52%,#79e4dd_100%)]"
+              aria-hidden="true"
+            />
 
-            <Field label="카테고리" error={errors.categoryId?.message}>
-              {isCategoryLoading ? (
-                <p className="rounded-lg border border-[#d9ccff] bg-[#fbf9ff] px-4 py-3 text-sm font-bold text-zinc-600">
-                  카테고리를 불러오는 중입니다...
-                </p>
-              ) : null}
+            <div className="grid gap-6">
+              <Field label="제목" error={errors.title?.message}>
+                <input {...register("title")} className={inputClassName} />
+              </Field>
 
-              {!isCategoryLoading && categoryOptions.length > 0 ? (
-                <Listbox
-                  label="카테고리"
-                  value={
-                    selectedCategoryId === undefined
-                      ? ""
-                      : String(selectedCategoryId)
-                  }
-                  options={categoryOptions}
-                  onChange={(selected) =>
-                    setValue(
-                      "categoryId",
-                      selected === "" ? undefined : Number(selected),
-                      {
-                        shouldDirty: true,
-                        shouldValidate: true,
-                      },
-                    )
-                  }
-                  className=""
-                />
-              ) : null}
+              <Field label="카테고리" error={errors.categoryId?.message}>
+                {isCategoryLoading ? (
+                  <p className="rounded-lg border border-[#d9ccff] bg-[#fbf9ff] px-4 py-3 text-sm font-bold text-zinc-600">
+                    카테고리를 불러오는 중입니다...
+                  </p>
+                ) : null}
 
-              {categoryError ? (
-                <p className="mt-2 text-xs font-semibold text-red-600">
-                  {categoryError}
-                </p>
-              ) : null}
+                {!isCategoryLoading && categoryOptions.length > 0 ? (
+                  <Listbox
+                    label="카테고리"
+                    value={
+                      selectedCategoryId === undefined
+                        ? ""
+                        : String(selectedCategoryId)
+                    }
+                    options={categoryOptions}
+                    onChange={(selected) =>
+                      setValue(
+                        "categoryId",
+                        selected === "" ? undefined : Number(selected),
+                        {
+                          shouldDirty: true,
+                          shouldValidate: true,
+                        },
+                      )
+                    }
+                    className=""
+                  />
+                ) : null}
 
-              {!isCategoryLoading &&
+                {categoryError ? (
+                  <p className="mt-2 text-xs font-semibold text-red-600">
+                    {categoryError}
+                  </p>
+                ) : null}
+
+                {!isCategoryLoading &&
                 !categoryError &&
                 categoryOptions.length === 0 ? (
-                <p className="rounded-lg border border-[#d9ccff] bg-[#fbf9ff] px-4 py-3 text-sm font-bold text-zinc-600">
-                  등록 가능한 카테고리가 없습니다.
+                  <p className="rounded-lg border border-[#d9ccff] bg-[#fbf9ff] px-4 py-3 text-sm font-bold text-zinc-600">
+                    등록 가능한 카테고리가 없습니다.
+                  </p>
+                ) : null}
+              </Field>
+
+              <Field label="제공 내용" error={errors.content?.message}>
+                <textarea
+                  {...register("content")}
+                  rows={7}
+                  className={textareaClassName}
+                />
+              </Field>
+
+              <div className="grid gap-5 md:grid-cols-2">
+                <Field
+                  label="예상 작업 기간"
+                  error={errors.estimatedHours?.message}
+                >
+                  <Listbox
+                    label="예상 작업 기간"
+                    value={
+                      selectedEstimatedHours === undefined
+                        ? ""
+                        : String(selectedEstimatedHours)
+                    }
+                    options={estimatedDurationOptions}
+                    onChange={(selected) =>
+                      setValue(
+                        "estimatedHours",
+                        selected === "" ? undefined : Number(selected),
+                        {
+                          shouldDirty: true,
+                          shouldValidate: true,
+                        },
+                      )
+                    }
+                    className=""
+                  />
+                </Field>
+
+                <Field label="필요 크레딧">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    className={inputClassName}
+                    placeholder="숫자만 입력해 주세요. 예: 150"
+                    value={
+                      selectedCreditPrice === undefined
+                        ? ""
+                        : String(selectedCreditPrice)
+                    }
+                    onChange={(event) => {
+                      const onlyNumbers = event.target.value.replace(/\D/g, "");
+
+                      setValue(
+                        "creditPrice",
+                        onlyNumbers === "" ? undefined : Number(onlyNumbers),
+                        {
+                          shouldDirty: true,
+                          shouldValidate: true,
+                        },
+                      );
+                    }}
+                  />
+
+                  <div className="mt-2 min-h-5">
+                    {errors.creditPrice?.message ? (
+                      <p className="text-xs font-semibold text-red-600">
+                        {errors.creditPrice.message}
+                      </p>
+                    ) : null}
+                  </div>
+                </Field>
+              </div>
+
+              {message ? (
+                <p className="rounded-lg border border-red-100 bg-red-50 p-3 text-sm font-semibold text-red-700">
+                  {message}
                 </p>
               ) : null}
-            </Field>
 
-            <Field label="제공 내용" error={errors.content?.message}>
-              <textarea
-                {...register("content")}
-                rows={7}
-                className={textareaClassName}
-              />
-            </Field>
-
-            <div className="grid gap-5 md:grid-cols-2">
-              <Field
-                label="예상 작업 기간"
-                error={errors.estimatedHours?.message}
+              <button
+                type="submit"
+                disabled={
+                  isSubmitting ||
+                  isCategoryLoading ||
+                  categoryOptions.length === 0
+                }
+                className="mt-2 h-[52px] w-full cursor-pointer rounded-lg bg-[linear-gradient(135deg,#8c5bff_0%,#8973ff_42%,#78a9ff_74%,#79e4dd_100%)] text-base font-black text-white shadow-lg shadow-violet-400/20 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-violet-400/25 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-60"
               >
-                <Listbox
-                  label="예상 작업 기간"
-                  value={
-                    selectedEstimatedHours === undefined
-                      ? ""
-                      : String(selectedEstimatedHours)
-                  }
-                  options={estimatedDurationOptions}
-                  onChange={(selected) =>
-                    setValue(
-                      "estimatedHours",
-                      selected === "" ? undefined : Number(selected),
-                      {
-                        shouldDirty: true,
-                        shouldValidate: true,
-                      },
-                    )
-                  }
-                  className=""
-                />
-              </Field>
-
-              <Field label="필요 크레딧">
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  className={inputClassName}
-                  placeholder="숫자만 입력해 주세요. 예: 150"
-                  value={
-                    selectedCreditPrice === undefined
-                      ? ""
-                      : String(selectedCreditPrice)
-                  }
-                  onChange={(event) => {
-                    const onlyNumbers = event.target.value.replace(/\D/g, "");
-
-                    setValue(
-                      "creditPrice",
-                      onlyNumbers === "" ? undefined : Number(onlyNumbers),
-                      {
-                        shouldDirty: true,
-                        shouldValidate: true,
-                      },
-                    );
-                  }}
-                />
-
-                <div className="mt-2 min-h-5">
-                  {errors.creditPrice?.message ? (
-                    <p className="text-xs font-semibold text-red-600">
-                      {errors.creditPrice.message}
-                    </p>
-                  ) : null}
-                </div>
-              </Field>
+                {isSubmitting ? "등록 중..." : "재능 등록하기"}
+              </button>
             </div>
-
-            {message ? (
-              <p className="rounded-lg border border-red-100 bg-red-50 p-3 text-sm font-semibold text-red-700">
-                {message}
-              </p>
-            ) : null}
-
-            <button
-              type="submit"
-              disabled={
-                isSubmitting || isCategoryLoading || categoryOptions.length === 0
-              }
-              className="mt-2 h-[52px] w-full cursor-pointer rounded-lg bg-[linear-gradient(135deg,#8c5bff_0%,#8973ff_42%,#78a9ff_74%,#79e4dd_100%)] text-base font-black text-white shadow-lg shadow-violet-400/20 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-violet-400/25 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-60"
-            >
-              {isSubmitting ? "등록 중..." : "재능 등록하기"}
-            </button>
-          </div>
-        </form>
+          </form>
+        ) : null}
 
         {isSuccessModalOpen ? (
           <FeedbackModal
