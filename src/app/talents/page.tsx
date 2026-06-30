@@ -18,7 +18,6 @@ import {
   categoryApi,
   talentApi,
   type CategoryRes,
-  type TalentDetailRes,
   type TalentListRes,
   type TalentSortType,
 } from "@/lib/api";
@@ -148,20 +147,22 @@ function getCategoryVisual(categoryName: string) {
   return categoryVisuals.default;
 }
 
-function getTalentAuthorNickname(talent: TalentListRes): string | null {
-  const nickname =
-    talent.author?.nickname ??
-    talent.nickname ??
-    talent.authorNickname ??
-    talent.sellerNickname ??
-    talent.providerNickname ??
-    talent.userNickname;
+function getTalentAuthorLabel(talent: TalentListRes): string {
+  const nickname = talent.authorNickname?.trim();
 
-  return nickname?.trim() || null;
-}
+  if (nickname) {
+    return nickname;
+  }
 
-function getTalentDetailAuthorNickname(talent: TalentDetailRes): string | null {
-  return talent.author?.nickname?.trim() || null;
+  if (
+    typeof talent.authorId === "number" &&
+    Number.isInteger(talent.authorId) &&
+    talent.authorId > 0
+  ) {
+    return `사용자 #${talent.authorId}`;
+  }
+
+  return "작성자 정보 없음";
 }
 
 function TalentSortMenu({
@@ -267,10 +268,6 @@ export default function TalentsPage() {
     string | null
   >(null);
   const [talents, setTalents] = useState<TalentListRes[]>([]);
-  const [authorNamesByTalentId, setAuthorNamesByTalentId] = useState<
-    Record<number, string | null>
-  >({});
-  const requestedAuthorIdsRef = useRef<Set<number>>(new Set());
   const [nextCursor, setNextCursor] = useState<number | null>(null);
   const [hasNext, setHasNext] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
@@ -365,60 +362,6 @@ export default function TalentsPage() {
       ignore = true;
     };
   }, [categoryId, shelfFilter, sortBy]);
-
-  useEffect(() => {
-    const targets = talents.filter((talent) => {
-      if (getTalentAuthorNickname(talent)) {
-        return false;
-      }
-
-      if (requestedAuthorIdsRef.current.has(talent.talentId)) {
-        return false;
-      }
-
-      return true;
-    });
-
-    if (targets.length === 0) {
-      return;
-    }
-
-    targets.forEach((talent) => {
-      requestedAuthorIdsRef.current.add(talent.talentId);
-    });
-
-    let ignore = false;
-
-    async function loadTalentAuthors() {
-      const settledAuthors = await Promise.allSettled(
-        targets.map((talent) => talentApi.getDetail(talent.talentId)),
-      );
-
-      if (ignore) {
-        return;
-      }
-
-      setAuthorNamesByTalentId((previous) => {
-        const next = { ...previous };
-
-        settledAuthors.forEach((result, index) => {
-          const talentId = targets[index].talentId;
-          next[talentId] =
-            result.status === "fulfilled"
-              ? getTalentDetailAuthorNickname(result.value)
-              : null;
-        });
-
-        return next;
-      });
-    }
-
-    void loadTalentAuthors();
-
-    return () => {
-      ignore = true;
-    };
-  }, [talents]);
 
   async function handleLoadMore() {
     setErrorMessage(null);
@@ -627,11 +570,6 @@ export default function TalentsPage() {
                 <TalentProductCard
                   key={talent.talentId}
                   talent={talent}
-                  authorNickname={
-                    getTalentAuthorNickname(talent) ??
-                    authorNamesByTalentId[talent.talentId] ??
-                    null
-                  }
                 />
               ))}
             </div>
@@ -656,20 +594,19 @@ export default function TalentsPage() {
 
 function TalentProductCard({
   talent,
-  authorNickname,
 }: {
   talent: TalentListRes;
-  authorNickname: string | null;
 }) {
   const visual = getCategoryVisual(talent.categoryName);
   const CategoryIcon = visual.Icon;
   const newTalent = isNewTalent(talent.createdAt);
   const bestTalent = talent.completeCount > 0 || talent.avgRating >= 4.5;
-  const displayAuthorNickname = authorNickname ?? "등록자 정보 없음";
+  const authorLabel = getTalentAuthorLabel(talent);
 
   return (
     <Link
       href={`/talents/${talent.talentId}`}
+      prefetch={false}
       className="group block text-left"
     >
       <div className={`relative aspect-square overflow-hidden ${visual.tileBg}`}>
@@ -712,7 +649,7 @@ function TalentProductCard({
         <p className="mt-2 text-sm font-semibold text-zinc-500">
           등록자{" "}
           <span className="font-black text-zinc-700">
-            {displayAuthorNickname}
+            {authorLabel}
           </span>
         </p>
 

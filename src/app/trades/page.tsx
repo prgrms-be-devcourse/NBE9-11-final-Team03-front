@@ -8,15 +8,17 @@ import { LoginRequiredState } from "@/components/common/LoginRequiredState";
 import {
   chatApi,
   profileApi,
-  talentApi,
   tradeApi,
   type ChatRoomListItem,
   type MyProfileDetailRes,
-  type TalentDetailRes,
   type TradeListRes,
   type TradeStatus,
 } from "@/lib/api";
-import { getStoredUserId, hasStoredAccessToken } from "@/lib/auth";
+import {
+  extractAuthClaimsFromAccessToken,
+  getAccessToken,
+  hasStoredAccessToken,
+} from "@/lib/auth";
 import {
   isAuthRequiredError,
   isAuthRequiredMessage,
@@ -33,9 +35,21 @@ type TradeListItem = TradeListRes & {
 
 interface TradeGroupView {
   groupKey: string;
+  tradeGroupId: number | null;
   tradeType: TradeListItem["tradeType"];
   trades: TradeListItem[];
   updatedAt: string;
+}
+
+
+function getAuthenticatedUserId(): number | null {
+  const token = getAccessToken();
+
+  if (!token) {
+    return null;
+  }
+
+  return extractAuthClaimsFromAccessToken(token).userId;
 }
 
 const statusOptions: { value: TradeStatus | ""; label: string }[] = [
@@ -95,6 +109,29 @@ function TradeStatusPill({ status }: { status: TradeStatus }) {
   );
 }
 
+function TradeContextPill({
+  label,
+  tone = "info",
+}: {
+  label: string;
+  tone?: "info" | "success" | "warning";
+}) {
+  const className =
+    tone === "success"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : tone === "warning"
+        ? "border-amber-200 bg-amber-50 text-amber-700"
+        : "border-[#d9ccff] bg-[#f4f0ff] text-[#8c5bff]";
+
+  return (
+    <span
+      className={`inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-black ${className}`}
+    >
+      {label}
+    </span>
+  );
+}
+
 function TradeTypePill({
   tradeType,
 }: {
@@ -107,24 +144,35 @@ function TradeTypePill({
   );
 }
 
-function groupTradesForView(trades: TradeListItem[]): TradeGroupView[] {
+function getTimeValue(value: unknown) {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return 0;
+  }
+
+  const time = new Date(value).getTime();
+
+  return Number.isFinite(time) ? time : 0;
+}
+
+function buildTradeCardsForView(trades: TradeListItem[]): TradeGroupView[] {
   const map = new Map<string, TradeGroupView>();
 
   for (const [index, trade] of trades.entries()) {
     const tradeId = getPositiveInteger(trade.tradeId);
     const tradeGroupId = getPositiveInteger(trade.tradeGroupId);
     const groupKey =
-      trade.tradeType === "SWAP" && tradeGroupId !== null
-        ? `swap-${tradeGroupId}`
+      tradeGroupId !== null
+        ? `GROUP-${tradeGroupId}`
         : tradeId !== null
-          ? `trade-${tradeId}`
-          : `trade-unknown-${index}`;
+          ? `TRADE-${tradeId}`
+          : `TRADE-UNKNOWN-${index}`;
 
     const current = map.get(groupKey);
 
     if (!current) {
       map.set(groupKey, {
         groupKey,
+        tradeGroupId,
         tradeType: trade.tradeType,
         trades: [trade],
         updatedAt: trade.updatedAt,
@@ -134,17 +182,13 @@ function groupTradesForView(trades: TradeListItem[]): TradeGroupView[] {
 
     current.trades.push(trade);
 
-    if (
-      new Date(trade.updatedAt).getTime() >
-      new Date(current.updatedAt).getTime()
-    ) {
+    if (getTimeValue(trade.updatedAt) > getTimeValue(current.updatedAt)) {
       current.updatedAt = trade.updatedAt;
     }
   }
 
   return Array.from(map.values()).sort(
-    (a, b) =>
-      new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+    (a, b) => getTimeValue(b.updatedAt) - getTimeValue(a.updatedAt),
   );
 }
 
@@ -152,10 +196,10 @@ function getRepresentativeStatus(group: TradeGroupView): TradeStatus {
   const priority: TradeStatus[] = [
     "DISPUTED",
     "UNDER_REVIEW",
-    "AWAITING_PARTNER",
     "IN_PROGRESS",
-    "CANCELLED",
+    "AWAITING_PARTNER",
     "COMPLETED",
+    "CANCELLED",
   ];
 
   return (
@@ -165,8 +209,93 @@ function getRepresentativeStatus(group: TradeGroupView): TradeStatus {
   );
 }
 
+function filterTradeGroupsByStatus(
+  groups: TradeGroupView[],
+  selectedStatus: TradeStatus | "",
+) {
+  if (!selectedStatus) {
+    return groups;
+  }
+
+  return groups.filter(
+    (group) => getRepresentativeStatus(group) === selectedStatus,
+  );
+}
+
+function getRepresentativeTrade(
+  group: TradeGroupView,
+  currentUserId: number | null,
+) {
+  if (currentUserId !== null) {
+    const buyerTrade = group.trades.find(
+      (trade) => getPositiveInteger(trade.buyerId) === currentUserId,
+    );
+
+    if (buyerTrade) {
+      return buyerTrade;
+    }
+  }
+
+  return group.trades[0];
+}
+
+async function enrichSwapTradeGroupIds(
+  trades: TradeListItem[],
+): Promise<TradeListItem[]> {
+  const targetTradeIds = Array.from(
+    new Set(
+      trades
+        .filter(
+          (trade) =>
+            trade.tradeType === "SWAP" &&
+            getPositiveInteger(trade.tradeGroupId) === null,
+        )
+        .map((trade) => getPositiveInteger(trade.tradeId))
+        .filter((tradeId): tradeId is number => tradeId !== null),
+    ),
+  );
+
+  if (targetTradeIds.length === 0) {
+    return trades;
+  }
+
+  const settledDetails = await Promise.allSettled(
+    targetTradeIds.map(async (tradeId) => ({
+      tradeId,
+      detail: await tradeApi.getDetail(tradeId),
+    })),
+  );
+
+  const groupIdsByTradeId = new Map<number, number>();
+
+  settledDetails.forEach((result) => {
+    if (result.status !== "fulfilled") {
+      return;
+    }
+
+    const tradeId = getPositiveInteger(result.value.tradeId);
+    const tradeGroupId = getPositiveInteger(result.value.detail.tradeGroupId);
+
+    if (tradeId !== null && tradeGroupId !== null) {
+      groupIdsByTradeId.set(tradeId, tradeGroupId);
+    }
+  });
+
+  if (groupIdsByTradeId.size === 0) {
+    return trades;
+  }
+
+  return trades.map((trade) => {
+    const tradeId = getPositiveInteger(trade.tradeId);
+    const tradeGroupId =
+      tradeId === null ? null : groupIdsByTradeId.get(tradeId) ?? null;
+
+    return tradeGroupId === null ? trade : { ...trade, tradeGroupId };
+  });
+}
+
 function formatGroupCredit(group: TradeGroupView) {
-  if (group.tradeType !== "SWAP" || group.trades.length < 2) {
+  if (group.tradeGroupId === null || group.trades.length < 2) {
     return formatTradeCredit(group.trades[0].creditPrice);
   }
 
@@ -261,18 +390,6 @@ function getNonEmptyText(value: unknown) {
     : null;
 }
 
-function getTalentAuthorId(talent: TalentDetailRes) {
-  return (
-    getPositiveInteger(talent.author?.id) ??
-    getPositiveInteger(talent.author?.userId) ??
-    getPositiveInteger(talent.author?.authorId) ??
-    getPositiveInteger(talent.author?.sellerId) ??
-    getPositiveInteger(talent.userId) ??
-    getPositiveInteger(talent.authorId) ??
-    getPositiveInteger(talent.sellerId)
-  );
-}
-
 function findMatchingChatRoom(
   trade: TradeListItem,
   chatRooms: ChatRoomListItem[],
@@ -310,34 +427,35 @@ function findMatchingChatRoom(
   );
 }
 
-async function getTalentDetailMap(trades: TradeListItem[]) {
-  const talentIds = Array.from(
-    new Set(
-      trades
-        .map((trade) => getPositiveInteger(trade.talentId))
-        .filter((talentId): talentId is number => talentId !== null),
-    ),
-  );
+function getChatRoomTalentTitleForTrade(
+  trade: TradeListItem,
+  room: ChatRoomListItem | null,
+) {
+  if (!room) {
+    return null;
+  }
 
-  const settledDetails = await Promise.allSettled(
-    talentIds.map((talentId) => talentApi.getDetail(talentId)),
-  );
+  const talentId = getPositiveInteger(trade.talentId);
 
-  const talentDetailMap = new Map<number, TalentDetailRes>();
+  if (talentId !== null) {
+    if (talentId === getPositiveInteger(room.myTalentId)) {
+      return getNonEmptyText(room.myTalentTitle);
+    }
 
-  for (const result of settledDetails) {
-    if (result.status === "fulfilled") {
-      const talentId =
-        getPositiveInteger(result.value.id) ??
-        getPositiveInteger(result.value.talentId);
+    if (talentId === getPositiveInteger(room.opponentTalentId)) {
+      return getNonEmptyText(room.opponentTalentTitle);
+    }
 
-      if (talentId !== null) {
-        talentDetailMap.set(talentId, result.value);
-      }
+    if (talentId === getPositiveInteger(room.requesterTalentId)) {
+      return getNonEmptyText(room.requesterTalentTitle);
+    }
+
+    if (talentId === getPositiveInteger(room.providerTalentId)) {
+      return getNonEmptyText(room.providerTalentTitle);
     }
   }
 
-  return talentDetailMap;
+  return getNonEmptyText(room.talentTitle);
 }
 
 function applyTradeDisplayFields({
@@ -345,25 +463,20 @@ function applyTradeDisplayFields({
   currentUserId,
   myProfile,
   chatRooms,
-  talentDetailMap,
 }: {
   trade: TradeListItem;
   currentUserId: number | null;
   myProfile: MyProfileDetailRes | null;
   chatRooms: ChatRoomListItem[];
-  talentDetailMap: Map<number, TalentDetailRes>;
 }): TradeListItem {
   const enrichedTrade: TradeListItem = { ...trade };
-  const talentId = getPositiveInteger(enrichedTrade.talentId);
-  const talentDetail = talentId === null ? null : talentDetailMap.get(talentId) ?? null;
   const myNickname = getNonEmptyText(myProfile?.nickname);
   const matchingRoom = findMatchingChatRoom(enrichedTrade, chatRooms);
   const opponentNickname = getNonEmptyText(matchingRoom?.opponentNickname);
 
   enrichedTrade.talentTitle =
     getNonEmptyText(enrichedTrade.talentTitle) ??
-    getNonEmptyText(matchingRoom?.talentTitle) ??
-    getNonEmptyText(talentDetail?.title) ??
+    getChatRoomTalentTitleForTrade(enrichedTrade, matchingRoom) ??
     enrichedTrade.talentTitle;
 
   if (currentUserId !== null && myNickname !== null) {
@@ -390,18 +503,6 @@ function applyTradeDisplayFields({
     }
   }
 
-  const talentAuthorId = talentDetail ? getTalentAuthorId(talentDetail) : null;
-  const talentAuthorNickname = getNonEmptyText(talentDetail?.author?.nickname);
-
-  if (
-    talentAuthorId !== null &&
-    talentAuthorId === getPositiveInteger(enrichedTrade.sellerId) &&
-    talentAuthorNickname !== null
-  ) {
-    enrichedTrade.sellerNickname =
-      getNonEmptyText(enrichedTrade.sellerNickname) ?? talentAuthorNickname;
-  }
-
   return enrichedTrade;
 }
 
@@ -413,7 +514,7 @@ async function enrichTradeListDisplayFields(
     return trades;
   }
 
-  const [profileResult, chatRoomsResult, talentDetailMap] = await Promise.all([
+  const [profileResult, chatRoomsResult] = await Promise.all([
     profileApi.getMe().then(
       (profile) => profile,
       () => null,
@@ -422,7 +523,6 @@ async function enrichTradeListDisplayFields(
       (response) => response.content,
       () => [],
     ),
-    getTalentDetailMap(trades),
   ]);
 
   return trades.map((trade) =>
@@ -431,7 +531,6 @@ async function enrichTradeListDisplayFields(
       currentUserId,
       myProfile: profileResult,
       chatRooms: chatRoomsResult,
-      talentDetailMap,
     }),
   );
 }
@@ -440,6 +539,199 @@ function getTradeHref(trade: TradeListItem) {
   const tradeId = getPositiveInteger(trade.tradeId);
 
   return tradeId === null ? "/trades" : `/trades/${tradeId}`;
+}
+
+function isSwapGroupForView(group: TradeGroupView) {
+  return group.tradeGroupId !== null && group.trades.length > 1;
+}
+
+function getReceiveTrade(
+  group: TradeGroupView,
+  currentUserId: number | null,
+) {
+  if (currentUserId === null) {
+    return null;
+  }
+
+  return (
+    group.trades.find(
+      (trade) => getPositiveInteger(trade.buyerId) === currentUserId,
+    ) ?? null
+  );
+}
+
+function getProvideTrade(
+  group: TradeGroupView,
+  currentUserId: number | null,
+) {
+  if (currentUserId === null) {
+    return null;
+  }
+
+  return (
+    group.trades.find(
+      (trade) => getPositiveInteger(trade.sellerId) === currentUserId,
+    ) ?? null
+  );
+}
+
+function getSwapContextPills(
+  group: TradeGroupView,
+  currentUserId: number | null,
+): { key: string; label: string; tone?: "info" | "success" | "warning" }[] {
+  const receiveTrade = getReceiveTrade(group, currentUserId);
+  const provideTrade = getProvideTrade(group, currentUserId);
+  const pills: { key: string; label: string; tone?: "info" | "success" | "warning" }[] = [];
+
+  if (receiveTrade?.tradeStatus === "UNDER_REVIEW") {
+    pills.push({
+      key: `partner-submitted-${receiveTrade.tradeId}`,
+      label: "상대방 제출 완료",
+      tone: "info",
+    });
+  }
+
+  if (provideTrade?.tradeStatus === "AWAITING_PARTNER") {
+    pills.push({
+      key: `partner-confirmed-${provideTrade.tradeId}`,
+      label: "상대방 구매 확정 완료",
+      tone: "success",
+    });
+  }
+
+  if (receiveTrade?.tradeStatus === "AWAITING_PARTNER") {
+    pills.push({
+      key: `my-confirmed-${receiveTrade.tradeId}`,
+      label: "구매 확정 완료",
+      tone: "warning",
+    });
+  }
+
+  return pills;
+}
+
+function getTradeStatusLabelForViewer(
+  trade: TradeListItem,
+  currentUserId: number | null,
+): string {
+  const isBuyer = currentUserId === getPositiveInteger(trade.buyerId);
+  const isSeller = currentUserId === getPositiveInteger(trade.sellerId);
+
+  if (trade.tradeStatus === "UNDER_REVIEW") {
+    if (isBuyer) return "상대방 제출 완료";
+    if (isSeller) return "결과물 제출 완료";
+  }
+
+  if (trade.tradeStatus === "AWAITING_PARTNER") {
+    if (isBuyer) return "구매 확정 완료";
+    if (isSeller) return "상대방 구매 확정 완료";
+  }
+
+  return statusLabels[trade.tradeStatus];
+}
+
+function getSwapGroupTitle(
+  group: TradeGroupView,
+  currentUserId: number | null,
+) {
+  const receiveTrade = getReceiveTrade(group, currentUserId);
+  const provideTrade = getProvideTrade(group, currentUserId);
+
+  if (receiveTrade && provideTrade) {
+    return `${formatTalentTitle(receiveTrade)} ↔ ${formatTalentTitle(
+      provideTrade,
+    )}`;
+  }
+
+  const titles = Array.from(
+    new Set(group.trades.map((trade) => formatTalentTitle(trade))),
+  ).filter((title) => title !== "재능 정보 없음");
+
+  if (titles.length >= 2) {
+    return `${titles[0]} ↔ ${titles[1]}`;
+  }
+
+  return titles[0] ?? "재능 교환";
+}
+
+function getParticipantLabels(group: TradeGroupView) {
+  const labelsById = new Map<number, string>();
+  const labelsWithoutId = new Set<string>();
+
+  function addParticipant(idValue: unknown, nicknameValue: unknown) {
+    const userId = getPositiveInteger(idValue);
+    const nickname = getNonEmptyText(nicknameValue);
+
+    if (userId === null) {
+      if (nickname) {
+        labelsWithoutId.add(nickname);
+      }
+
+      return;
+    }
+
+    const fallback = `사용자 #${userId}`;
+    const currentLabel = labelsById.get(userId);
+
+    if (!currentLabel || currentLabel === fallback) {
+      labelsById.set(userId, nickname ?? fallback);
+    }
+  }
+
+  group.trades.forEach((trade) => {
+    addParticipant(trade.buyerId, trade.buyerNickname);
+    addParticipant(trade.sellerId, trade.sellerNickname);
+  });
+
+  const labels = [...labelsById.values(), ...labelsWithoutId];
+
+  return labels.length > 0 ? labels.join(" · ") : "참여자 정보 없음";
+}
+
+function getSwapLegSummaries(
+  group: TradeGroupView,
+  currentUserId: number | null,
+) {
+  const receiveTrade = getReceiveTrade(group, currentUserId);
+  const provideTrade = getProvideTrade(group, currentUserId);
+
+  if (receiveTrade || provideTrade) {
+    return [
+      receiveTrade
+        ? {
+          key: `receive-${receiveTrade.tradeId}`,
+          title: "내가 받을 재능",
+          description: "상대가 제공하는 재능",
+          trade: receiveTrade,
+        }
+        : {
+          key: "receive-missing",
+          title: "내가 받을 재능",
+          description: "상대 재능 정보를 확인할 수 없습니다.",
+          trade: null,
+        },
+      provideTrade
+        ? {
+          key: `provide-${provideTrade.tradeId}`,
+          title: "내가 제공할 재능",
+          description: "내가 제공하는 재능",
+          trade: provideTrade,
+        }
+        : {
+          key: "provide-missing",
+          title: "내가 제공할 재능",
+          description: "내 재능 정보를 확인할 수 없습니다.",
+          trade: null,
+        },
+    ];
+  }
+
+  return group.trades.slice(0, 2).map((trade, index) => ({
+    key: `swap-${trade.tradeId ?? index}`,
+    title: index === 0 ? "교환 재능 A" : "교환 재능 B",
+    description: "교환 그룹의 재능",
+    trade,
+  }));
 }
 
 export default function TradesPage() {
@@ -467,7 +759,7 @@ export default function TradesPage() {
         return;
       }
 
-      const nextCurrentUserId = getStoredUserId();
+      const nextCurrentUserId = getAuthenticatedUserId();
       setCurrentUserId(nextCurrentUserId);
 
       if (append) {
@@ -480,13 +772,15 @@ export default function TradesPage() {
 
       try {
         const response = await tradeApi.getList({
-          status: selectedStatus || undefined,
           cursor,
           size: PAGE_SIZE,
         });
+        const tradesWithGroupIds = await enrichSwapTradeGroupIds(
+          response.content,
+        );
 
         const enrichedTrades = await enrichTradeListDisplayFields(
-          response.content,
+          tradesWithGroupIds,
           nextCurrentUserId,
         );
 
@@ -504,15 +798,15 @@ export default function TradesPage() {
           isAuthRequiredError(error)
             ? "로그인 후 이용해 주세요."
             : error instanceof Error
-            ? error.message
-            : "거래 목록을 불러오지 못했습니다.",
+              ? error.message
+              : "거래 목록을 불러오지 못했습니다.",
         );
       } finally {
         setIsLoading(false);
         setIsLoadingMore(false);
       }
     },
-    [selectedStatus],
+    [],
   );
 
   useEffect(() => {
@@ -533,7 +827,11 @@ export default function TradesPage() {
     await loadTrades({ cursor: nextCursor, append: true });
   }
 
-  const tradeGroups = groupTradesForView(trades);
+  const tradeGroups = buildTradeCardsForView(trades);
+  const visibleTradeGroups = filterTradeGroupsByStatus(
+    tradeGroups,
+    selectedStatus,
+  );
 
   return (
     <main className="relative min-h-[calc(100dvh-64px)] overflow-hidden bg-white">
@@ -586,21 +884,23 @@ export default function TradesPage() {
           </div>
         ) : null}
 
-        {!isLoading && !errorMessage && trades.length === 0 ? (
+        {!isLoading && !errorMessage && visibleTradeGroups.length === 0 ? (
           <EmptyState title="조건에 맞는 거래가 없습니다." />
         ) : null}
 
-        {!isLoading && trades.length > 0 ? (
+        {!isLoading && !errorMessage && (visibleTradeGroups.length > 0 || hasNext) ? (
           <>
-            <div className="grid gap-4">
-              {tradeGroups.map((group) => (
-                <TradeGroupCard
-                  key={group.groupKey}
-                  group={group}
-                  currentUserId={currentUserId}
-                />
-              ))}
-            </div>
+            {visibleTradeGroups.length > 0 ? (
+              <div className="grid gap-4">
+                {visibleTradeGroups.map((group) => (
+                  <TradeGroupCard
+                    key={group.groupKey}
+                    group={group}
+                    currentUserId={currentUserId}
+                  />
+                ))}
+              </div>
+            ) : null}
 
             {hasNext ? (
               <div className="mt-8 flex justify-center">
@@ -628,24 +928,25 @@ function TradeGroupCard({
   group: TradeGroupView;
   currentUserId: number | null;
 }) {
-  if (group.tradeType !== "SWAP" || group.trades.length === 1) {
+  if (!isSwapGroupForView(group)) {
     return (
-      <TradeListCard trade={group.trades[0]} currentUserId={currentUserId} />
+      <TradeListCard
+        trade={getRepresentativeTrade(group, currentUserId)}
+        currentUserId={currentUserId}
+      />
     );
   }
 
   const groupStatus = getRepresentativeStatus(group);
-
-  const receiveTrade = group.trades.find(
-    (trade) => currentUserId !== null && trade.buyerId === currentUserId,
-  );
-
-  const provideTrade = group.trades.find(
-    (trade) => currentUserId !== null && trade.sellerId === currentUserId,
-  );
+  const legSummaries = getSwapLegSummaries(group, currentUserId);
+  const groupTitle = getSwapGroupTitle(group, currentUserId);
+  const groupLabel =
+    group.tradeGroupId === null ? "교환 그룹" : `그룹 ${group.tradeGroupId}`;
+  const participantLabel = getParticipantLabels(group);
+  const contextPills = getSwapContextPills(group, currentUserId);
 
   return (
-    <section className="overflow-hidden rounded-lg border border-[#ded6ff] bg-white/95 shadow-sm shadow-violet-950/[0.04] transition hover:-translate-y-0.5 hover:border-[#c8b7ff] hover:shadow-xl hover:shadow-violet-950/[0.08]">
+    <section className="overflow-hidden rounded-lg border border-[#ded6ff] bg-white/95 shadow-sm shadow-violet-950/[0.04]">
       <div className="h-[3px] bg-[linear-gradient(90deg,rgba(140,91,255,0.68)_0%,rgba(120,169,255,0.48)_54%,rgba(121,228,221,0.58)_100%)]" />
       <div className="p-6">
         <div className="mb-5 flex flex-col gap-4 border-b border-slate-200 pb-5 md:flex-row md:items-start md:justify-between">
@@ -653,8 +954,11 @@ function TradeGroupCard({
             <p className="text-xs font-black uppercase tracking-[0.22em] text-[#8c5bff]">
               교환 거래
             </p>
-            <p className="mt-2 text-xl font-black text-zinc-950">
-              {formatTradeTitle(group.trades[0])}
+            <p className="mt-2 truncate text-xl font-black text-zinc-950">
+              {groupTitle}
+            </p>
+            <p className="mt-1 text-sm font-semibold text-zinc-500">
+              {groupLabel} · {participantLabel}
             </p>
             <p className="mt-1 text-sm font-semibold text-zinc-500">
               {getDisplayDate(group.updatedAt)}
@@ -663,6 +967,13 @@ function TradeGroupCard({
 
           <div className="flex flex-wrap items-center gap-2 md:justify-end">
             <TradeStatusPill status={groupStatus} />
+            {contextPills.map((pill) => (
+              <TradeContextPill
+                key={pill.key}
+                label={pill.label}
+                tone={pill.tone}
+              />
+            ))}
             <TradeTypePill tradeType="SWAP" />
             <span className="inline-flex items-center rounded-full bg-[#f4f0ff] px-3 py-1.5 text-xs font-black text-[#8c5bff]">
               {formatGroupCredit(group)}
@@ -671,62 +982,102 @@ function TradeGroupCard({
         </div>
 
         <div className="grid gap-3 rounded-lg border border-[#eee8ff] bg-[#fbf9ff] p-4 md:grid-cols-2">
-          {receiveTrade ? (
-            <TradeLegLink
-              title="내가 받을 재능"
-              description="결과물 확인, 구매 확정, 분쟁 신청을 진행합니다."
-              trade={receiveTrade}
+          {legSummaries.map((summary) => (
+            <TradeLegSummary
+              key={summary.key}
+              title={summary.title}
+              description={summary.description}
+              trade={summary.trade}
+              currentUserId={currentUserId}
             />
-          ) : null}
-
-          {provideTrade ? (
-            <TradeLegLink
-              title="내가 제공할 재능"
-              description="결과물을 제출하는 거래입니다."
-              trade={provideTrade}
-            />
-          ) : null}
-
-          {!receiveTrade && !provideTrade ? (
-            <div className="rounded-md bg-white/85 p-4 text-sm font-semibold text-zinc-600 md:col-span-2">
-              현재 로그인 사용자와 연결된 거래 역할을 확인하지 못했습니다.
-            </div>
-          ) : null}
+          ))}
         </div>
       </div>
     </section>
   );
 }
 
-function TradeLegLink({
+function TradeLegSummary({
   title,
   description,
   trade,
+  currentUserId,
 }: {
   title: string;
   description: string;
-  trade: TradeListItem;
+  trade: TradeListItem | null;
+  currentUserId: number | null;
 }) {
-  return (
-    <Link
-      href={getTradeHref(trade)}
-      className="rounded-md bg-white/85 p-4 transition hover:bg-white hover:shadow-sm hover:shadow-violet-950/[0.05]"
-    >
+  const content = (
+    <>
       <p className="text-xs font-black text-[#8c5bff]">{title}</p>
 
       <p className="mt-2 text-base font-black text-zinc-950">
-        {formatTalentTitle(trade)}
+        {trade ? formatTalentTitle(trade) : "재능 정보 없음"}
       </p>
 
       <p className="mt-1 text-sm leading-6 text-zinc-600">{description}</p>
 
-      <p className="mt-3 text-sm font-bold text-zinc-700">
-        {formatTradeCredit(trade.creditPrice)}
-      </p>
-      <p className="mt-1 text-xs font-bold text-zinc-500">
-        {formatBuyerName(trade)} · {formatSellerName(trade)}
-      </p>
-    </Link>
+      {trade ? (
+        <>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <TradeContextPill
+              label={getTradeStatusLabelForViewer(trade, currentUserId)}
+              tone={
+                trade.tradeStatus === "AWAITING_PARTNER"
+                  ? "success"
+                  : trade.tradeStatus === "UNDER_REVIEW"
+                    ? "info"
+                    : "warning"
+              }
+            />
+          </div>
+          <p className="mt-3 text-sm font-bold text-zinc-700">
+            거래 #{trade.tradeId} · {formatTradeCredit(trade.creditPrice)}
+          </p>
+          <TradeDirectionPills trade={trade} />
+        </>
+      ) : null}
+    </>
+  );
+
+  if (trade) {
+    return (
+      <Link
+        href={getTradeHref(trade)}
+        className="block rounded-md border border-transparent bg-white/85 p-4 transition hover:border-[#d9ccff] hover:bg-white hover:shadow-sm hover:shadow-violet-950/[0.05] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8c5bff]"
+      >
+        {content}
+      </Link>
+    );
+  }
+
+  return (
+    <div className="rounded-md bg-white/85 p-4">
+      {content}
+    </div>
+  );
+}
+
+function TradeDirectionPills({ trade }: { trade: TradeListItem }) {
+  const providerLabel = formatSellerName(trade);
+  const receiverLabel = formatBuyerName(trade);
+
+  return (
+    <div
+      className="mt-2 flex flex-wrap items-center gap-2 text-xs font-black text-zinc-500"
+      aria-label={`${providerLabel}에서 ${receiverLabel}로 제공`}
+    >
+      <span className="max-w-full truncate rounded-full bg-zinc-100 px-2.5 py-1 text-zinc-700">
+        {providerLabel}
+      </span>
+      <span className="text-sm text-[#8c5bff]" aria-hidden="true">
+        →
+      </span>
+      <span className="max-w-full truncate rounded-full bg-zinc-100 px-2.5 py-1 text-zinc-700">
+        {receiverLabel}
+      </span>
+    </div>
   );
 }
 
@@ -747,7 +1098,7 @@ function TradeListCard({
       : "참여자 확인 필요";
 
   return (
-    <Link
+    <a
       href={getTradeHref(trade)}
       className="block overflow-hidden rounded-lg border border-[#ded6ff] bg-white/95 shadow-sm shadow-violet-950/[0.04] transition hover:-translate-y-0.5 hover:border-[#c8b7ff] hover:shadow-xl hover:shadow-violet-950/[0.08]"
     >
@@ -756,6 +1107,12 @@ function TradeListCard({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <TradeStatusPill status={trade.tradeStatus} />
+            {(trade.tradeStatus === "UNDER_REVIEW" || trade.tradeStatus === "AWAITING_PARTNER") ? (
+              <TradeContextPill
+                label={getTradeStatusLabelForViewer(trade, currentUserId)}
+                tone={trade.tradeStatus === "AWAITING_PARTNER" ? "success" : "info"}
+              />
+            ) : null}
             <TradeTypePill tradeType={trade.tradeType} />
           </div>
 
@@ -779,6 +1136,6 @@ function TradeListCard({
           {formatTradeCredit(trade.creditPrice)}
         </p>
       </div>
-    </Link>
+    </a>
   );
 }

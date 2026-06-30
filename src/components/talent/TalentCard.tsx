@@ -13,6 +13,7 @@ export function TalentCard({ talent, category, provider }: TalentCardProps) {
   return (
     <Link
       href={`/talents/${talent.id}`}
+      prefetch={false}
       className="group flex h-[396px] flex-col rounded-lg border border-zinc-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-teal-300 hover:shadow-md"
     >
       <div className="flex h-8 items-center gap-2 overflow-hidden">

@@ -1,10 +1,12 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDownLeft,
   ArrowUpRight,
+  Check,
+  ChevronDown,
   Coins,
   History,
   ShieldCheck,
@@ -23,11 +25,115 @@ import {
 import { isAuthRequiredMessage } from "@/lib/auth-required";
 import { formatCredit, formatDate } from "@/utils/format";
 
+
+interface ListboxOption<TValue extends string> {
+  value: TValue;
+  label: string;
+  disabled?: boolean;
+}
+
+interface ListboxProps<TValue extends string> {
+  label: string;
+  value: TValue;
+  options: ListboxOption<TValue>[];
+  onChange: (value: TValue) => void;
+  placeholder?: string;
+  className?: string;
+}
+
+function Listbox<TValue extends string>({
+  label,
+  value,
+  options,
+  onChange,
+  placeholder = "선택해 주세요",
+  className = "mt-2",
+}: ListboxProps<TValue>) {
+  const [isOpen, setIsOpen] = useState(false);
+  const listboxRef = useRef<HTMLDivElement | null>(null);
+  const selected = options.find((option) => option.value === value);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!listboxRef.current?.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [isOpen]);
+
+  return (
+    <div ref={listboxRef} className={`relative ${className}`}>
+      <button
+        type="button"
+        aria-label={label}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        onClick={() => setIsOpen((current) => !current)}
+        className="flex h-12 w-full items-center justify-between rounded-lg border border-[#d9ccff] bg-white px-4 text-left text-sm font-black text-zinc-900 shadow-sm shadow-violet-950/[0.03] outline-none transition hover:border-[#c8b7ff] hover:bg-[#fbf9ff] focus:border-[#8c5bff] focus:ring-4 focus:ring-[#f4f0ff]"
+      >
+        <span className={selected ? "font-black text-zinc-900" : "font-black text-zinc-400"}>
+          {selected?.label ?? placeholder}
+        </span>
+        <ChevronDown
+          className={`h-4 w-4 text-zinc-500 transition ${
+            isOpen ? "rotate-180" : ""
+          }`}
+          aria-hidden="true"
+        />
+      </button>
+      {isOpen ? (
+        <div
+          role="listbox"
+          className="absolute z-40 mt-2 max-h-72 w-full overflow-y-auto rounded-lg border border-[#d9ccff] bg-white p-1.5 shadow-[0_18px_42px_rgba(80,60,160,0.16)]"
+        >
+          {options.map((option) => {
+            const isSelected = option.value === value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="option"
+                aria-selected={isSelected}
+                disabled={option.disabled}
+                onClick={() => {
+                  onChange(option.value);
+                  setIsOpen(false);
+                }}
+                className={`flex h-11 w-full items-center justify-between rounded-md px-3 text-left text-base transition ${
+                  isSelected
+                    ? "bg-[#f4f0ff] font-bold text-[#8c5bff]"
+                    : "font-bold text-zinc-700 hover:bg-[#f8f5ff] hover:text-[#8c5bff]"
+                } disabled:cursor-not-allowed disabled:text-zinc-300`}
+              >
+                <span className="font-bold">{option.label}</span>
+                {isSelected ? (
+                  <Check className="h-4 w-4 text-[#8c5bff]" aria-hidden="true" />
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 const CREDIT_ACCOUNT_NOT_FOUND_MESSAGE =
   "크레딧 계좌가 없습니다. 기존 가입 계정일 수 있습니다. 새로 회원가입한 계정으로 다시 확인해 주세요.";
 const TRANSACTION_PAGE_SIZE = 10;
 
 type TransactionTypeFilter = "" | CreditTransactionType;
+type PeriodFilter = "ALL" | "TODAY" | "7D" | "30D" | "CUSTOM";
 
 const transactionTypeLabels: Record<CreditTransactionType, string> = {
   WELCOME: "가입 보너스",
@@ -40,15 +146,20 @@ const transactionTypeLabels: Record<CreditTransactionType, string> = {
   ADJUSTMENT: "관리자 조정",
 };
 
-const transactionTypeOptions: Array<{
-  value: TransactionTypeFilter;
-  label: string;
-}> = [
+const transactionTypeOptions: ListboxOption<TransactionTypeFilter>[] = [
   { value: "", label: "전체 유형" },
   ...Object.entries(transactionTypeLabels).map(([value, label]) => ({
     value: value as CreditTransactionType,
     label,
   })),
+];
+
+const periodOptions: ListboxOption<PeriodFilter>[] = [
+  { value: "ALL", label: "전체 기간" },
+  { value: "TODAY", label: "오늘" },
+  { value: "7D", label: "최근 7일" },
+  { value: "30D", label: "최근 30일" },
+  { value: "CUSTOM", label: "직접 선택" },
 ];
 
 function hasStoredAccessToken(): boolean {
@@ -57,6 +168,40 @@ function hasStoredAccessToken(): boolean {
   }
 
   return Boolean(window.localStorage.getItem("baton_access_token"));
+}
+
+function formatDateInput(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function getPeriodDateRange(period: PeriodFilter): {
+  fromDate: string;
+  toDate: string;
+} {
+  if (period === "ALL" || period === "CUSTOM") {
+    return { fromDate: "", toDate: "" };
+  }
+
+  const today = new Date();
+  const toDate = formatDateInput(today);
+  const startDate = new Date(today);
+
+  if (period === "7D") {
+    startDate.setDate(today.getDate() - 6);
+  }
+
+  if (period === "30D") {
+    startDate.setDate(today.getDate() - 29);
+  }
+
+  return {
+    fromDate: formatDateInput(startDate),
+    toDate,
+  };
 }
 
 function getCreditErrorMessage(error: unknown): string {
@@ -106,6 +251,28 @@ function isInvalidDateRange(fromDate: string, toDate: string): boolean {
   return Boolean(fromDate && toDate && fromDate > toDate);
 }
 
+function getTransactionDateValue(createdAt: string): string {
+  return createdAt.slice(0, 10);
+}
+
+function isTransactionInDateRange(
+  transaction: CreditTransactionRes,
+  fromDate: string,
+  toDate: string,
+): boolean {
+  const transactionDate = getTransactionDateValue(transaction.createdAt);
+
+  if (fromDate && transactionDate < fromDate) {
+    return false;
+  }
+
+  if (toDate && transactionDate > toDate) {
+    return false;
+  }
+
+  return true;
+}
+
 export default function CreditsPage() {
   const [balance, setBalance] = useState<CreditBalanceRes | null>(null);
   const [transactions, setTransactions] = useState<CreditTransactionRes[]>([]);
@@ -119,10 +286,13 @@ export default function CreditsPage() {
     null,
   );
   const [typeFilter, setTypeFilter] = useState<TransactionTypeFilter>("");
+  const [periodFilter, setPeriodFilter] = useState<PeriodFilter>("ALL");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [appliedTypeFilter, setAppliedTypeFilter] =
     useState<TransactionTypeFilter>("");
+  const [appliedPeriodFilter, setAppliedPeriodFilter] =
+    useState<PeriodFilter>("ALL");
   const [appliedFromDate, setAppliedFromDate] = useState("");
   const [appliedToDate, setAppliedToDate] = useState("");
 
@@ -133,6 +303,13 @@ export default function CreditsPage() {
       descriptions.push(transactionTypeLabels[appliedTypeFilter]);
     }
 
+    if (appliedPeriodFilter !== "ALL") {
+      const periodLabel =
+        periodOptions.find((option) => option.value === appliedPeriodFilter)
+          ?.label ?? "선택 기간";
+      descriptions.push(periodLabel);
+    }
+
     if (appliedFromDate || appliedToDate) {
       descriptions.push(
         `${appliedFromDate || "처음"} ~ ${appliedToDate || "오늘"}`,
@@ -140,7 +317,7 @@ export default function CreditsPage() {
     }
 
     return descriptions.join(" · ");
-  }, [appliedFromDate, appliedToDate, appliedTypeFilter]);
+  }, [appliedFromDate, appliedPeriodFilter, appliedToDate, appliedTypeFilter]);
 
   const loadTransactions = useCallback(
     async ({
@@ -165,10 +342,12 @@ export default function CreditsPage() {
         }),
       );
 
+      const nextContent = transactionPage.content.filter((transaction) =>
+        isTransactionInDateRange(transaction, from, to),
+      );
+
       setTransactions((prevTransactions) =>
-        append
-          ? [...prevTransactions, ...transactionPage.content]
-          : transactionPage.content,
+        append ? [...prevTransactions, ...nextContent] : nextContent,
       );
       setNextCursor(transactionPage.nextCursor);
       setHasNext(transactionPage.hasNext);
@@ -234,6 +413,19 @@ export default function CreditsPage() {
   const isLoginRequired = isAuthRequiredMessage(errorMessage);
   const isFilterDisabled = isTransactionsLoading || isLoadingMore;
 
+  function handlePeriodChange(nextPeriod: PeriodFilter) {
+    setPeriodFilter(nextPeriod);
+    setFilterErrorMessage(null);
+
+    if (nextPeriod === "CUSTOM") {
+      return;
+    }
+
+    const nextRange = getPeriodDateRange(nextPeriod);
+    setFromDate(nextRange.fromDate);
+    setToDate(nextRange.toDate);
+  }
+
   async function handleApplyFilters() {
     if (isInvalidDateRange(fromDate, toDate)) {
       setFilterErrorMessage("시작일은 종료일보다 늦을 수 없습니다.");
@@ -244,6 +436,7 @@ export default function CreditsPage() {
     setErrorMessage(null);
     setIsTransactionsLoading(true);
     setAppliedTypeFilter(typeFilter);
+    setAppliedPeriodFilter(periodFilter);
     setAppliedFromDate(fromDate);
     setAppliedToDate(toDate);
 
@@ -265,9 +458,11 @@ export default function CreditsPage() {
 
   async function handleResetFilters() {
     setTypeFilter("");
+    setPeriodFilter("ALL");
     setFromDate("");
     setToDate("");
     setAppliedTypeFilter("");
+    setAppliedPeriodFilter("ALL");
     setAppliedFromDate("");
     setAppliedToDate("");
     setFilterErrorMessage(null);
@@ -316,9 +511,7 @@ export default function CreditsPage() {
 
       <div className="fixed-container relative py-10 sm:py-14 lg:py-16">
         <header className="mx-auto max-w-3xl text-center">
-          <h1 className="baton-page-title mt-3 !font-bold">
-            CREDIT WALLET
-          </h1>
+          <h1 className="baton-page-title mt-3 !font-bold">CREDIT WALLET</h1>
           <p className="mx-auto mt-4 max-w-2xl text-sm font-semibold leading-7 text-zinc-500 sm:mt-5 sm:text-lg sm:leading-8">
             사용 가능한 크레딧과 거래 중 예치된 금액을 한눈에 확인하세요.
             <br />
@@ -378,58 +571,47 @@ export default function CreditsPage() {
               </p>
             </div>
             <div className="inline-flex items-center gap-2 rounded-full border border-[#ded6ff] bg-white px-4 py-2 text-sm font-black text-[#8c5bff] shadow-sm shadow-violet-950/[0.04]">
-              <History className="size-4" aria-hidden="true" />
-              총 {transactions.length}{hasNext ? "+" : ""}건
+              <History className="size-4" aria-hidden="true" />총{" "}
+              {transactions.length}
+              {hasNext ? "+" : ""}건
             </div>
           </div>
 
           <div className="mt-6 rounded-lg border border-[#ded6ff] bg-white/95 p-4 shadow-sm shadow-violet-950/[0.04] sm:p-5">
-            <div className="grid gap-3 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
-              <label className="block">
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_auto] lg:items-end">
+              <div>
                 <span className="text-xs font-black text-[#8c5bff]">
                   거래 유형
                 </span>
-                <select
+                <Listbox
+                  label="거래 유형"
                   value={typeFilter}
-                  disabled={isFilterDisabled}
-                  onChange={(event) =>
-                    setTypeFilter(event.target.value as TransactionTypeFilter)
-                  }
-                  className="mt-2 h-11 w-full rounded-lg border border-[#ded6ff] bg-white px-3 text-sm font-black text-zinc-800 outline-none transition focus:border-[#8c5bff] disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-400"
-                >
-                  {transactionTypeOptions.map((option) => (
-                    <option key={option.value || "ALL"} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="block">
-                <span className="text-xs font-black text-[#8c5bff]">
-                  시작일
-                </span>
-                <input
-                  type="date"
-                  value={fromDate}
-                  disabled={isFilterDisabled}
-                  onChange={(event) => setFromDate(event.target.value)}
-                  className="mt-2 h-11 w-full rounded-lg border border-[#ded6ff] bg-white px-3 text-sm font-black text-zinc-800 outline-none transition focus:border-[#8c5bff] disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-400"
+                  options={transactionTypeOptions}
+                  onChange={(nextType) => {
+                    if (!isFilterDisabled) {
+                      setTypeFilter(nextType);
+                    }
+                  }}
+                  className="mt-2"
                 />
-              </label>
+              </div>
 
-              <label className="block">
+              <div>
                 <span className="text-xs font-black text-[#8c5bff]">
-                  종료일
+                  조회 기간
                 </span>
-                <input
-                  type="date"
-                  value={toDate}
-                  disabled={isFilterDisabled}
-                  onChange={(event) => setToDate(event.target.value)}
-                  className="mt-2 h-11 w-full rounded-lg border border-[#ded6ff] bg-white px-3 text-sm font-black text-zinc-800 outline-none transition focus:border-[#8c5bff] disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-400"
+                <Listbox
+                  label="조회 기간"
+                  value={periodFilter}
+                  options={periodOptions}
+                  onChange={(nextPeriod) => {
+                    if (!isFilterDisabled) {
+                      handlePeriodChange(nextPeriod);
+                    }
+                  }}
+                  className="mt-2"
                 />
-              </label>
+              </div>
 
               <div className="flex gap-2">
                 <button
@@ -450,6 +632,36 @@ export default function CreditsPage() {
                 </button>
               </div>
             </div>
+
+            {periodFilter === "CUSTOM" ? (
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <label className="block">
+                  <span className="text-xs font-black text-[#8c5bff]">
+                    시작일
+                  </span>
+                  <input
+                    type="date"
+                    value={fromDate}
+                    disabled={isFilterDisabled}
+                    onChange={(event) => setFromDate(event.target.value)}
+                    className="mt-2 h-12 w-full rounded-lg border border-[#d9ccff] bg-white px-4 text-sm font-bold text-zinc-900 shadow-sm shadow-violet-950/[0.03] outline-none transition hover:border-[#c8b7ff] hover:bg-[#fbf9ff] focus:border-[#8c5bff] focus:ring-4 focus:ring-[#f4f0ff] disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-400"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-xs font-black text-[#8c5bff]">
+                    종료일
+                  </span>
+                  <input
+                    type="date"
+                    value={toDate}
+                    disabled={isFilterDisabled}
+                    onChange={(event) => setToDate(event.target.value)}
+                    className="mt-2 h-12 w-full rounded-lg border border-[#d9ccff] bg-white px-4 text-sm font-bold text-zinc-900 shadow-sm shadow-violet-950/[0.03] outline-none transition hover:border-[#c8b7ff] hover:bg-[#fbf9ff] focus:border-[#8c5bff] focus:ring-4 focus:ring-[#f4f0ff] disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-400"
+                  />
+                </label>
+              </div>
+            ) : null}
 
             {filterErrorMessage ? (
               <p className="mt-3 text-sm font-bold text-rose-600">
@@ -613,9 +825,7 @@ function Summary({
         {icon}
       </div>
       <p className="mt-5 text-sm font-black text-zinc-600">{title}</p>
-      <p className="mt-1 text-xs font-semibold text-zinc-400">
-        {description}
-      </p>
+      <p className="mt-1 text-xs font-semibold text-zinc-400">{description}</p>
       <p className="mt-4 text-3xl font-black tracking-normal text-zinc-950">
         {isLoading ? "불러오는 중..." : value}
       </p>
