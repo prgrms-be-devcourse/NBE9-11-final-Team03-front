@@ -3,6 +3,7 @@
 import { ChangeEvent, FormEvent, useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { ErrorState } from "@/components/common/ErrorState";
+import { extractAuthClaimsFromAccessToken, getAccessToken } from "@/lib/auth";
 import { LoginRequiredState } from "@/components/common/LoginRequiredState";
 import {
   chatApi,
@@ -12,6 +13,7 @@ import {
   type ChatRoomListItem,
   type MyProfileDetailRes,
   type TalentDetailRes,
+  type TradeListRes,
   type TradeRes,
   type TradeSubmissionRes,
 } from "@/lib/api";
@@ -51,15 +53,14 @@ const inputClassName =
 const sideCardClassName =
   "relative overflow-hidden rounded-lg border border-[#ded6ff] bg-white/90 p-6 shadow-sm shadow-violet-950/[0.04] backdrop-blur";
 
-function readStoredUserId(): number | null {
-  if (typeof window === "undefined") {
+function readAuthenticatedUserId(): number | null {
+  const token = getAccessToken();
+
+  if (!token) {
     return null;
   }
 
-  const storedUserId = window.localStorage.getItem("baton_user_id");
-  const userId = storedUserId === null ? NaN : Number(storedUserId);
-
-  return Number.isInteger(userId) && userId > 0 ? userId : null;
+  return extractAuthClaimsFromAccessToken(token).userId;
 }
 
 function getStatusTone(
@@ -88,6 +89,51 @@ function getStatusClass(
   return classes[getStatusTone(status)];
 }
 
+function getTradeStatusLabelForViewer(
+  trade: TradeRes,
+  currentUserId: number | null,
+): string {
+  const isCurrentBuyer = currentUserId === getPositiveInteger(trade.buyerId);
+  const isCurrentSeller = currentUserId === getPositiveInteger(trade.sellerId);
+
+  if (trade.tradeStatus === "UNDER_REVIEW") {
+    if (isCurrentBuyer) {
+      return "상대방 제출 완료";
+    }
+
+    if (isCurrentSeller) {
+      return "결과물 제출 완료";
+    }
+  }
+
+  if (trade.tradeStatus === "AWAITING_PARTNER") {
+    if (isCurrentBuyer) {
+      return "구매 확정 완료";
+    }
+
+    if (isCurrentSeller) {
+      return "상대방 구매 확정 완료";
+    }
+  }
+
+  return getTradeStatusLabel(trade.tradeStatus);
+}
+
+function getPeerConfirmationNoticeTitle(
+  trade: TradeRes,
+  currentUserId: number | null,
+): string {
+  if (currentUserId === getPositiveInteger(trade.sellerId)) {
+    return "상대방 구매 확정 완료";
+  }
+
+  if (currentUserId === getPositiveInteger(trade.buyerId)) {
+    return "구매 확정 완료";
+  }
+
+  return "구매 확정 완료";
+}
+
 function StatusPill({
   label,
   status,
@@ -114,16 +160,22 @@ function TypePill({ label }: { label: string }) {
   );
 }
 
-function getTradeStatusLabel(status: string): string {
-  return TRADE_STATUS_LABELS[status] ?? status;
+function getTradeStatusLabel(status: unknown): string {
+  return typeof status === "string"
+    ? TRADE_STATUS_LABELS[status] ?? status
+    : "거래 상태 정보 없음";
 }
 
-function getEscrowStatusLabel(status: string): string {
-  return ESCROW_STATUS_LABELS[status] ?? status;
+function getEscrowStatusLabel(status: unknown): string {
+  return typeof status === "string"
+    ? ESCROW_STATUS_LABELS[status] ?? status
+    : "에스크로 상태 정보 없음";
 }
 
-function getTradeTypeLabel(type: string): string {
-  return TRADE_TYPE_LABELS[type] ?? type;
+function getTradeTypeLabel(type: unknown): string {
+  return typeof type === "string"
+    ? TRADE_TYPE_LABELS[type] ?? type
+    : "거래 유형 정보 없음";
 }
 
 function getPositiveInteger(value: unknown) {
@@ -182,13 +234,13 @@ function formatSellerName(trade: TradeRes) {
 }
 
 function formatTalentTitle(trade: TradeRes) {
-  const title = trade.talentTitle?.trim();
+  const title = getNonEmptyText(trade.talentTitle);
 
   return title || formatOptionalEntityId("재능", trade.talentId);
 }
 
 function formatTradeTitle(trade: TradeRes) {
-  const title = ("title" in trade ? trade.title : undefined)?.trim();
+  const title = getNonEmptyText("title" in trade ? trade.title : undefined);
 
   return title || formatTalentTitle(trade) || formatOptionalEntityId("거래", trade.tradeId);
 }
@@ -197,6 +249,35 @@ function getNonEmptyText(value: unknown) {
   return typeof value === "string" && value.trim().length > 0
     ? value.trim()
     : null;
+}
+
+
+function getImagePreviewContentType(value: unknown): string | null {
+  const url = getNonEmptyText(value);
+
+  if (!url) {
+    return null;
+  }
+
+  const lowerUrl = url.toLowerCase();
+
+  if (lowerUrl.includes(".jpg") || lowerUrl.includes(".jpeg")) {
+    return "image/jpeg";
+  }
+
+  if (lowerUrl.includes(".png")) {
+    return "image/png";
+  }
+
+  if (lowerUrl.includes(".webp")) {
+    return "image/webp";
+  }
+
+  if (lowerUrl.includes(".gif")) {
+    return "image/gif";
+  }
+
+  return null;
 }
 
 function getTalentAuthorId(talent: TalentDetailRes) {
@@ -211,7 +292,10 @@ function getTalentAuthorId(talent: TalentDetailRes) {
   );
 }
 
-function findMatchingChatRoom(trade: TradeRes, chatRooms: ChatRoomListItem[]) {
+function findMatchingChatRoom(
+  trade: TradeRes,
+  chatRooms: ChatRoomListItem[],
+) {
   const tradeId = getPositiveInteger(trade.tradeId);
   const tradeGroupId = getPositiveInteger(trade.tradeGroupId);
   const talentId = getPositiveInteger(trade.talentId);
@@ -249,14 +333,14 @@ function applyTradeDisplayFields({
   trade,
   currentUserId,
   myProfile,
-  chatRooms,
   talentDetail,
+  chatRooms,
 }: {
   trade: TradeRes;
   currentUserId: number | null;
   myProfile: MyProfileDetailRes | null;
-  chatRooms: ChatRoomListItem[];
   talentDetail: TalentDetailRes | null;
+  chatRooms: ChatRoomListItem[];
 }): TradeRes {
   const enrichedTrade: TradeRes = { ...trade };
   const myNickname = getNonEmptyText(myProfile?.nickname);
@@ -314,29 +398,29 @@ async function enrichTradeDetailDisplayFields(
 ) {
   const talentId = getPositiveInteger(trade.talentId);
 
-  const [profileResult, chatRoomsResult, talentDetailResult] = await Promise.all([
+  const [profileResult, talentDetailResult, chatRoomsResult] = await Promise.all([
     profileApi.getMe().then(
       (profile) => profile,
       () => null,
     ),
+    talentId === null
+      ? Promise.resolve(null)
+      : talentApi.getDetail(talentId).then(
+        (talent) => talent,
+        () => null,
+      ),
     chatApi.getMyChatRooms({ size: 100 }).then(
       (response) => response.content,
       () => [],
     ),
-    talentId === null
-      ? Promise.resolve(null)
-      : talentApi.getDetail(talentId).then(
-          (talent) => talent,
-          () => null,
-        ),
   ]);
 
   return applyTradeDisplayFields({
     trade,
     currentUserId,
     myProfile: profileResult,
-    chatRooms: chatRoomsResult,
     talentDetail: talentDetailResult,
+    chatRooms: chatRoomsResult,
   });
 }
 
@@ -363,15 +447,154 @@ function getCurrentUserDisplayName(
   return "거래 참여자가 아닙니다.";
 }
 
+interface PartnerTradeInfo {
+  tradeId: number;
+  tradeStatus: TradeRes["tradeStatus"];
+  buyerId: number;
+  sellerId: number;
+}
+
+interface SwapPartnerTradeLookupTarget {
+  tradeId: unknown;
+  tradeGroupId: unknown;
+  tradeStatus: unknown;
+  tradeType: unknown;
+}
+
+type ConfirmDialogState =
+  | {
+    type: "confirmTrade";
+    title: string;
+    description: string;
+    confirmLabel: string;
+    tone: "primary";
+  }
+  | {
+    type: "cancelTrade";
+    title: string;
+    description: string;
+    confirmLabel: string;
+    tone: "danger";
+  };
+
+function toPartnerTradeInfo(
+  trade: TradeListRes | TradeRes,
+): PartnerTradeInfo | null {
+  const tradeId = getPositiveInteger(trade.tradeId);
+  const buyerId = getPositiveInteger(trade.buyerId);
+  const sellerId = getPositiveInteger(trade.sellerId);
+
+  if (tradeId === null || buyerId === null || sellerId === null) {
+    return null;
+  }
+
+  return {
+    tradeId,
+    tradeStatus: trade.tradeStatus,
+    buyerId,
+    sellerId,
+  };
+}
+
+async function getMyTradeListForPartnerStatus() {
+  const trades: TradeListRes[] = [];
+  let cursor: number | null = null;
+  let hasNext = true;
+  let scannedPageCount = 0;
+
+  while (hasNext && scannedPageCount < 5) {
+    const page = await tradeApi.getList({
+      cursor,
+      size: 100,
+    });
+
+    trades.push(...page.content);
+    hasNext = page.hasNext;
+    cursor = page.nextCursor;
+    scannedPageCount += 1;
+
+    if (cursor === null) {
+      break;
+    }
+  }
+
+  return trades;
+}
+
+async function findSwapPartnerTrade(
+  currentTrade: SwapPartnerTradeLookupTarget,
+): Promise<PartnerTradeInfo | null> {
+  const currentTradeId = getPositiveInteger(currentTrade.tradeId);
+  const currentTradeGroupId = getPositiveInteger(currentTrade.tradeGroupId);
+
+  if (
+    currentTrade.tradeType !== "SWAP" ||
+    currentTradeId === null ||
+    currentTradeGroupId === null
+  ) {
+    return null;
+  }
+
+  const myTrades = await getMyTradeListForPartnerStatus();
+
+  const partnerFromList = myTrades.find((candidate) => {
+    const candidateTradeId = getPositiveInteger(candidate.tradeId);
+    const candidateTradeGroupId = getPositiveInteger(candidate.tradeGroupId);
+
+    return (
+      candidateTradeId !== null &&
+      candidateTradeId !== currentTradeId &&
+      candidateTradeGroupId === currentTradeGroupId
+    );
+  });
+
+  if (partnerFromList) {
+    return toPartnerTradeInfo(partnerFromList);
+  }
+
+  const swapCandidates = myTrades.filter((candidate) => {
+    const candidateTradeId = getPositiveInteger(candidate.tradeId);
+
+    return (
+      candidate.tradeType === "SWAP" &&
+      candidateTradeId !== null &&
+      candidateTradeId !== currentTradeId
+    );
+  });
+
+  const detailResults = await Promise.allSettled(
+    swapCandidates.map((candidate) => tradeApi.getDetail(candidate.tradeId)),
+  );
+
+  for (const result of detailResults) {
+    if (result.status !== "fulfilled") {
+      continue;
+    }
+
+    const partnerDetail = result.value;
+    const partnerTradeGroupId = getPositiveInteger(partnerDetail.tradeGroupId);
+
+    if (partnerTradeGroupId === currentTradeGroupId) {
+      return toPartnerTradeInfo(partnerDetail);
+    }
+  }
+
+  return null;
+}
+
 export default function TradeDetailPage() {
   const params = useParams<{ tradeId: string }>();
   const tradeId = Number(params.tradeId);
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const [trade, setTrade] = useState<TradeRes | null>(null);
+  const [partnerTrade, setPartnerTrade] = useState<PartnerTradeInfo | null>(null);
   const [submission, setSubmission] = useState<TradeSubmissionRes | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [description, setDescription] = useState("");
   const [disputeReason, setDisputeReason] = useState("");
+  const [disputeReasonError, setDisputeReasonError] = useState("");
+  const [isDisputeDialogOpen, setIsDisputeDialogOpen] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [submissionMessage, setSubmissionMessage] = useState<string | null>(
@@ -380,6 +603,7 @@ export default function TradeDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [isSubmissionLoading, setIsSubmissionLoading] = useState(false);
+  const [submissionFileInputKey, setSubmissionFileInputKey] = useState(0);
 
   useEffect(() => {
     let ignore = false;
@@ -390,16 +614,18 @@ export default function TradeDetailPage() {
       if (!Number.isInteger(tradeId) || tradeId <= 0) {
         if (!ignore) {
           setErrorMessage("유효한 거래 ID가 아닙니다.");
+          setPartnerTrade(null);
           setIsLoading(false);
         }
         return;
       }
 
-      const userId = readStoredUserId();
+      const userId = readAuthenticatedUserId();
 
       if (userId === null) {
         if (!ignore) {
           setCurrentUserId(null);
+          setPartnerTrade(null);
           setErrorMessage("로그인 후 이용해 주세요.");
           setIsLoading(false);
         }
@@ -428,12 +654,13 @@ export default function TradeDetailPage() {
         }
 
         setTrade(null);
+        setPartnerTrade(null);
         setErrorMessage(
           isAuthRequiredError(error)
             ? "로그인 후 이용해 주세요."
             : error instanceof Error
-            ? error.message
-            : "거래 상세를 불러오지 못했습니다.",
+              ? error.message
+              : "거래 상세를 불러오지 못했습니다.",
         );
       } finally {
         if (!ignore) {
@@ -449,8 +676,53 @@ export default function TradeDetailPage() {
     };
   }, [tradeId]);
 
+  const partnerStatusTradeId = trade?.tradeId ?? null;
+  const partnerStatusTradeGroupId = trade?.tradeGroupId ?? null;
+  const partnerStatusTradeStatus = trade?.tradeStatus ?? null;
+  const partnerStatusTradeType = trade?.tradeType ?? null;
+
+  useEffect(() => {
+    let ignore = false;
+
+    async function loadPartnerTradeStatus() {
+      if (currentUserId === null || partnerStatusTradeType !== "SWAP") {
+        setPartnerTrade(null);
+        return;
+      }
+
+      try {
+        const nextPartnerTrade = await findSwapPartnerTrade({
+          tradeId: partnerStatusTradeId,
+          tradeGroupId: partnerStatusTradeGroupId,
+          tradeStatus: partnerStatusTradeStatus,
+          tradeType: partnerStatusTradeType,
+        });
+
+        if (!ignore) {
+          setPartnerTrade(nextPartnerTrade);
+        }
+      } catch {
+        if (!ignore) {
+          setPartnerTrade(null);
+        }
+      }
+    }
+
+    void loadPartnerTradeStatus();
+
+    return () => {
+      ignore = true;
+    };
+  }, [
+    currentUserId,
+    partnerStatusTradeGroupId,
+    partnerStatusTradeId,
+    partnerStatusTradeStatus,
+    partnerStatusTradeType,
+  ]);
+
   async function refreshTrade(nextSuccessMessage?: string) {
-    if (currentUserId === null || !Number.isInteger(tradeId)) {
+    if (currentUserId === null || !Number.isInteger(tradeId) || tradeId <= 0) {
       return;
     }
 
@@ -513,54 +785,97 @@ export default function TradeDetailPage() {
     };
   }, [trade, currentUserId, loadSubmission]);
 
-  async function handleConfirmTrade() {
-    if (!trade || currentUserId === null) {
+  function handleConfirmTrade() {
+    if (!trade || currentUserId === null || isActionLoading) {
       return;
     }
 
-    if (!window.confirm("결과물을 확인했고 구매를 확정하시겠습니까?")) {
+    setConfirmDialog({
+      type: "confirmTrade",
+      title: "구매를 확정할까요?",
+      description:
+        "결과물을 확인했다면 구매를 확정해 주세요. 확정 후에는 에스크로 정산 또는 상대 확정 대기 상태로 전환됩니다.",
+      confirmLabel: "구매 확정",
+      tone: "primary",
+    });
+  }
+
+  function handleCancelTrade() {
+    if (!trade || currentUserId === null || isActionLoading) {
       return;
     }
+
+    setConfirmDialog({
+      type: "cancelTrade",
+      title: "거래를 취소할까요?",
+      description:
+        "진행 중인 거래를 취소합니다. 취소 후에는 되돌릴 수 없으니 거래 상황을 확인한 뒤 진행해 주세요.",
+      confirmLabel: "거래 취소",
+      tone: "danger",
+    });
+  }
+
+  function closeConfirmDialog() {
+    if (isActionLoading) {
+      return;
+    }
+
+    setConfirmDialog(null);
+  }
+
+  async function executeConfirmDialogAction() {
+    if (!trade || currentUserId === null || confirmDialog === null) {
+      return;
+    }
+
+    const actionType = confirmDialog.type;
 
     setErrorMessage(null);
     setSuccessMessage("");
     setIsActionLoading(true);
 
     try {
-      await tradeApi.confirm(trade.tradeId);
-      await refreshTrade("구매가 확정되었습니다.");
+      if (actionType === "confirmTrade") {
+        await tradeApi.confirm(trade.tradeId);
+        setConfirmDialog(null);
+        await refreshTrade("구매가 확정되었습니다.");
+        return;
+      }
+
+      await tradeApi.cancel(trade.tradeId);
+      setConfirmDialog(null);
+      await refreshTrade("거래가 취소되었습니다.");
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : "구매 확정에 실패했습니다.",
+        error instanceof Error
+          ? error.message
+          : actionType === "confirmTrade"
+            ? "구매 확정에 실패했습니다."
+            : "거래 취소에 실패했습니다.",
       );
     } finally {
       setIsActionLoading(false);
     }
   }
 
-  async function handleCancelTrade() {
+  function openDisputeDialog() {
     if (!trade || currentUserId === null) {
-      return;
-    }
-
-    if (!window.confirm("진행 중인 거래를 취소하시겠습니까?")) {
       return;
     }
 
     setErrorMessage(null);
     setSuccessMessage("");
-    setIsActionLoading(true);
+    setDisputeReasonError("");
+    setIsDisputeDialogOpen(true);
+  }
 
-    try {
-      await tradeApi.cancel(trade.tradeId);
-      await refreshTrade("거래가 취소되었습니다.");
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : "거래 취소에 실패했습니다.",
-      );
-    } finally {
-      setIsActionLoading(false);
+  function closeDisputeDialog() {
+    if (isActionLoading) {
+      return;
     }
+
+    setIsDisputeDialogOpen(false);
+    setDisputeReasonError("");
   }
 
   async function handleDisputeTrade() {
@@ -570,20 +885,22 @@ export default function TradeDetailPage() {
 
     const reason = disputeReason.trim();
     if (reason.length < 5 || reason.length > 200) {
-      setErrorMessage("분쟁 사유는 5자 이상 200자 이하로 입력해 주세요.");
+      setDisputeReasonError("분쟁 사유는 5자 이상 200자 이하로 입력해 주세요.");
       return;
     }
 
     setErrorMessage(null);
+    setDisputeReasonError("");
     setSuccessMessage("");
     setIsActionLoading(true);
 
     try {
       await tradeApi.dispute(trade.tradeId, { reason });
       setDisputeReason("");
-      await refreshTrade("분쟁이 신청되었습니다.");
+      setIsDisputeDialogOpen(false);
+      await refreshTrade("분쟁이 신청되었습니다. 관리자 검토가 완료될 때까지 에스크로가 동결됩니다.");
     } catch (error) {
-      setErrorMessage(
+      setDisputeReasonError(
         error instanceof Error ? error.message : "분쟁 신청에 실패했습니다.",
       );
     } finally {
@@ -617,10 +934,71 @@ export default function TradeDetailPage() {
     setSelectedFile(file);
   }
 
+  function markSubmissionAsSubmitted(
+    nextSubmission: TradeSubmissionRes,
+    nextSuccessMessage: string,
+  ) {
+    setSubmission(nextSubmission);
+    setSelectedFile(null);
+    setSubmissionFileInputKey((current) => current + 1);
+    setDescription("");
+    setTrade((currentTrade) =>
+      currentTrade === null
+        ? currentTrade
+        : { ...currentTrade, tradeStatus: "UNDER_REVIEW" },
+    );
+    setSuccessMessage(nextSuccessMessage);
+  }
+
+  function getSubmitResultErrorMessage(error: unknown) {
+    if (!(error instanceof Error)) {
+      return "결과물 제출 API에서 오류가 발생했습니다.";
+    }
+
+    if (error.message.includes("서버 내부 오류")) {
+      return "결과물 제출 API에서 서버 오류가 발생했습니다. 이미 제출된 결과물이 있거나 거래 상태가 서버와 맞지 않을 수 있습니다. 새로고침 후에도 반복되면 백엔드 로그를 확인해 주세요.";
+    }
+
+    return `결과물 제출 API에서 오류가 발생했습니다. ${error.message}`;
+  }
+
+  async function refreshTradeAfterSubmission() {
+    try {
+      await refreshTrade();
+    } catch {
+      setSubmissionMessage(
+        "결과물은 제출되었지만 최신 거래 상태를 다시 불러오지 못했습니다. 잠시 후 새로고침해 주세요.",
+      );
+    }
+  }
+
   async function handleSubmitResult(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!trade || currentUserId === null) {
+      return;
+    }
+
+    const urlTradeId = getPositiveInteger(tradeId);
+    const detailTradeId = getPositiveInteger(trade.tradeId);
+
+    if (urlTradeId === null) {
+      setErrorMessage("유효한 거래 ID가 아닙니다.");
+      return;
+    }
+
+    if (detailTradeId === null || detailTradeId !== urlTradeId) {
+      setErrorMessage("거래 정보를 다시 확인해 주세요.");
+      return;
+    }
+
+    if (currentUserId !== trade.sellerId) {
+      setErrorMessage("판매자만 결과물을 제출할 수 있습니다.");
+      return;
+    }
+
+    if (trade.tradeStatus !== "IN_PROGRESS") {
+      setErrorMessage("진행 중인 거래에만 결과물을 제출할 수 있습니다.");
       return;
     }
 
@@ -640,41 +1018,64 @@ export default function TradeDetailPage() {
       return;
     }
 
+    if (trimmedDescription.length > 200) {
+      setErrorMessage("결과물 설명은 200자 이하로 입력해 주세요.");
+      return;
+    }
+
     setErrorMessage(null);
     setSuccessMessage("");
     setSubmissionMessage(null);
     setIsActionLoading(true);
 
     try {
-      const presigned = await tradeApi.createSubmissionPresignedUrl(
-        trade.tradeId,
-        {
+      let presigned;
+      try {
+        presigned = await tradeApi.createSubmissionPresignedUrl(urlTradeId, {
           fileName: selectedFile.name,
-        },
-      );
+        });
+      } catch (error) {
+        setErrorMessage(
+          error instanceof Error
+            ? `presigned URL 발급에 실패했습니다. ${error.message}`
+            : "presigned URL 발급에 실패했습니다.",
+        );
+        return;
+      }
 
-      await tradeApi.uploadFileToPresignedUrl(
-        presigned.presignedUrl,
-        selectedFile,
-      );
+      const expectedFileKeyPrefix = `trades/${urlTradeId}/`;
+      if (!presigned.fileKey.startsWith(expectedFileKeyPrefix)) {
+        setErrorMessage("업로드 파일 경로와 거래 정보가 일치하지 않습니다.");
+        return;
+      }
 
-      const nextSubmission = await tradeApi.submitResult(
-        trade.tradeId,
-        {
+      try {
+        await tradeApi.uploadFileToPresignedUrl(
+          presigned.presignedUrl,
+          selectedFile,
+        );
+      } catch (error) {
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "파일 업로드에 실패했습니다.",
+        );
+        return;
+      }
+
+      let nextSubmission: TradeSubmissionRes;
+      try {
+        nextSubmission = await tradeApi.submitResult(urlTradeId, {
           fileKey: presigned.fileKey,
           description: trimmedDescription,
-        },
-      );
-      setSubmission(nextSubmission);
-      setSelectedFile(null);
-      setDescription("");
-      await refreshTrade("결과물이 제출되었습니다.");
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "결과물 제출에 실패했습니다.",
-      );
+        });
+      } catch (error) {
+        setErrorMessage(getSubmitResultErrorMessage(error));
+        return;
+      }
+
+      markSubmissionAsSubmitted(nextSubmission, "결과물이 제출되었습니다.");
+      await refreshTradeAfterSubmission();
     } finally {
       setIsActionLoading(false);
     }
@@ -686,6 +1087,7 @@ export default function TradeDetailPage() {
     trade !== null && isSeller && trade.tradeStatus === "IN_PROGRESS";
   const canReviewResult =
     trade !== null && isBuyer && trade.tradeStatus === "UNDER_REVIEW";
+  const shouldShowPartnerSubmittedNotice = canReviewResult;
   const canCancelTrade =
     trade !== null &&
     (isBuyer || isSeller) &&
@@ -696,6 +1098,12 @@ export default function TradeDetailPage() {
     trade !== null &&
     trade.tradeType === "SWAP" &&
     trade.tradeStatus === "AWAITING_PARTNER";
+  const shouldShowPartnerConfirmedNotice =
+    trade !== null &&
+    trade.tradeType === "SWAP" &&
+    isBuyer &&
+    trade.tradeStatus === "UNDER_REVIEW" &&
+    partnerTrade?.tradeStatus === "AWAITING_PARTNER";
   const shouldShowBuyerInProgressNotice =
     trade !== null && isBuyer && trade.tradeStatus === "IN_PROGRESS";
   const shouldShowSellerReviewNotice =
@@ -742,10 +1150,7 @@ export default function TradeDetailPage() {
 
       <div className="fixed-container relative pb-20 pt-10 sm:pb-24 sm:pt-14 lg:pt-16">
         <header className="mx-auto max-w-3xl text-center">
-          <p className="text-sm font-black uppercase tracking-[0.32em] text-[#8c5bff]">
-            Trade Desk
-          </p>
-          <h1 className="baton-page-title mt-4">
+          <h1 className="baton-page-title mt-3 !font-bold">
             TRADE DETAIL
           </h1>
           <p className="mx-auto mt-4 max-w-2xl text-sm font-semibold leading-7 text-zinc-600 sm:mt-5 sm:text-lg sm:leading-8">
@@ -753,294 +1158,524 @@ export default function TradeDetailPage() {
           </p>
         </header>
 
-      {isAuthRequiredMessage(errorMessage) ? (
-        <LoginRequiredState
-          className="mx-auto mt-8 w-full max-w-[1180px]"
-          description="거래 상세와 제출 기능은 로그인 후 확인할 수 있어요."
-        />
-      ) : errorMessage ? (
-        <div className="mx-auto mt-8 w-full max-w-[1180px]">
-          <ErrorState message={errorMessage} />
-        </div>
-      ) : null}
+        {isAuthRequiredMessage(errorMessage) ? (
+          <LoginRequiredState
+            className="mx-auto mt-8 w-full max-w-[1180px]"
+            description="거래 상세와 제출 기능은 로그인 후 확인할 수 있어요."
+          />
+        ) : errorMessage ? (
+          <div className="mx-auto mt-8 w-full max-w-[1180px]">
+            <ErrorState message={errorMessage} />
+          </div>
+        ) : null}
 
-      {successMessage ? (
-        <p className="mx-auto mt-8 w-full max-w-[1180px] rounded-lg border border-[#d9ccff] bg-[#fbf9ff] p-4 text-sm font-black text-[#8c5bff] shadow-sm shadow-violet-950/[0.04]">
-          {successMessage}
-        </p>
-      ) : null}
+        {successMessage ? (
+          <p className="mx-auto mt-8 w-full max-w-[1180px] rounded-lg border border-[#d9ccff] bg-[#fbf9ff] p-4 text-sm font-black text-[#8c5bff] shadow-sm shadow-violet-950/[0.04]">
+            {successMessage}
+          </p>
+        ) : null}
 
-      {trade ? (
-        <div className="mx-auto mt-8 grid w-full max-w-[1180px] grid-cols-1 gap-6 lg:mt-12 lg:grid-cols-[1fr_360px]">
-          <section className="relative overflow-hidden rounded-lg border border-[#ded6ff] bg-white/90 p-5 shadow-[0_28px_80px_rgba(80,60,160,0.14)] backdrop-blur sm:p-8">
+        {trade ? (
+          <div className="mx-auto mt-8 grid w-full max-w-[1180px] grid-cols-1 gap-6 lg:mt-12 lg:grid-cols-[1fr_360px]">
+            <section className="relative overflow-hidden rounded-lg border border-[#ded6ff] bg-white/90 p-5 shadow-[0_28px_80px_rgba(80,60,160,0.14)] backdrop-blur sm:p-8">
+              <div
+                className="absolute inset-x-0 top-0 h-1 rounded-t-lg bg-[linear-gradient(90deg,#8c5bff_0%,#78a9ff_52%,#79e4dd_100%)]"
+                aria-hidden="true"
+              />
+              <div className="flex flex-wrap gap-2">
+                <StatusPill
+                  label={getTradeStatusLabelForViewer(trade, currentUserId)}
+                  status={trade.tradeStatus}
+                />
+                <StatusPill
+                  label={getEscrowStatusLabel(trade.escrowStatus)}
+                  status={trade.escrowStatus}
+                />
+                <TypePill label={getTradeTypeLabel(trade.tradeType)} />
+              </div>
+
+              <div className="mt-6 grid grid-cols-1 gap-4 rounded-lg border border-[#eee8ff] bg-[#fbf9ff] p-4 sm:grid-cols-2 sm:p-5 lg:grid-cols-3">
+                <SummaryItem title="거래" value={formatTradeTitle(trade)} />
+                <SummaryItem title="재능" value={formatTalentTitle(trade)} />
+                <SummaryItem
+                  title="크레딧 가격"
+                  value={formatTradeCredit(trade.creditPrice)}
+                />
+                <SummaryItem title="구매자" value={formatBuyerName(trade)} />
+                <SummaryItem title="판매자" value={formatSellerName(trade)} />
+                <SummaryItem
+                  title="매칭 ID"
+                  value={
+                    getPositiveInteger(trade.matchId) === null
+                      ? "-"
+                      : `#${getPositiveInteger(trade.matchId)}`
+                  }
+                />
+              </div>
+
+              <div className="mt-6 grid grid-cols-1 gap-4 rounded-lg border border-[#eee8ff] bg-white/80 p-4 sm:grid-cols-2 sm:p-5 lg:grid-cols-3">
+                <SummaryItem
+                  title="거래 상태"
+                  value={getTradeStatusLabelForViewer(trade, currentUserId)}
+                />
+                <SummaryItem
+                  title="에스크로 상태"
+                  value={getEscrowStatusLabel(trade.escrowStatus)}
+                />
+                <SummaryItem
+                  title="거래 타입"
+                  value={getTradeTypeLabel(trade.tradeType)}
+                />
+                <SummaryItem
+                  title="에스크로 만료"
+                  value={
+                    trade.escrowExpiresAt
+                      ? getDisplayDate(trade.escrowExpiresAt)
+                      : "-"
+                  }
+                />
+                <SummaryItem title="생성일" value={getDisplayDate(trade.createdAt)} />
+                <SummaryItem title="수정일" value={getDisplayDate(trade.updatedAt)} />
+                <SummaryItem
+                  title="현재 사용자"
+                  value={getCurrentUserDisplayName(trade, currentUserId)}
+                />
+              </div>
+            </section>
+
+            <aside className="space-y-5">
+              {terminalTradeMessage && (isBuyer || isSeller) ? (
+                <TradeActionNotice
+                  title="거래 상태"
+                  description={`${terminalTradeMessage} 더 이상 진행할 액션이 없습니다.`}
+                />
+              ) : null}
+
+              {!terminalTradeMessage && shouldShowBuyerInProgressNotice ? (
+                <TradeActionNotice
+                  title="작업 진행 중입니다"
+                  description="판매자가 결과물을 제출하면 구매 확정 또는 분쟁 신청을 선택할 수 있습니다."
+                />
+              ) : null}
+
+              {!terminalTradeMessage && shouldShowSwapAwaitingPartnerNotice ? (
+                <TradeActionNotice
+                  title={getPeerConfirmationNoticeTitle(trade, currentUserId)}
+                  description={
+                    isBuyer
+                      ? "결과물 확인과 구매 확정을 완료했습니다. 상대방도 자신의 거래를 확정하면 재능 교환 거래가 완료됩니다."
+                      : "상대방이 구매 확정을 완료했습니다. 내 거래 확인이 끝나면 재능 교환 거래가 완료됩니다."
+                  }
+                />
+              ) : null}
+
+              {!terminalTradeMessage && shouldShowPartnerConfirmedNotice ? (
+                <TradeActionNotice
+                  title="상대방 구매 확정 완료"
+                  description="상대방이 자신의 거래에서 구매 확정을 완료했습니다. 내가 받을 결과물을 확인하고 구매 확정을 누르면 재능 교환 거래가 완료됩니다."
+                />
+              ) : null}
+
+              {!terminalTradeMessage && canCancelTrade ? (
+                <section className={sideCardClassName}>
+                  <p className="font-black text-zinc-950">거래 취소</p>
+                  <p className="mt-2 text-sm leading-6 text-zinc-600">
+                    작업 진행 중인 거래만 참여자가 취소할 수 있습니다.
+                  </p>
+                  <button
+                    type="button"
+                    disabled={isActionLoading}
+                    onClick={handleCancelTrade}
+                    className="mt-5 h-11 w-full cursor-pointer rounded-lg border border-rose-200 bg-white px-4 text-sm font-black text-rose-600 transition hover:border-rose-300 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    거래 취소
+                  </button>
+                </section>
+              ) : null}
+
+              {!terminalTradeMessage && shouldShowPartnerSubmittedNotice ? (
+                <TradeActionNotice
+                  title="상대방 제출 완료"
+                  description="상대방이 결과물을 제출했습니다. 결과물을 확인한 뒤 구매 확정 또는 분쟁 신청을 선택해 주세요."
+                />
+              ) : null}
+
+              {!terminalTradeMessage && canReviewResult ? (
+                <section className={sideCardClassName}>
+                  <p className="font-black text-zinc-950">구매자 액션</p>
+                  <p className="mt-2 text-sm leading-6 text-zinc-600">
+                    결과물을 확인한 뒤 구매를 확정할 수 있습니다.
+                  </p>
+                  <div className="mt-5 grid gap-2">
+                    <button
+                      type="button"
+                      disabled={isActionLoading || isSubmissionLoading}
+                      onClick={handleLoadSubmission}
+                      className="h-11 cursor-pointer rounded-lg border border-[#ded6ff] bg-white px-4 text-sm font-black text-zinc-700 transition hover:border-[#8c5bff] hover:bg-[#fbf9ff] hover:text-[#8c5bff] disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {isSubmissionLoading ? "조회 중" : "결과물 다시 조회"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isActionLoading || trade.tradeStatus !== "UNDER_REVIEW"}
+                      onClick={handleConfirmTrade}
+                      className="h-11 cursor-pointer rounded-lg bg-[linear-gradient(135deg,#8c5bff_0%,#8973ff_42%,#78a9ff_74%,#79e4dd_100%)] px-4 text-sm font-black text-white shadow-lg shadow-violet-400/20 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-violet-400/25 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-60"
+                    >
+                      구매 확정
+                    </button>
+                  </div>
+                </section>
+              ) : null}
+
+              {!terminalTradeMessage && canDisputeTrade ? (
+                <section className={sideCardClassName}>
+                  <p className="font-black text-zinc-950">분쟁 신청</p>
+                  <p className="mt-2 text-sm leading-6 text-zinc-600">
+                    결과물이 약속과 다를 경우 분쟁을 신청할 수 있습니다.
+                    신청 후 관리자 검토가 완료될 때까지 에스크로가 동결됩니다.
+                  </p>
+                  <button
+                    type="button"
+                    disabled={isActionLoading}
+                    onClick={openDisputeDialog}
+                    className="mt-4 h-11 w-full cursor-pointer rounded-lg border border-amber-200 bg-white px-4 text-sm font-black text-amber-700 transition hover:border-amber-300 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    분쟁 신청
+                  </button>
+                </section>
+              ) : null}
+
+              {!terminalTradeMessage && canSubmitResult ? (
+                <section className={sideCardClassName}>
+                  <p className="font-black text-zinc-950">결과물 제출</p>
+                  <p className="mt-2 text-sm leading-6 text-zinc-600">
+                    파일을 선택하면 presigned URL로 업로드한 뒤 결과물을
+                    제출합니다.
+                  </p>
+                  <form onSubmit={handleSubmitResult} className="mt-5 space-y-4">
+                    <label className="block text-sm font-semibold text-zinc-800">
+                      결과물 파일
+                      <input
+                        key={submissionFileInputKey}
+                        type="file"
+                        onChange={handleSubmissionFileChange}
+                        className="mt-2 block w-full text-sm font-semibold text-zinc-700 file:mr-4 file:h-10 file:cursor-pointer file:rounded-lg file:border-0 file:bg-[#8c5bff] file:px-4 file:text-sm file:font-black file:text-white"
+                      />
+                    </label>
+                    <label className="block text-sm font-semibold text-zinc-800">
+                      설명
+                      <textarea
+                        value={description}
+                        onChange={(event) => setDescription(event.target.value)}
+                        maxLength={200}
+                        rows={4}
+                        className={`${inputClassName} mt-2 min-h-24 resize-none`}
+                      />
+                    </label>
+                    <button
+                      type="submit"
+                      disabled={
+                        isActionLoading ||
+                        selectedFile === null ||
+                        description.trim().length === 0
+                      }
+                      className="h-11 w-full cursor-pointer rounded-lg bg-[linear-gradient(135deg,#8c5bff_0%,#8973ff_42%,#78a9ff_74%,#79e4dd_100%)] px-4 text-sm font-black text-white shadow-lg shadow-violet-400/20 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-violet-400/25 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-60"
+                    >
+                      {isActionLoading ? "업로드 중" : "결과물 제출"}
+                    </button>
+                  </form>
+                </section>
+              ) : null}
+
+              {!terminalTradeMessage && shouldShowSellerReviewNotice ? (
+                <TradeActionNotice
+                  title="결과물 검토 중입니다"
+                  description="결과물이 제출되었습니다. 구매자 확인을 기다리는 중입니다."
+                />
+              ) : null}
+
+              {!isBuyer && !isSeller ? (
+                <section className={sideCardClassName}>
+                  <p className="font-black text-zinc-950">권한 안내</p>
+                  <p className="mt-2 text-sm leading-6 text-zinc-600">
+                    이 거래의 구매자 또는 판매자만 거래 액션을 사용할 수
+                    있습니다.
+                  </p>
+                </section>
+              ) : null}
+            </aside>
+          </div>
+        ) : null}
+
+        {shouldShowSubmissionSection ? (
+          <section className="relative mx-auto mt-6 w-full max-w-[1180px] overflow-hidden rounded-lg border border-[#ded6ff] bg-white/90 p-5 shadow-[0_28px_80px_rgba(80,60,160,0.14)] backdrop-blur sm:p-8">
             <div
               className="absolute inset-x-0 top-0 h-1 rounded-t-lg bg-[linear-gradient(90deg,#8c5bff_0%,#78a9ff_52%,#79e4dd_100%)]"
               aria-hidden="true"
             />
-            <div className="flex flex-wrap gap-2">
-              <StatusPill
-                label={getTradeStatusLabel(trade.tradeStatus)}
-                status={trade.tradeStatus}
-              />
-              <StatusPill
-                label={getEscrowStatusLabel(trade.escrowStatus)}
-                status={trade.escrowStatus}
-              />
-              <TypePill label={getTradeTypeLabel(trade.tradeType)} />
-            </div>
+            <p className="font-black text-zinc-950">결과물 정보</p>
 
-            <div className="mt-6 grid grid-cols-1 gap-4 rounded-lg border border-[#eee8ff] bg-[#fbf9ff] p-4 sm:grid-cols-2 sm:p-5 lg:grid-cols-3">
-              <SummaryItem title="거래" value={formatTradeTitle(trade)} />
-              <SummaryItem title="재능" value={formatTalentTitle(trade)} />
-              <SummaryItem
-                title="크레딧 가격"
-                value={formatTradeCredit(trade.creditPrice)}
-              />
-              <SummaryItem title="구매자" value={formatBuyerName(trade)} />
-              <SummaryItem title="판매자" value={formatSellerName(trade)} />
-              <SummaryItem
-                title="매칭 ID"
-                value={
-                  getPositiveInteger(trade.matchId) === null
-                    ? "-"
-                    : `#${getPositiveInteger(trade.matchId)}`
-                }
-              />
-            </div>
-
-            <div className="mt-6 grid grid-cols-1 gap-4 rounded-lg border border-[#eee8ff] bg-white/80 p-4 sm:grid-cols-2 sm:p-5 lg:grid-cols-3">
-              <SummaryItem
-                title="거래 상태"
-                value={getTradeStatusLabel(trade.tradeStatus)}
-              />
-              <SummaryItem
-                title="에스크로 상태"
-                value={getEscrowStatusLabel(trade.escrowStatus)}
-              />
-              <SummaryItem
-                title="거래 타입"
-                value={getTradeTypeLabel(trade.tradeType)}
-              />
-              <SummaryItem
-                title="에스크로 만료"
-                value={
-                  trade.escrowExpiresAt
-                    ? getDisplayDate(trade.escrowExpiresAt)
-                    : "-"
-                }
-              />
-              <SummaryItem title="생성일" value={getDisplayDate(trade.createdAt)} />
-              <SummaryItem title="수정일" value={getDisplayDate(trade.updatedAt)} />
-              <SummaryItem
-                title="현재 사용자"
-                value={getCurrentUserDisplayName(trade, currentUserId)}
-              />
-            </div>
-          </section>
-
-          <aside className="space-y-5">
-            {terminalTradeMessage && (isBuyer || isSeller) ? (
-              <TradeActionNotice
-                title="거래 상태"
-                description={`${terminalTradeMessage} 더 이상 진행할 액션이 없습니다.`}
-              />
-            ) : null}
-
-            {!terminalTradeMessage && shouldShowBuyerInProgressNotice ? (
-              <TradeActionNotice
-                title="작업 진행 중입니다"
-                description="판매자가 결과물을 제출하면 확인할 수 있습니다."
-              />
-            ) : null}
-
-            {!terminalTradeMessage && shouldShowSwapAwaitingPartnerNotice ? (
-              <TradeActionNotice
-                title="상대 확정을 기다리고 있습니다"
-                description="재능 교환 거래의 한쪽 확정이 완료되었습니다. 상대방이 결과물을 확인하고 확정하면 교환 거래가 완료됩니다."
-              />
-            ) : null}
-
-            {!terminalTradeMessage && canCancelTrade ? (
-              <section className={sideCardClassName}>
-                <p className="font-black text-zinc-950">거래 취소</p>
-                <p className="mt-2 text-sm leading-6 text-zinc-600">
-                  작업 진행 중인 거래만 참여자가 취소할 수 있습니다.
-                </p>
-                <button
-                  type="button"
-                  disabled={isActionLoading}
-                  onClick={handleCancelTrade}
-                  className="mt-5 h-11 w-full cursor-pointer rounded-lg border border-rose-200 bg-white px-4 text-sm font-black text-rose-600 transition hover:border-rose-300 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  거래 취소
-                </button>
-              </section>
-            ) : null}
-
-            {!terminalTradeMessage && canReviewResult ? (
-              <section className={sideCardClassName}>
-                <p className="font-black text-zinc-950">구매자 액션</p>
-                <p className="mt-2 text-sm leading-6 text-zinc-600">
-                  결과물을 확인한 뒤 구매를 확정할 수 있습니다.
-                </p>
-                <div className="mt-5 grid gap-2">
-                  <button
-                    type="button"
-                    disabled={isActionLoading || isSubmissionLoading}
-                    onClick={handleLoadSubmission}
-                    className="h-11 cursor-pointer rounded-lg border border-[#ded6ff] bg-white px-4 text-sm font-black text-zinc-700 transition hover:border-[#8c5bff] hover:bg-[#fbf9ff] hover:text-[#8c5bff] disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {isSubmissionLoading ? "조회 중" : "결과물 다시 조회"}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isActionLoading || trade.tradeStatus !== "UNDER_REVIEW"}
-                    onClick={handleConfirmTrade}
-                    className="h-11 cursor-pointer rounded-lg bg-[linear-gradient(135deg,#8c5bff_0%,#8973ff_42%,#78a9ff_74%,#79e4dd_100%)] px-4 text-sm font-black text-white shadow-lg shadow-violet-400/20 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-violet-400/25 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-60"
-                  >
-                    구매 확정
-                  </button>
-                </div>
-              </section>
-            ) : null}
-
-            {!terminalTradeMessage && canDisputeTrade ? (
-              <section className={sideCardClassName}>
-                <p className="font-black text-zinc-950">분쟁 신청</p>
-                <p className="mt-2 text-sm leading-6 text-zinc-600">
-                  결과물이 약속과 다를 경우 5자 이상 200자 이하로 사유를
-                  입력해 주세요.
-                </p>
-                <textarea
-                  value={disputeReason}
-                  onChange={(event) => setDisputeReason(event.target.value)}
-                  maxLength={200}
-                  rows={4}
-                  className={`${inputClassName} mt-4 min-h-24 resize-none`}
-                />
-                <button
-                  type="button"
-                  disabled={
-                    isActionLoading ||
-                    disputeReason.trim().length < 5 ||
-                    disputeReason.trim().length > 200
-                  }
-                  onClick={handleDisputeTrade}
-                  className="mt-3 h-11 w-full cursor-pointer rounded-lg border border-amber-200 bg-white px-4 text-sm font-black text-amber-700 transition hover:border-amber-300 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  분쟁 신청
-                </button>
-              </section>
-            ) : null}
-
-            {!terminalTradeMessage && canSubmitResult ? (
-              <section className={sideCardClassName}>
-                <p className="font-black text-zinc-950">결과물 제출</p>
-                <p className="mt-2 text-sm leading-6 text-zinc-600">
-                  파일을 선택하면 presigned URL로 업로드한 뒤 결과물을
-                  제출합니다.
-                </p>
-                <form onSubmit={handleSubmitResult} className="mt-5 space-y-4">
-                  <label className="block text-sm font-semibold text-zinc-800">
-                    결과물 파일
-                    <input
-                      type="file"
-                      onChange={handleSubmissionFileChange}
-                      className="mt-2 block w-full text-sm font-semibold text-zinc-700 file:mr-4 file:h-10 file:cursor-pointer file:rounded-lg file:border-0 file:bg-[#8c5bff] file:px-4 file:text-sm file:font-black file:text-white"
-                    />
-                  </label>
-                  <label className="block text-sm font-semibold text-zinc-800">
-                    설명
-                    <textarea
-                      value={description}
-                      onChange={(event) => setDescription(event.target.value)}
-                      maxLength={200}
-                      rows={4}
-                      className={`${inputClassName} mt-2 min-h-24 resize-none`}
-                    />
-                  </label>
-                  <button
-                    type="submit"
-                    disabled={
-                      isActionLoading ||
-                      selectedFile === null ||
-                      description.trim().length === 0
-                    }
-                    className="h-11 w-full cursor-pointer rounded-lg bg-[linear-gradient(135deg,#8c5bff_0%,#8973ff_42%,#78a9ff_74%,#79e4dd_100%)] px-4 text-sm font-black text-white shadow-lg shadow-violet-400/20 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-violet-400/25 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-60"
-                  >
-                    {isActionLoading ? "업로드 중" : "결과물 제출"}
-                  </button>
-                </form>
-              </section>
-            ) : null}
-
-            {!terminalTradeMessage && shouldShowSellerReviewNotice ? (
-              <TradeActionNotice
-                title="결과물 검토 중입니다"
-                description="결과물이 제출되었습니다. 구매자 확인을 기다리는 중입니다."
-              />
-            ) : null}
-
-            {!isBuyer && !isSeller ? (
-              <section className={sideCardClassName}>
-                <p className="font-black text-zinc-950">권한 안내</p>
-                <p className="mt-2 text-sm leading-6 text-zinc-600">
-                  이 거래의 구매자 또는 판매자만 거래 액션을 사용할 수
-                  있습니다.
-                </p>
-              </section>
-            ) : null}
-          </aside>
-        </div>
-      ) : null}
-
-      {shouldShowSubmissionSection ? (
-        <section className="relative mx-auto mt-6 w-full max-w-[1180px] overflow-hidden rounded-lg border border-[#ded6ff] bg-white/90 p-5 shadow-[0_28px_80px_rgba(80,60,160,0.14)] backdrop-blur sm:p-8">
-          <div
-            className="absolute inset-x-0 top-0 h-1 rounded-t-lg bg-[linear-gradient(90deg,#8c5bff_0%,#78a9ff_52%,#79e4dd_100%)]"
-            aria-hidden="true"
-          />
-          <p className="font-black text-zinc-950">결과물 정보</p>
-
-          {isSubmissionLoading ? (
-            <div className="mt-4 rounded-lg border border-[#eee8ff] bg-[#fbf9ff] p-6 text-center text-sm font-semibold text-zinc-600">
-              결과물을 불러오는 중입니다.
-            </div>
-          ) : submission ? (
-            <>
-              <div className="mt-4 grid grid-cols-1 gap-4 rounded-lg border border-[#eee8ff] bg-[#fbf9ff] p-4 sm:grid-cols-2 sm:p-5 lg:grid-cols-4">
-                <SummaryItem title="제출 ID" value={`#${submission.id}`} />
-                <SummaryItem
-                  title="에스크로 ID"
-                  value={`#${submission.escrowId}`}
-                />
-                <SummaryItem
-                  title="제출일"
-                  value={getDisplayDate(submission.submittedAt)}
-                />
-                <SummaryItem
-                  title="설명"
-                  value={submission.description ?? "-"}
-                />
+            {isSubmissionLoading ? (
+              <div className="mt-4 rounded-lg border border-[#eee8ff] bg-[#fbf9ff] p-6 text-center text-sm font-semibold text-zinc-600">
+                결과물을 불러오는 중입니다.
               </div>
-              <a
-                href={submission.fileUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-5 inline-flex h-11 items-center rounded-lg border border-[#ded6ff] bg-white px-5 text-sm font-black text-zinc-700 transition hover:border-[#8c5bff] hover:bg-[#fbf9ff] hover:text-[#8c5bff]"
-              >
-                결과물 파일 열기
-              </a>
-            </>
-          ) : (
-            <p className="mt-4 rounded-lg border border-[#eee8ff] bg-[#fbf9ff] p-5 text-sm font-semibold text-zinc-600">
-              {submissionMessage ?? "아직 제출된 결과물이 없습니다."}
-            </p>
-          )}
-        </section>
-      ) : null}
+            ) : submission ? (
+              <>
+                <div className="mt-4 grid grid-cols-1 gap-4 rounded-lg border border-[#eee8ff] bg-[#fbf9ff] p-4 sm:grid-cols-2 sm:p-5 lg:grid-cols-4">
+                  <SummaryItem
+                    title="제출 ID"
+                    value={formatOptionalEntityId("제출", submission.id)}
+                  />
+                  <SummaryItem
+                    title="에스크로 ID"
+                    value={formatOptionalEntityId("에스크로", submission.escrowId)}
+                  />
+                  <SummaryItem
+                    title="제출일"
+                    value={getDisplayDate(submission.submittedAt)}
+                  />
+                  <SummaryItem
+                    title="설명"
+                    value={getNonEmptyText(submission.description) ?? "-"}
+                  />
+                </div>
+                {getNonEmptyText(submission.fileUrl) ? (
+                  <div className="mt-5 space-y-4">
+                    {getImagePreviewContentType(submission.fileUrl) ? (
+                      <div className="overflow-hidden rounded-lg border border-[#eee8ff] bg-white">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={getNonEmptyText(submission.fileUrl) ?? undefined}
+                          alt="제출된 결과물 미리보기"
+                          className="max-h-[520px] w-full object-contain"
+                        />
+                      </div>
+                    ) : null}
+                    <a
+                      href={getNonEmptyText(submission.fileUrl) ?? undefined}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex h-11 items-center rounded-lg border border-[#ded6ff] bg-white px-5 text-sm font-black text-zinc-700 transition hover:border-[#8c5bff] hover:bg-[#fbf9ff] hover:text-[#8c5bff]"
+                    >
+                      결과물 파일 열기
+                    </a>
+                  </div>
+                ) : (
+                  <p className="mt-5 rounded-lg border border-[#eee8ff] bg-white px-4 py-3 text-sm font-semibold text-zinc-600">
+                    결과물 파일 정보를 확인할 수 없습니다.
+                  </p>
+                )}
+              </>
+            ) : (
+              <p className="mt-4 rounded-lg border border-[#eee8ff] bg-[#fbf9ff] p-5 text-sm font-semibold text-zinc-600">
+                {submissionMessage ?? "아직 제출된 결과물이 없습니다."}
+              </p>
+            )}
+          </section>
+        ) : null}
+
+        {confirmDialog ? (
+          <ConfirmActionDialog
+            title={confirmDialog.title}
+            description={confirmDialog.description}
+            confirmLabel={confirmDialog.confirmLabel}
+            tone={confirmDialog.tone}
+            isSubmitting={isActionLoading}
+            onClose={closeConfirmDialog}
+            onConfirm={executeConfirmDialogAction}
+          />
+        ) : null}
+
+        {trade && isDisputeDialogOpen ? (
+          <DisputeRequestDialog
+            reason={disputeReason}
+            errorMessage={disputeReasonError}
+            isSubmitting={isActionLoading}
+            tradeTitle={formatTradeTitle(trade)}
+            onChangeReason={(value) => {
+              setDisputeReason(value);
+              if (disputeReasonError) {
+                setDisputeReasonError("");
+              }
+            }}
+            onClose={closeDisputeDialog}
+            onSubmit={handleDisputeTrade}
+          />
+        ) : null}
       </div>
-    </main>
+    </main >
+  );
+}
+
+
+function ConfirmActionDialog({
+  title,
+  description,
+  confirmLabel,
+  tone,
+  isSubmitting,
+  onClose,
+  onConfirm,
+}: {
+  title: string;
+  description: string;
+  confirmLabel: string;
+  tone: "primary" | "danger";
+  isSubmitting: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const confirmButtonClassName =
+    tone === "danger"
+      ? "h-12 rounded-xl border border-rose-200 bg-white text-sm font-black text-rose-600 transition hover:border-rose-300 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+      : "h-12 rounded-xl bg-[linear-gradient(135deg,#8c5bff_0%,#8973ff_48%,#79e4dd_100%)] text-sm font-black text-white shadow-lg shadow-violet-400/20 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-violet-400/25 disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60";
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="trade-action-confirm-dialog-title"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/45 p-6 backdrop-blur-sm"
+    >
+      <section className="relative w-full max-w-[480px] overflow-hidden rounded-2xl border border-[#ded6ff] bg-white/95 p-6 shadow-[0_28px_80px_rgba(80,60,160,0.24)] sm:p-7">
+        <div
+          className="absolute inset-x-0 top-0 h-1 bg-[linear-gradient(90deg,#8c5bff_0%,#78a9ff_52%,#79e4dd_100%)]"
+          aria-hidden="true"
+        />
+
+        <h2
+          id="trade-action-confirm-dialog-title"
+          className="text-xl font-black text-zinc-950"
+        >
+          {title}
+        </h2>
+        <p className="mt-3 text-sm font-semibold leading-6 text-zinc-600">
+          {description}
+        </p>
+
+        <div className="mt-6 grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            disabled={isSubmitting}
+            onClick={onClose}
+            className="h-12 rounded-xl border border-zinc-300 bg-white text-sm font-black text-zinc-700 transition hover:border-zinc-500 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            닫기
+          </button>
+          <button
+            type="button"
+            disabled={isSubmitting}
+            onClick={onConfirm}
+            className={confirmButtonClassName}
+          >
+            {isSubmitting ? "처리 중..." : confirmLabel}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function DisputeRequestDialog({
+  reason,
+  errorMessage,
+  isSubmitting,
+  tradeTitle,
+  onChangeReason,
+  onClose,
+  onSubmit,
+}: {
+  reason: string;
+  errorMessage: string;
+  isSubmitting: boolean;
+  tradeTitle: string;
+  onChangeReason: (reason: string) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+}) {
+  const reasonLength = reason.length;
+  const isOverLimit = reasonLength > 200;
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    onSubmit();
+  }
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="dispute-request-dialog-title"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/45 p-6 backdrop-blur-sm"
+    >
+      <form
+        onSubmit={handleSubmit}
+        className="relative w-full max-w-[540px] overflow-hidden rounded-2xl border border-[#ded6ff] bg-white/95 p-6 shadow-[0_28px_80px_rgba(80,60,160,0.24)] sm:p-7"
+      >
+        <div
+          className="absolute inset-x-0 top-0 h-1 bg-[linear-gradient(90deg,#8c5bff_0%,#78a9ff_52%,#79e4dd_100%)]"
+          aria-hidden="true"
+        />
+
+        <h2
+          id="dispute-request-dialog-title"
+          className="text-xl font-black text-zinc-950"
+        >
+          분쟁 신청
+        </h2>
+        <p className="mt-2 text-sm font-semibold leading-6 text-zinc-600">
+          관리자에게 전달할 분쟁 사유를 입력해 주세요. 신청 후 관리자
+          검토가 끝날 때까지 에스크로가 동결됩니다.
+        </p>
+        <p className="mt-3 rounded-2xl border border-[#eee8ff] bg-[#fbf9ff] px-4 py-3 text-sm font-bold text-zinc-700">
+          대상 거래: {tradeTitle}
+        </p>
+
+        <label className="mt-5 block text-sm font-black text-zinc-900">
+          분쟁 사유
+          <textarea
+            value={reason}
+            onChange={(event) => onChangeReason(event.target.value)}
+            rows={7}
+            disabled={isSubmitting}
+            className="mt-2 w-full resize-none rounded-2xl border border-[#d9ccff] bg-white px-4 py-3 text-sm font-semibold leading-6 text-zinc-800 outline-none transition placeholder:text-zinc-400 focus:border-[#8c5bff] focus:ring-4 focus:ring-[#f4f0ff] disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-400"
+            placeholder="예: 결과물이 약속한 내용과 다르거나 파일 확인이 어렵습니다."
+          />
+        </label>
+
+        <div className="mt-1.5 flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+          {errorMessage ? (
+            <p className="min-w-0 flex-1 text-xs font-semibold text-red-600">
+              {errorMessage}
+            </p>
+          ) : null}
+          <span
+            className={`ml-auto shrink-0 text-xs font-semibold ${isOverLimit ? "text-red-600" : "text-zinc-500"
+              }`}
+          >
+            {reasonLength.toLocaleString("en-US")}/200
+          </span>
+        </div>
+
+        <div className="mt-6 grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            disabled={isSubmitting}
+            onClick={onClose}
+            className="h-12 rounded-xl border border-zinc-300 bg-white text-sm font-black text-zinc-700 transition hover:border-zinc-500 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            취소
+          </button>
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="h-12 rounded-xl bg-[linear-gradient(135deg,#8c5bff_0%,#8973ff_48%,#79e4dd_100%)] text-sm font-black text-white shadow-lg shadow-violet-400/20 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-violet-400/25 disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isSubmitting ? "신청 중..." : "분쟁 신청"}
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }
 

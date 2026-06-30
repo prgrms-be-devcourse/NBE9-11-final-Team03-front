@@ -74,6 +74,35 @@ import type {
 export * from "./client";
 export * from "./types";
 
+
+function getUploadContentType(file: File): string {
+  const explicitType = file.type?.trim();
+
+  if (explicitType) {
+    return explicitType;
+  }
+
+  const extension = file.name.split(".").pop()?.toLowerCase();
+
+  switch (extension) {
+    case "jpg":
+    case "jpeg":
+      return "image/jpeg";
+    case "png":
+      return "image/png";
+    case "webp":
+      return "image/webp";
+    case "gif":
+      return "image/gif";
+    case "pdf":
+      return "application/pdf";
+    case "zip":
+      return "application/zip";
+    default:
+      return "application/octet-stream";
+  }
+}
+
 interface CursorParams {
   cursor?: number | null;
   size?: number;
@@ -218,22 +247,8 @@ export const talentApi = {
         sort: params.sort ?? "LATEST",
       });
 
-      const settledDetails = await Promise.allSettled(
-        page.content.map((talent) => talentApi.getDetail(talent.talentId)),
-      );
-
-      const myTalentIdSet = new Set(
-        settledDetails
-          .filter(
-            (result): result is PromiseFulfilledResult<TalentDetailRes> =>
-              result.status === "fulfilled",
-          )
-          .filter((result) => result.value.author?.authorId === userId)
-          .map((result) => result.value.id),
-      );
-
       myTalents.push(
-        ...page.content.filter((talent) => myTalentIdSet.has(talent.talentId)),
+        ...page.content.filter((talent) => talent.authorId === userId),
       );
 
       hasNext = page.hasNext;
@@ -526,7 +541,7 @@ export const tradeApi = {
     const response = await fetch(uploadUrl, {
       method: "PUT",
       headers: {
-        "Content-Type": file.type || "application/octet-stream",
+        "Content-Type": getUploadContentType(file),
       },
       body: file,
     });

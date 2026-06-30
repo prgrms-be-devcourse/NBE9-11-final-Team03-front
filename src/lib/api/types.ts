@@ -134,6 +134,7 @@ export interface AuthorInfo {
 
 export interface TalentListRes {
   talentId: number;
+  authorId?: number | null;
   categoryName: string;
   title: string;
   nickname?: string | null;
@@ -354,6 +355,16 @@ export interface ChatRoomListItem {
   tradeGroupId: number | null;
   talentId: number;
   talentTitle: string | null;
+  myTalentId?: number | null;
+  myTalentTitle?: string | null;
+  opponentTalentId?: number | null;
+  opponentTalentTitle?: string | null;
+  requesterId?: number | null;
+  requesterTalentId?: number | null;
+  requesterTalentTitle?: string | null;
+  providerId?: number | null;
+  providerTalentId?: number | null;
+  providerTalentTitle?: string | null;
   buyerId: number;
   sellerId: number;
   opponentId: number;

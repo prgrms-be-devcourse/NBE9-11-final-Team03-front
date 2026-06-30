@@ -56,6 +56,24 @@ function getTalentId(talent: TalentDetailRes): number | null {
     : null;
 }
 
+const talentDetailRequests = new Map<number, Promise<TalentDetailRes>>();
+
+function getTalentDetailOnce(talentId: number): Promise<TalentDetailRes> {
+  const pendingRequest = talentDetailRequests.get(talentId);
+
+  if (pendingRequest) {
+    return pendingRequest;
+  }
+
+  const request = talentApi.getDetail(talentId).finally(() => {
+    talentDetailRequests.delete(talentId);
+  });
+
+  talentDetailRequests.set(talentId, request);
+
+  return request;
+}
+
 export default function TalentDetailPage() {
   const params = useParams<{ talentId: string }>();
   const router = useRouter();
@@ -87,7 +105,7 @@ export default function TalentDetailPage() {
       setErrorMessage(null);
 
       try {
-        const nextTalent = await talentApi.getDetail(talentId);
+        const nextTalent = await getTalentDetailOnce(talentId);
 
         if (ignore) {
           return;

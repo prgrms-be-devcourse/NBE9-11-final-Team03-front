@@ -87,7 +87,7 @@ export function MatchProposalInbox({ type }: MatchProposalInboxProps) {
   >(null);
 
   const loadProposals = useCallback(
-    async (clearSuccessMessage = true) => {
+    async (clearSuccessMessage = true, showErrorMessage = true) => {
       if (!hasStoredAccessToken()) {
         setReceivedProposals([]);
         setSentProposals([]);
@@ -115,15 +115,17 @@ export function MatchProposalInbox({ type }: MatchProposalInboxProps) {
           setReceivedProposals([]);
         }
       } catch (error) {
-        setReceivedProposals([]);
-        setSentProposals([]);
-        setErrorMessage(
-          isAuthRequiredError(error)
-            ? "로그인 후 이용해 주세요."
-            : error instanceof Error
-            ? error.message
-            : "제안 목록을 불러오지 못했습니다.",
-        );
+        if (showErrorMessage) {
+          setReceivedProposals([]);
+          setSentProposals([]);
+          setErrorMessage(
+            isAuthRequiredError(error)
+              ? "로그인 후 이용해 주세요."
+              : error instanceof Error
+                ? error.message
+                : "제안 목록을 불러오지 못했습니다.",
+          );
+        }
       } finally {
         setIsLoading(false);
       }
@@ -160,6 +162,15 @@ export function MatchProposalInbox({ type }: MatchProposalInboxProps) {
       }
 
       await matchApi.acceptProposal(proposalId);
+      setReceivedProposals((currentProposals) =>
+        currentProposals.map((currentProposal) =>
+          currentProposal.proposalId === proposalId
+            ? { ...currentProposal, status: "ACCEPTED" }
+            : currentProposal,
+        ),
+      );
+      setPreparedChatHref("/chats");
+      setSuccessMessage(ACCEPT_SUCCESS_CHAT_LIST_MESSAGE);
 
       try {
         const afterRoomsResponse = await chatApi.getMyChatRooms({ size: 20 });
@@ -175,16 +186,12 @@ export function MatchProposalInbox({ type }: MatchProposalInboxProps) {
           setSuccessMessage(
             "제안을 수락했습니다. 생성된 거래 채팅을 확인해 주세요.",
           );
-        } else {
-          setPreparedChatHref("/chats");
-          setSuccessMessage(ACCEPT_SUCCESS_CHAT_LIST_MESSAGE);
         }
       } catch {
-        setPreparedChatHref("/chats");
-        setSuccessMessage(ACCEPT_SUCCESS_CHAT_LIST_MESSAGE);
+        // Chat room discovery is best-effort; accepting the proposal already succeeded.
       }
 
-      await loadProposals(false);
+      await loadProposals(false, false);
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "제안 수락에 실패했습니다.",
@@ -203,7 +210,7 @@ export function MatchProposalInbox({ type }: MatchProposalInboxProps) {
     try {
       await matchApi.rejectProposal(proposalId);
       setSuccessMessage("제안을 거절했습니다.");
-      await loadProposals(false);
+      await loadProposals(false, false);
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "제안 거절에 실패했습니다.",
@@ -264,23 +271,23 @@ export function MatchProposalInbox({ type }: MatchProposalInboxProps) {
         <div className="grid gap-5">
           {type === "received"
             ? receivedProposals.map((proposal) => (
-                <MatchProposalCard
-                  key={proposal.proposalId}
-                  proposal={proposal}
-                  variant="received"
-                  isProcessing={processingProposalId === proposal.proposalId}
-                  onAccept={handleAccept}
-                  onReject={handleReject}
-                />
-              ))
+              <MatchProposalCard
+                key={proposal.proposalId}
+                proposal={proposal}
+                variant="received"
+                isProcessing={processingProposalId === proposal.proposalId}
+                onAccept={handleAccept}
+                onReject={handleReject}
+              />
+            ))
             : sentProposals.map((proposal) => (
-                <MatchProposalCard
-                  key={proposal.proposalId}
-                  proposal={proposal}
-                  variant="sent"
-                  isProcessing={processingProposalId === proposal.proposalId}
-                />
-              ))}
+              <MatchProposalCard
+                key={proposal.proposalId}
+                proposal={proposal}
+                variant="sent"
+                isProcessing={processingProposalId === proposal.proposalId}
+              />
+            ))}
         </div>
       ) : null}
     </section>

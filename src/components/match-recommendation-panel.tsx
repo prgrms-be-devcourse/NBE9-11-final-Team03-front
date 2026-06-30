@@ -404,7 +404,7 @@ export function MatchRecommendationPanel() {
       ) : null}
 
       {isHydrated && !isLoadingList && recommendationItems.length > 0 ? (
-        <div className="grid grid-cols-1 gap-x-6 gap-y-14 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-x-6 gap-y-14 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {recommendationItems.map((item) => (
             <RecommendationCard
               key={getRecommendationItemKey(item)}
@@ -529,8 +529,8 @@ function toProfileCategoryRecommendation(
     talentId: talent.talentId,
     providerId: getTalentProviderId(talent),
     nickname:
-      talent.nickname ??
       talent.authorNickname ??
+      talent.nickname ??
       talent.sellerNickname ??
       talent.providerNickname ??
       talent.userNickname ??
@@ -555,6 +555,7 @@ function toProfileCategoryRecommendation(
 
 function getTalentProviderId(talent: TalentListRes): number {
   return (
+    talent.authorId ??
     talent.author?.id ??
     talent.author?.userId ??
     talent.author?.authorId ??

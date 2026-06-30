@@ -36,30 +36,68 @@ function readStoredUserId(): number | null {
 }
 
 function formatMessageTime(date: string): string {
+  const targetDate = getValidDate(date);
+
+  if (targetDate === null) {
+    return "-";
+  }
+
   return new Intl.DateTimeFormat("ko-KR", {
     hour: "2-digit",
     minute: "2-digit",
-  }).format(new Date(date));
+  }).format(targetDate);
 }
 
 function formatDateDivider(date: string): string {
+  const targetDate = getValidDate(date);
+
+  if (targetDate === null) {
+    return "날짜 정보 없음";
+  }
+
   return new Intl.DateTimeFormat("ko-KR", {
     year: "numeric",
     month: "long",
     day: "numeric",
     weekday: "long",
-  }).format(new Date(date));
+  }).format(targetDate);
 }
 
 function isSameDate(left: string, right: string): boolean {
-  const leftDate = new Date(left);
-  const rightDate = new Date(right);
+  const leftDate = getValidDate(left);
+  const rightDate = getValidDate(right);
+
+  if (leftDate === null || rightDate === null) {
+    return false;
+  }
 
   return (
     leftDate.getFullYear() === rightDate.getFullYear() &&
     leftDate.getMonth() === rightDate.getMonth() &&
     leftDate.getDate() === rightDate.getDate()
   );
+}
+
+function getValidDate(value: unknown): Date | null {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return null;
+  }
+
+  const date = new Date(value);
+
+  return Number.isFinite(date.getTime()) ? date : null;
+}
+
+function getPositiveInteger(value: unknown): number | null {
+  return typeof value === "number" && Number.isInteger(value) && value > 0
+    ? value
+    : null;
+}
+
+function getNonEmptyText(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim()
+    : null;
 }
 
 function isYesterday(date: Date, today: Date): boolean {
@@ -74,8 +112,12 @@ function isYesterday(date: Date, today: Date): boolean {
 }
 
 function formatChatRoomListDate(date: string): string {
-  const targetDate = new Date(date);
+  const targetDate = getValidDate(date);
   const today = new Date();
+
+  if (targetDate === null) {
+    return "-";
+  }
 
   if (isSameDate(date, today.toISOString())) {
     return new Intl.DateTimeFormat("ko-KR", {
@@ -123,15 +165,306 @@ function getMessageSenderLabel({
   currentUserId,
   opponentName,
 }: {
-  senderId: number;
+  senderId: number | null;
   currentUserId: number | null;
   opponentName: string;
 }): string {
-  if (senderId === currentUserId) {
+  if (senderId !== null && senderId === currentUserId) {
     return "나";
   }
 
   return opponentName;
+}
+
+function getFallbackTalentLabel(
+  title: unknown,
+  id: unknown,
+  fallbackText: string,
+): string {
+  const talentTitle = getNonEmptyText(title);
+
+  if (talentTitle) {
+    return talentTitle;
+  }
+
+  const talentId = getPositiveInteger(id);
+
+  return talentId === null ? fallbackText : `재능 #${talentId}`;
+}
+
+function hasExplicitTalentPair(room: ChatRoomListItem): boolean {
+  return (
+    getNonEmptyText(room.myTalentTitle) !== null ||
+    getPositiveInteger(room.myTalentId) !== null ||
+    getNonEmptyText(room.opponentTalentTitle) !== null ||
+    getPositiveInteger(room.opponentTalentId) !== null
+  );
+}
+
+function hasRequesterProviderTalentPair(room: ChatRoomListItem): boolean {
+  return (
+    getNonEmptyText(room.requesterTalentTitle) !== null ||
+    getPositiveInteger(room.requesterTalentId) !== null ||
+    getNonEmptyText(room.providerTalentTitle) !== null ||
+    getPositiveInteger(room.providerTalentId) !== null
+  );
+}
+
+function getMyTalentLabel(
+  room: ChatRoomListItem,
+  currentUserId: number | null,
+): string | null {
+  if (hasExplicitTalentPair(room)) {
+    return getFallbackTalentLabel(
+      room.myTalentTitle,
+      room.myTalentId,
+      "내 재능 정보 없음",
+    );
+  }
+
+  if (!hasRequesterProviderTalentPair(room) || currentUserId === null) {
+    return null;
+  }
+
+  if (getPositiveInteger(room.requesterId) === currentUserId) {
+    return getFallbackTalentLabel(
+      room.requesterTalentTitle,
+      room.requesterTalentId,
+      "내 재능 정보 없음",
+    );
+  }
+
+  if (getPositiveInteger(room.providerId) === currentUserId) {
+    return getFallbackTalentLabel(
+      room.providerTalentTitle,
+      room.providerTalentId,
+      "내 재능 정보 없음",
+    );
+  }
+
+  return null;
+}
+
+function getOpponentTalentLabel(
+  room: ChatRoomListItem,
+  currentUserId: number | null,
+): string | null {
+  if (hasExplicitTalentPair(room)) {
+    return getFallbackTalentLabel(
+      room.opponentTalentTitle,
+      room.opponentTalentId,
+      "상대 재능 정보 없음",
+    );
+  }
+
+  if (!hasRequesterProviderTalentPair(room) || currentUserId === null) {
+    return null;
+  }
+
+  if (getPositiveInteger(room.requesterId) === currentUserId) {
+    return getFallbackTalentLabel(
+      room.providerTalentTitle,
+      room.providerTalentId,
+      "상대 재능 정보 없음",
+    );
+  }
+
+  if (getPositiveInteger(room.providerId) === currentUserId) {
+    return getFallbackTalentLabel(
+      room.requesterTalentTitle,
+      room.requesterTalentId,
+      "상대 재능 정보 없음",
+    );
+  }
+
+  return null;
+}
+
+function getChatRoomTalentLines(
+  room: ChatRoomListItem,
+  currentUserId: number | null,
+): { label: string; value: string }[] {
+  if (room.roomType === "TRANSACTION") {
+    const myTalentLabel = getMyTalentLabel(room, currentUserId);
+    const opponentTalentLabel = getOpponentTalentLabel(room, currentUserId);
+
+    if (myTalentLabel !== null || opponentTalentLabel !== null) {
+      return [
+        {
+          label: "내 재능",
+          value: myTalentLabel ?? "내 재능 정보 없음",
+        },
+        {
+          label: "상대 재능",
+          value: opponentTalentLabel ?? "상대 재능 정보 없음",
+        },
+      ];
+    }
+
+    if (hasRequesterProviderTalentPair(room)) {
+      return [
+        {
+          label: "요청자 재능",
+          value: getFallbackTalentLabel(
+            room.requesterTalentTitle,
+            room.requesterTalentId,
+            "요청자 재능 정보 없음",
+          ),
+        },
+        {
+          label: "제공자 재능",
+          value: getFallbackTalentLabel(
+            room.providerTalentTitle,
+            room.providerTalentId,
+            "제공자 재능 정보 없음",
+          ),
+        },
+      ];
+    }
+  }
+
+  return [
+    {
+      label: "재능",
+      value: getFallbackTalentLabel(
+        room.talentTitle,
+        room.talentId,
+        "재능 정보 없음",
+      ),
+    },
+  ];
+}
+
+function getChatRoomTalentSummary(
+  room: ChatRoomListItem,
+  currentUserId: number | null,
+): string {
+  return getChatRoomTalentLines(room, currentUserId)
+    .map((line) => `${line.label}: ${line.value}`)
+    .join(" · ");
+}
+
+type ChatMessageRuntimeFields = ChatMessageRes & {
+  messageId?: number | string | null;
+  sentAt?: string | null;
+  createdDate?: string | null;
+  message?: string | null;
+};
+
+function getMessageRoomId(message: ChatMessageRes): number | null {
+  return getPositiveInteger(message.roomId);
+}
+
+function isMessageForRoom(message: ChatMessageRes, roomId: number): boolean {
+  const messageRoomId = getMessageRoomId(message);
+
+  return messageRoomId === null || messageRoomId === roomId;
+}
+
+function getMessageCreatedAtValue(message: ChatMessageRes): string {
+  const runtimeMessage = message as ChatMessageRuntimeFields;
+  const candidates = [
+    runtimeMessage.createdAt,
+    runtimeMessage.sentAt,
+    runtimeMessage.createdDate,
+  ];
+
+  return (
+    candidates.find(
+      (candidate): candidate is string =>
+        typeof candidate === "string" && candidate.trim().length > 0,
+    ) ?? ""
+  );
+}
+
+function getMessageTime(message: ChatMessageRes): number {
+  const date = getValidDate(getMessageCreatedAtValue(message));
+
+  return date?.getTime() ?? 0;
+}
+
+function getMessageContent(message: ChatMessageRes): string {
+  const runtimeMessage = message as ChatMessageRuntimeFields;
+  const content =
+    typeof runtimeMessage.content === "string"
+      ? runtimeMessage.content
+      : typeof runtimeMessage.message === "string"
+        ? runtimeMessage.message
+        : "";
+
+  return content;
+}
+
+function getMessageId(message: ChatMessageRes): string {
+  const runtimeMessage = message as ChatMessageRuntimeFields;
+  const primaryId = runtimeMessage.messageId ?? runtimeMessage.id;
+
+  if (typeof primaryId === "number" && Number.isFinite(primaryId)) {
+    return `id-${primaryId}`;
+  }
+
+  if (typeof primaryId === "string" && primaryId.trim().length > 0) {
+    return `id-${primaryId.trim()}`;
+  }
+
+  const roomId = getMessageRoomId(message) ?? "unknown-room";
+  const senderId = getPositiveInteger(runtimeMessage.senderId) ?? "unknown";
+  const createdAt = getMessageCreatedAtValue(message);
+  const content = getMessageContent(message);
+
+  return `fallback-${roomId}-${senderId}-${createdAt}-${content}`;
+}
+
+function getMessageNumericId(message: ChatMessageRes): number | null {
+  const runtimeMessage = message as ChatMessageRuntimeFields;
+  const primaryId = runtimeMessage.messageId ?? runtimeMessage.id;
+
+  if (typeof primaryId === "number" && Number.isFinite(primaryId)) {
+    return primaryId;
+  }
+
+  if (typeof primaryId === "string") {
+    const numericId = Number(primaryId);
+
+    return Number.isFinite(numericId) ? numericId : null;
+  }
+
+  return null;
+}
+
+function dedupeMessages(messages: ChatMessageRes[]): ChatMessageRes[] {
+  const messageMap = new Map<string, ChatMessageRes>();
+
+  for (const message of messages) {
+    messageMap.set(getMessageId(message), message);
+  }
+
+  return Array.from(messageMap.values());
+}
+
+function sortMessagesByCreatedAtAsc(
+  messages: ChatMessageRes[],
+): ChatMessageRes[] {
+  return [...messages].sort((left, right) => {
+    const timeDiff = getMessageTime(left) - getMessageTime(right);
+
+    if (timeDiff !== 0) {
+      return timeDiff;
+    }
+
+    const leftId = getMessageNumericId(left);
+    const rightId = getMessageNumericId(right);
+
+    if (leftId !== null && rightId !== null && leftId !== rightId) {
+      return leftId - rightId;
+    }
+
+    return getMessageId(left).localeCompare(getMessageId(right));
+  });
+}
+
+function normalizeMessages(messages: ChatMessageRes[]): ChatMessageRes[] {
+  return sortMessagesByCreatedAtAsc(dedupeMessages(messages));
 }
 
 export default function ChatsPage() {
@@ -154,6 +487,7 @@ export default function ChatsPage() {
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const chatSocketRef = useRef<ChatSocketConnection | null>(null);
   const currentUserIdRef = useRef<number | null>(null);
+  const selectedRoomIdRef = useRef<number | null>(null);
   const initialRoomQueryHandledRef = useRef(false);
   const currentRoomId = currentRoom?.id ?? null;
   const currentRoomListItem =
@@ -163,8 +497,11 @@ export default function ChatsPage() {
   const currentOpponentName =
     currentRoomListItem?.opponentNickname?.trim() || "상대방";
   const currentTalentTitle =
-    currentRoomListItem?.talentTitle?.trim() ||
-    (currentRoom ? `talentId ${currentRoom.talentId}` : "재능 정보 없음");
+    currentRoomListItem !== undefined
+      ? getChatRoomTalentSummary(currentRoomListItem, currentUserId)
+      : currentRoom
+        ? getFallbackTalentLabel(null, currentRoom.talentId, "재능 정보 없음")
+        : "재능 정보 없음";
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -199,23 +536,19 @@ export default function ChatsPage() {
     connection = connectChatSocket({
       roomId: currentRoomId,
       onMessage: (message) => {
+        if (
+          selectedRoomIdRef.current !== currentRoomId ||
+          !isMessageForRoom(message, currentRoomId)
+        ) {
+          return;
+        }
+
         setMessages((prevMessages) => {
-          const alreadyExists = prevMessages.some(
-            (prevMessage) => prevMessage.id === message.id,
+          const currentRoomMessages = prevMessages.filter((prevMessage) =>
+            isMessageForRoom(prevMessage, currentRoomId),
           );
 
-          if (alreadyExists) {
-            return prevMessages.map((prevMessage) =>
-              prevMessage.id === message.id
-                ? {
-                  ...prevMessage,
-                  ...message,
-                }
-                : prevMessage,
-            );
-          }
-
-          return [...prevMessages, message];
+          return normalizeMessages([...currentRoomMessages, message]);
         });
 
         const userId = currentUserIdRef.current;
@@ -224,16 +557,31 @@ export default function ChatsPage() {
         }
       },
       onRead: (event) => {
-        const readMessageIds = new Set(event.messageIds);
+        const readRoomId = getPositiveInteger(event.roomId);
+
+        if (
+          selectedRoomIdRef.current !== currentRoomId ||
+          (readRoomId !== null && readRoomId !== currentRoomId)
+        ) {
+          return;
+        }
+
+        const readMessageIds = new Set(
+          Array.isArray(event.messageIds) ? event.messageIds : [],
+        );
 
         setMessages((prevMessages) =>
-          prevMessages.map((message) =>
-            readMessageIds.has(message.id)
-              ? {
-                ...message,
-                read: true,
-              }
-              : message,
+          normalizeMessages(
+            prevMessages
+              .filter((message) => isMessageForRoom(message, currentRoomId))
+              .map((message) =>
+                readMessageIds.has(message.id)
+                  ? {
+                    ...message,
+                    read: true,
+                  }
+                  : message,
+              ),
           ),
         );
       },
@@ -272,8 +620,26 @@ export default function ChatsPage() {
 
     try {
       const response = await chatApi.getMessages(roomId);
-      setMessages(response.content);
+      const nextMessages = Array.isArray(response.content)
+        ? response.content
+        : [];
+
+      if (selectedRoomIdRef.current !== roomId) {
+        return;
+      }
+
+      setMessages((prevMessages) => {
+        const currentRoomMessages = prevMessages.filter((message) =>
+          isMessageForRoom(message, roomId),
+        );
+
+        return normalizeMessages([...currentRoomMessages, ...nextMessages]);
+      });
     } catch (error) {
+      if (selectedRoomIdRef.current !== roomId) {
+        return;
+      }
+
       setMessages([]);
       setErrorMessage(
         error instanceof Error
@@ -281,7 +647,9 @@ export default function ChatsPage() {
           : "메시지를 불러오지 못했습니다.",
       );
     } finally {
-      setIsLoadingMessages(false);
+      if (selectedRoomIdRef.current === roomId) {
+        setIsLoadingMessages(false);
+      }
     }
   }, []);
 
@@ -325,26 +693,43 @@ export default function ChatsPage() {
 
   const openExistingRoom = useCallback(
     async (roomId: number) => {
+      let activeRoomId = roomId;
+
       setErrorMessage(null);
       setIsEnteringRoom(true);
       setIsConnectedToSocket(false);
+      selectedRoomIdRef.current = roomId;
+      setCurrentRoom(null);
+      setMessages([]);
 
       try {
         const room = await chatApi.getRoom(roomId);
 
+        if (selectedRoomIdRef.current !== roomId) {
+          return;
+        }
+
+        activeRoomId = room.id;
+        selectedRoomIdRef.current = room.id;
         setCurrentRoom(room);
         setSocketConnectionVersion((version) => version + 1);
         await loadMessages(room.id);
       } catch (error) {
+        if (selectedRoomIdRef.current !== roomId) {
+          return;
+        }
+
         setCurrentRoom(null);
         setMessages([]);
         setErrorMessage(
           error instanceof Error
             ? error.message
             : "채팅방에 입장하지 못했습니다.",
-        );
+          );
       } finally {
-        setIsEnteringRoom(false);
+        if (selectedRoomIdRef.current === activeRoomId) {
+          setIsEnteringRoom(false);
+        }
       }
     },
     [loadMessages],
@@ -392,6 +777,7 @@ export default function ChatsPage() {
         setNextRoomCursor(null);
         setCurrentRoom(null);
         setMessages([]);
+        selectedRoomIdRef.current = null;
       }, 0);
 
       return () => {
@@ -503,6 +889,7 @@ export default function ChatsPage() {
                     <ChatRoomListButton
                       key={room.roomId}
                       room={room}
+                      currentUserId={currentUserId}
                       isActive={currentRoomId === room.roomId}
                       onSelect={() => handleSelectRoom(room.roomId)}
                     />
@@ -616,20 +1003,25 @@ export default function ChatsPage() {
                 ) : (
                   messages.map((message, index) => {
                     const previousMessage = messages[index - 1];
+                    const messageCreatedAt = getMessageCreatedAtValue(message);
                     const shouldShowDateDivider =
                       previousMessage === undefined ||
-                      !isSameDate(previousMessage.createdAt, message.createdAt);
+                      !isSameDate(
+                        getMessageCreatedAtValue(previousMessage),
+                        messageCreatedAt,
+                      );
+                    const senderId = getPositiveInteger(message.senderId);
 
                     return (
-                      <Fragment key={message.id}>
+                      <Fragment key={getMessageId(message)}>
                         {shouldShowDateDivider ? (
-                          <DateDivider date={message.createdAt} />
+                          <DateDivider date={messageCreatedAt} />
                         ) : null}
                         <MessageBubble
                           message={message}
-                          isMine={message.senderId === currentUserId}
+                          isMine={senderId !== null && senderId === currentUserId}
                           senderLabel={getMessageSenderLabel({
-                            senderId: message.senderId,
+                            senderId,
                             currentUserId,
                             opponentName: currentOpponentName,
                           })}
@@ -712,15 +1104,18 @@ function SocketStatusBadge({ isConnected }: { isConnected: boolean }) {
 
 function ChatRoomListButton({
   room,
+  currentUserId,
   isActive,
   onSelect,
 }: {
   room: ChatRoomListItem;
+  currentUserId: number | null;
   isActive: boolean;
   onSelect: () => void;
 }) {
   const opponentName = room.opponentNickname?.trim() || "상대방";
   const listDate = formatChatRoomListDate(room.lastMessageAt ?? room.createdAt);
+  const talentLines = getChatRoomTalentLines(room, currentUserId);
 
   return (
     <button
@@ -747,9 +1142,19 @@ function ChatRoomListButton({
             {listDate}
           </p>
         </div>
-        <p className="mt-1 truncate text-xs font-semibold text-zinc-500">
-          {room.talentTitle ?? "재능 정보 없음"}
-        </p>
+        <div className="mt-1 space-y-0.5">
+          {talentLines.map((line) => (
+            <p
+              key={line.label}
+              className="truncate text-xs font-semibold text-zinc-500"
+              title={`${line.label}: ${line.value}`}
+            >
+              <span className="font-black text-zinc-600">{line.label}</span>
+              <span aria-hidden="true">: </span>
+              <span>{line.value}</span>
+            </p>
+          ))}
+        </div>
         <p className="mt-2 truncate text-sm text-zinc-600">
           {room.lastMessage ?? "아직 메시지가 없습니다."}
         </p>
@@ -806,6 +1211,8 @@ function MessageBubble({
   senderLabel: string;
 }) {
   const shouldShowUnreadCount = isMine && !message.read;
+  const createdAt = getMessageCreatedAtValue(message);
+  const content = getMessageContent(message) || "메시지 내용이 없습니다.";
 
   return (
     <div className={`flex flex-col ${isMine ? "items-end" : "items-start"}`}>
@@ -815,7 +1222,7 @@ function MessageBubble({
       >
         {isMine ? (
           <MessageMeta
-            createdAt={message.createdAt}
+            createdAt={createdAt}
             shouldShowUnreadCount={shouldShowUnreadCount}
             isMine={isMine}
           />
@@ -828,13 +1235,13 @@ function MessageBubble({
             }`}
         >
           <p className="whitespace-pre-wrap break-words text-sm font-semibold leading-6">
-            {message.content}
+            {content}
           </p>
         </div>
 
         {!isMine ? (
           <MessageMeta
-            createdAt={message.createdAt}
+            createdAt={createdAt}
             shouldShowUnreadCount={false}
             isMine={isMine}
           />

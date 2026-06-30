@@ -11,7 +11,14 @@ import {
   Search,
   Users,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import Link from "next/link";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { Listbox } from "@/components/common/Listbox";
@@ -39,28 +46,22 @@ import {
   type UserStatus,
 } from "@/lib/api";
 import { getStoredUserRole, hasStoredAccessToken } from "@/lib/auth";
-import { formatCredit, formatDate, formatEstimatedDuration } from "@/utils/format";
+import {
+  formatCredit,
+  formatDate,
+  formatEstimatedDuration,
+} from "@/utils/format";
 
 type AdminTab =
-  | "overview"
-  | "users"
-  | "talents"
-  | "reports"
-  | "trades"
-  | "disputes"
-  | "logs";
+  "overview" | "users" | "talents" | "reports" | "trades" | "disputes" | "logs";
 
 type AdminMutableUserStatus = Exclude<UserStatus, "WITHDRAWN">;
 type BreakdownTone =
-  | "lime"
-  | "gray"
-  | "orange"
-  | "red"
-  | "yellow"
-  | "sky"
-  | "violet";
+  "lime" | "gray" | "orange" | "red" | "yellow" | "sky" | "violet";
 
 const PAGE_SIZE = 12;
+const ADMIN_CHAT_HISTORY_UNAVAILABLE_MESSAGE =
+  "관리자 채팅 조회 API가 없어 현재 채팅 내역을 볼 수 없습니다.";
 
 const tabs: {
   value: AdminTab;
@@ -68,49 +69,49 @@ const tabs: {
   description: string;
   Icon: typeof LayoutDashboard;
 }[] = [
-    {
-      value: "overview",
-      label: "요약",
-      description: "서비스 운영 지표",
-      Icon: LayoutDashboard,
-    },
-    {
-      value: "users",
-      label: "사용자",
-      description: "계정 조회와 상태 변경",
-      Icon: Users,
-    },
-    {
-      value: "talents",
-      label: "재능",
-      description: "게시글 조회와 노출 관리",
-      Icon: FileText,
-    },
-    {
-      value: "reports",
-      label: "신고",
-      description: "신고 조회와 처리",
-      Icon: AlertTriangle,
-    },
-    {
-      value: "trades",
-      label: "거래",
-      description: "거래 상태와 참여자 조회",
-      Icon: ClipboardList,
-    },
-    {
-      value: "disputes",
-      label: "분쟁",
-      description: "분쟁 거래 판정",
-      Icon: Gavel,
-    },
-    {
-      value: "logs",
-      label: "로그",
-      description: "관리자 조치 이력",
-      Icon: History,
-    },
-  ];
+  {
+    value: "overview",
+    label: "요약",
+    description: "서비스 운영 지표",
+    Icon: LayoutDashboard,
+  },
+  {
+    value: "users",
+    label: "사용자",
+    description: "계정 조회와 상태 변경",
+    Icon: Users,
+  },
+  {
+    value: "talents",
+    label: "재능",
+    description: "게시글 조회와 노출 관리",
+    Icon: FileText,
+  },
+  {
+    value: "reports",
+    label: "신고",
+    description: "신고 조회와 처리",
+    Icon: AlertTriangle,
+  },
+  {
+    value: "trades",
+    label: "거래",
+    description: "거래 상태와 참여자 조회",
+    Icon: ClipboardList,
+  },
+  {
+    value: "disputes",
+    label: "분쟁",
+    description: "분쟁 거래 판정",
+    Icon: Gavel,
+  },
+  {
+    value: "logs",
+    label: "로그",
+    description: "관리자 조치 이력",
+    Icon: History,
+  },
+];
 
 const userStatusOptions: UserStatus[] = [
   "ACTIVE",
@@ -209,6 +210,425 @@ const actionTypeLabels: Record<AdminActionType, string> = {
   TALENT_STATUS_CHANGED: "재능 상태 변경",
   REPORT_RESOLVED: "신고 처리",
 };
+
+type AdminTalentDisplay = AdminTalentRes & {
+  authorNickname?: string | null;
+};
+
+type AdminTradeDisplay = AdminTradeRes & {
+  buyerNickname?: string | null;
+  sellerNickname?: string | null;
+  talentTitle?: string | null;
+  title?: string | null;
+};
+
+type AdminDisputeDisplay = AdminDisputeRes & {
+  buyerNickname?: string | null;
+  sellerNickname?: string | null;
+  talentTitle?: string | null;
+  title?: string | null;
+};
+
+interface AdminDisputeTalentItem {
+  key: string;
+  tradeLabel: string;
+  talentTitle: string;
+  buyerLabel: string;
+  sellerLabel: string;
+}
+
+interface AdminDisputeGroupView {
+  key: string;
+  tradeGroupId: number | null;
+  representativeDispute: AdminDisputeDisplay;
+  disputes: AdminDisputeDisplay[];
+  isSwapGroup: boolean;
+  title: string;
+  reason: string;
+  talentItems: AdminDisputeTalentItem[];
+}
+
+type AdminReportDisplay = AdminTalentReportRes & {
+  talentTitle?: string | null;
+  reporterNickname?: string | null;
+};
+
+type AdminActionLogDisplay = AdminActionLogRes & {
+  adminNickname?: string | null;
+  targetLabel?: string | null;
+  targetDetailLabel?: string | null;
+};
+
+function hasText(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function formatEntityId(label: string, id: unknown): string {
+  return typeof id === "number" && Number.isFinite(id)
+    ? `${label} #${id}`
+    : `${label} 정보 없음`;
+}
+
+function getPositiveAdminId(id: unknown): number | null {
+  return typeof id === "number" && Number.isInteger(id) && id > 0 ? id : null;
+}
+
+function formatOptionalText(value: unknown, fallback: string): string {
+  return hasText(value) ? value.trim() : fallback;
+}
+
+function formatAdminShortText(
+  value: unknown,
+  fallback: string,
+  maxLength = 80,
+): string {
+  const text = formatOptionalText(value, fallback).replace(/\s+/g, " ");
+
+  return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
+}
+
+function formatAdminDate(value: unknown): string {
+  if (!hasText(value)) {
+    return "-";
+  }
+
+  const date = new Date(value);
+
+  return Number.isNaN(date.getTime()) ? "-" : formatDate(value);
+}
+
+function formatAdminCredit(value: unknown): string {
+  return typeof value === "number" && Number.isFinite(value)
+    ? formatCredit(value)
+    : "크레딧 정보 없음";
+}
+
+function formatAdminUserName(
+  user: Partial<AdminUserRes> & Pick<AdminUserRes, "userId">,
+): string {
+  return formatOptionalText(
+    user.nickname,
+    formatEntityId("사용자", user.userId),
+  );
+}
+
+function formatAdminUserEmail(user: Partial<AdminUserRes>): string {
+  return formatOptionalText(user.email, "이메일 정보 없음");
+}
+
+function formatAdminTalentTitle(talent: AdminTalentDisplay): string {
+  return formatOptionalText(
+    talent.title,
+    formatEntityId("재능", talent.talentId),
+  );
+}
+
+function formatAdminTalentAuthor(talent: AdminTalentDisplay): string {
+  return formatOptionalText(
+    talent.authorNickname,
+    formatEntityId("작성자", talent.authorId),
+  );
+}
+
+function formatAdminTalentAuthorMeta(talent: AdminTalentDisplay): string {
+  const authorName = formatAdminTalentAuthor(talent);
+  return `작성자: ${authorName}`;
+}
+
+function formatAdminTalentCategory(talent: Partial<AdminTalentRes>): string {
+  return formatOptionalText(talent.categoryName, "카테고리 정보 없음");
+}
+
+function formatAdminReportTalent(report: AdminReportDisplay): string {
+  return formatOptionalText(
+    report.talentTitle,
+    formatEntityId("재능", report.talentId),
+  );
+}
+
+function formatAdminReportReporter(report: AdminReportDisplay): string {
+  return formatOptionalText(
+    report.reporterNickname,
+    formatEntityId("신고자", report.reporterId),
+  );
+}
+
+function formatAdminTradeTitle(
+  trade: AdminTradeDisplay | AdminDisputeDisplay,
+): string {
+  return formatOptionalText(
+    trade.talentTitle,
+    formatOptionalText(trade.title, formatEntityId("거래", trade.tradeId)),
+  );
+}
+
+function formatAdminTradeMeta(trade: AdminTradeDisplay | AdminDisputeDisplay): string {
+  return `${formatEntityId("거래", trade.tradeId)} · ${formatAdminCredit(trade.creditPrice)}`;
+}
+
+function formatAdminDisputeReason(reason: string | null | undefined): string {
+  return formatAdminShortText(reason, "분쟁 사유가 없습니다.", 42);
+}
+
+function formatAdminTradeBuyer(
+  trade: AdminTradeDisplay | AdminDisputeDisplay,
+): string {
+  return formatOptionalText(
+    trade.buyerNickname,
+    formatEntityId("구매자", trade.buyerId),
+  );
+}
+
+function formatAdminTradeSeller(
+  trade: AdminTradeDisplay | AdminDisputeDisplay,
+): string {
+  return formatOptionalText(
+    trade.sellerNickname,
+    formatEntityId("판매자", trade.sellerId),
+  );
+}
+
+function formatAdminTradeTalent(
+  trade: AdminTradeDisplay | AdminDisputeDisplay,
+): string {
+  return formatOptionalText(
+    trade.talentTitle,
+    formatEntityId("재능", trade.talentId),
+  );
+}
+
+function getDisputeGroupKey(dispute: AdminDisputeDisplay, index: number): string {
+  const tradeGroupId = getPositiveAdminId(dispute.tradeGroupId);
+  if (tradeGroupId !== null) {
+    return `GROUP-${tradeGroupId}`;
+  }
+
+  const tradeId = getPositiveAdminId(dispute.tradeId);
+  return tradeId === null ? `TRADE-UNKNOWN-${index}` : `TRADE-${tradeId}`;
+}
+
+function getRepresentativeDispute(
+  disputes: AdminDisputeDisplay[],
+): AdminDisputeDisplay {
+  const [representativeDispute] = disputes;
+
+  if (!representativeDispute) {
+    throw new Error("분쟁 정보가 없습니다.");
+  }
+
+  return representativeDispute;
+}
+
+function getAdminDisputeTalentItems(
+  disputes: AdminDisputeDisplay[],
+): AdminDisputeTalentItem[] {
+  return disputes.map((dispute, index) => {
+    const tradeId = getPositiveAdminId(dispute.tradeId);
+    const talentId = getPositiveAdminId(dispute.talentId);
+
+    return {
+      key:
+        tradeId !== null
+          ? `trade-${tradeId}`
+          : talentId !== null
+            ? `talent-${talentId}-${index}`
+            : `dispute-item-${index}`,
+      tradeLabel: formatEntityId("거래", dispute.tradeId),
+      talentTitle: formatAdminTradeTalent(dispute),
+      buyerLabel: formatAdminTradeBuyer(dispute),
+      sellerLabel: formatAdminTradeSeller(dispute),
+    };
+  });
+}
+
+function groupAdminDisputesForView(
+  disputes: AdminDisputeDisplay[],
+): AdminDisputeGroupView[] {
+  const map = new Map<string, AdminDisputeDisplay[]>();
+
+  disputes.forEach((dispute, index) => {
+    const groupKey = getDisputeGroupKey(dispute, index);
+    const current = map.get(groupKey);
+
+    if (current) {
+      current.push(dispute);
+      return;
+    }
+
+    map.set(groupKey, [dispute]);
+  });
+
+  return Array.from(map.entries()).map(([key, groupedDisputes]) => {
+    const representativeDispute = getRepresentativeDispute(groupedDisputes);
+    const tradeGroupId = getPositiveAdminId(
+      representativeDispute.tradeGroupId,
+    );
+    const isSwapGroup =
+      tradeGroupId !== null && representativeDispute.tradeType === "SWAP";
+
+    return {
+      key,
+      tradeGroupId,
+      representativeDispute,
+      disputes: groupedDisputes,
+      isSwapGroup,
+      title: isSwapGroup
+        ? `교환 분쟁 · 그룹 ${tradeGroupId}`
+        : formatAdminTradeTitle(representativeDispute),
+      reason: formatAdminDisputeReason(representativeDispute.disputeReason),
+      talentItems: getAdminDisputeTalentItems(groupedDisputes),
+    };
+  });
+}
+
+function formatAdminDisputeGroupMeta(group: AdminDisputeGroupView): string {
+  if (group.isSwapGroup) {
+    return `교환 · ${formatAdminCredit(group.representativeDispute.creditPrice)}`;
+  }
+
+  return formatAdminTradeMeta(group.representativeDispute);
+}
+
+function formatAdminTargetLabel(
+  targetType: AdminActionTargetType,
+  targetId: number,
+): string {
+  return `${targetTypeLabels[targetType] ?? "대상"} #${targetId}`;
+}
+
+function formatAdminActionAdmin(log: AdminActionLogDisplay): string {
+  return formatOptionalText(
+    log.adminNickname,
+    formatEntityId("관리자", log.adminId),
+  );
+}
+
+function formatAdminActionTarget(log: AdminActionLogDisplay): string {
+  return formatOptionalText(
+    log.targetLabel,
+    formatAdminTargetLabel(log.targetType, log.targetId),
+  );
+}
+
+function formatGroupLabel(tradeGroupId: number | null | undefined): string {
+  return typeof tradeGroupId === "number" && Number.isFinite(tradeGroupId)
+    ? `교환 그룹 ${tradeGroupId}`
+    : "-";
+}
+
+async function getAdminUserNickname(userId: number): Promise<string | null> {
+  try {
+    const user = await adminApi.getUser(userId);
+    return hasText(user.nickname) ? user.nickname.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+async function getAdminTalentTitle(talentId: number): Promise<string | null> {
+  try {
+    const talent = await adminApi.getTalent(talentId);
+    return hasText(talent.title) ? talent.title.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+async function enrichAdminTalent(talent: AdminTalentRes): Promise<AdminTalentDisplay> {
+  return {
+    ...talent,
+    authorNickname: await getAdminUserNickname(talent.authorId),
+  };
+}
+
+async function enrichAdminTrade(trade: AdminTradeRes): Promise<AdminTradeDisplay> {
+  const [buyerNickname, sellerNickname, talentTitle] = await Promise.all([
+    getAdminUserNickname(trade.buyerId),
+    getAdminUserNickname(trade.sellerId),
+    getAdminTalentTitle(trade.talentId),
+  ]);
+
+  return {
+    ...trade,
+    buyerNickname,
+    sellerNickname,
+    talentTitle,
+  };
+}
+
+async function enrichAdminDispute(
+  dispute: AdminDisputeRes,
+): Promise<AdminDisputeDisplay> {
+  const [buyerNickname, sellerNickname, talentTitle] = await Promise.all([
+    getAdminUserNickname(dispute.buyerId),
+    getAdminUserNickname(dispute.sellerId),
+    getAdminTalentTitle(dispute.talentId),
+  ]);
+
+  return {
+    ...dispute,
+    buyerNickname,
+    sellerNickname,
+    talentTitle,
+  };
+}
+
+async function enrichAdminReport(
+  report: AdminTalentReportRes,
+): Promise<AdminReportDisplay> {
+  const [reporterNickname, talentTitle] = await Promise.all([
+    getAdminUserNickname(report.reporterId),
+    getAdminTalentTitle(report.talentId),
+  ]);
+
+  return {
+    ...report,
+    reporterNickname,
+    talentTitle,
+  };
+}
+
+async function enrichAdminActionLog(
+  log: AdminActionLogRes,
+): Promise<AdminActionLogDisplay> {
+  const adminNickname = await getAdminUserNickname(log.adminId);
+
+  let targetLabel: string | null = null;
+  let targetDetailLabel: string | null = null;
+
+  if (log.targetType === "USER") {
+    const nickname = await getAdminUserNickname(log.targetId);
+    targetLabel = nickname ?? formatEntityId("사용자", log.targetId);
+    targetDetailLabel = "사용자";
+  }
+
+  if (log.targetType === "TALENT") {
+    const title = await getAdminTalentTitle(log.targetId);
+    targetLabel = title ?? formatEntityId("재능", log.targetId);
+    targetDetailLabel = "재능";
+  }
+
+  if (log.targetType === "REPORT") {
+    try {
+      const report = await adminApi.getReport(log.targetId);
+      const reporterNickname = await getAdminUserNickname(report.reporterId);
+      targetLabel = reporterNickname
+        ? `${reporterNickname}의 신고`
+        : formatEntityId("신고", log.targetId);
+      targetDetailLabel = "신고";
+    } catch {
+      targetLabel = formatEntityId("신고", log.targetId);
+      targetDetailLabel = "신고";
+    }
+  }
+
+  return {
+    ...log,
+    adminNickname,
+    targetLabel,
+    targetDetailLabel,
+  };
+}
 
 const userStatusBreakdownOrder: UserStatus[] = [
   "ACTIVE",
@@ -353,11 +773,10 @@ export default function AdminPage() {
       <div className="fixed-container relative py-10 sm:py-14 lg:py-16">
         <header className="border-b border-[#ded6ff] pb-8 text-center">
           <div className="mx-auto max-w-3xl">
-            <h1 className="baton-page-title mt-3 !font-bold">
-              관리자
-            </h1>
+            <h1 className="baton-page-title mt-3 !font-bold">관리자</h1>
             <p className="mx-auto mt-4 max-w-2xl text-sm font-semibold leading-7 text-zinc-500 sm:mt-5 sm:text-lg sm:leading-8">
-              사용자, 재능, 신고, 거래와 분쟁을 백엔드 관리자 API로 직접 관리합니다.
+              사용자, 재능, 신고, 거래와 분쟁을 백엔드 관리자 API로 직접
+              관리합니다.
             </p>
           </div>
         </header>
@@ -375,20 +794,23 @@ export default function AdminPage() {
                 key={tab.value}
                 type="button"
                 onClick={() => setActiveTab(tab.value)}
-                className={`grid min-h-[138px] cursor-pointer grid-rows-[58px_1fr] overflow-hidden rounded-lg border p-0 text-center transition hover:-translate-y-0.5 ${selected
-                  ? "border-[#8c5bff] bg-[#8c5bff] text-white shadow-lg shadow-violet-400/20"
-                  : "border-[#ded6ff] bg-white text-zinc-700 shadow-sm shadow-violet-950/[0.03] hover:border-[#d9ccff] hover:bg-[#fbf9ff] hover:text-[#8c5bff]"
+                className={`grid min-h-[138px] cursor-pointer grid-rows-[58px_1fr] overflow-hidden rounded-lg border p-0 text-center transition hover:-translate-y-0.5 ${
+                  selected
+                    ? "border-[#8c5bff] bg-[#8c5bff] text-white shadow-lg shadow-violet-400/20"
+                    : "border-[#ded6ff] bg-white text-zinc-700 shadow-sm shadow-violet-950/[0.03] hover:border-[#d9ccff] hover:bg-[#fbf9ff] hover:text-[#8c5bff]"
                 }`}
               >
                 <span
-                  className={`flex h-full items-center justify-center gap-3 border-b px-5 text-lg font-black leading-none ${selected ? "border-white/20" : "border-[#f0ebff]"
+                  className={`flex h-full items-center justify-center gap-3 border-b px-5 text-lg font-black leading-none ${
+                    selected ? "border-white/20" : "border-[#f0ebff]"
                   }`}
                 >
                   <Icon className="h-6 w-6 shrink-0" aria-hidden="true" />
                   <span className="truncate">{tab.label}</span>
                 </span>
                 <span
-                  className={`flex h-full items-center justify-center whitespace-nowrap px-5 py-4 text-sm font-bold leading-none ${selected ? "text-white/85" : "text-zinc-500"
+                  className={`flex h-full items-center justify-center whitespace-nowrap px-5 py-4 text-sm font-bold leading-none ${
+                    selected ? "text-white/85" : "text-zinc-500"
                   }`}
                 >
                   {tab.description}
@@ -561,7 +983,7 @@ function AdminUsersTab() {
     }
 
     const reason = window.prompt(
-      `${user.nickname} 사용자를 ${userStatusLabels[nextStatus]} 상태로 변경하는 사유를 입력해 주세요.`,
+      `${formatAdminUserName(user)} 사용자를 ${userStatusLabels[nextStatus]} 상태로 변경하는 사유를 입력해 주세요.`,
       "",
     );
 
@@ -582,7 +1004,9 @@ function AdminUsersTab() {
       await loadUsers();
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : "사용자 상태 변경에 실패했습니다.",
+        error instanceof Error
+          ? error.message
+          : "사용자 상태 변경에 실패했습니다.",
       );
     } finally {
       setProcessingUserId(null);
@@ -643,25 +1067,32 @@ function AdminUsersTab() {
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="truncate text-xl font-black text-zinc-950">
-                    {user.nickname}
+                    {formatAdminUserName(user)}
                   </p>
-                  <StatusChip tone={user.status === "ACTIVE" ? "success" : "warning"}>
+                  <StatusChip
+                    tone={user.status === "ACTIVE" ? "success" : "warning"}
+                  >
                     {userStatusLabels[user.status]}
                   </StatusChip>
-                  <StatusChip tone={user.role === "ADMIN" ? "violet" : "default"}>
+                  <StatusChip
+                    tone={user.role === "ADMIN" ? "violet" : "default"}
+                  >
                     {userRoleLabels[user.role]}
                   </StatusChip>
                 </div>
                 <p className="mt-1 truncate text-sm font-semibold text-zinc-500">
-                  #{user.userId} · {user.email}
+                  {formatAdminUserEmail(user)}
                 </p>
                 <p className="mt-2 truncate text-sm font-semibold leading-6 text-zinc-600">
-                  닉네임 {user.nickname}
+                  닉네임: {formatAdminUserName(user)}
                 </p>
               </div>
 
               <div className="grid min-w-0 grid-cols-2 gap-2 text-sm">
-                <SmallMetric label="신뢰" value={formatNumber(user.trustScore)} />
+                <SmallMetric
+                  label="신뢰"
+                  value={formatNumber(user.trustScore)}
+                />
                 <SmallMetric label="가입" value={formatDate(user.createdAt)} />
               </div>
 
@@ -694,7 +1125,7 @@ function AdminUsersTab() {
 }
 
 function AdminTalentsTab() {
-  const [talents, setTalents] = useState<AdminTalentRes[]>([]);
+  const [talents, setTalents] = useState<AdminTalentDisplay[]>([]);
   const [categories, setCategories] = useState<CategoryRes[]>([]);
   const [status, setStatus] = useState<TalentStatus | "">("");
   const [categoryId, setCategoryId] = useState("");
@@ -714,7 +1145,10 @@ function AdminTalentsTab() {
   const categoryLabelById = useMemo(
     () =>
       new Map(
-        categories.map((category) => [String(category.categoryId), category.name]),
+        categories.map((category) => [
+          String(category.categoryId),
+          category.name,
+        ]),
       ),
     [categories],
   );
@@ -731,7 +1165,10 @@ function AdminTalentsTab() {
         page,
         size: PAGE_SIZE,
       });
-      setTalents(response.content);
+      const enrichedTalents = await Promise.all(
+        response.content.map((talent) => enrichAdminTalent(talent)),
+      );
+      setTalents(enrichedTalents);
       setPageInfo(toPageInfo(response));
     } catch (error) {
       setTalents([]);
@@ -760,7 +1197,9 @@ function AdminTalentsTab() {
     async function loadCategories(): Promise<void> {
       try {
         const response = await categoryApi.getList();
-        const nextCategories = [...(Array.isArray(response) ? response : [])].sort(
+        const nextCategories = [
+          ...(Array.isArray(response) ? response : []),
+        ].sort(
           (left, right) =>
             left.sortOrder - right.sortOrder ||
             left.categoryId - right.categoryId,
@@ -792,7 +1231,7 @@ function AdminTalentsTab() {
     }
 
     const reason = window.prompt(
-      `"${talent.title}" 재능을 ${talentStatusLabels[nextStatus]} 상태로 변경하는 사유를 입력해 주세요.`,
+      `${formatAdminTalentTitle(talent)} 재능을 ${talentStatusLabels[nextStatus]} 상태로 변경하는 사유를 입력해 주세요.`,
       "",
     );
 
@@ -813,7 +1252,9 @@ function AdminTalentsTab() {
       await loadTalents();
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : "재능 상태 변경에 실패했습니다.",
+        error instanceof Error
+          ? error.message
+          : "재능 상태 변경에 실패했습니다.",
       );
     } finally {
       setProcessingTalentId(null);
@@ -874,26 +1315,36 @@ function AdminTalentsTab() {
               <div className="relative min-w-0 text-left xl:pl-12">
                 <div className="relative flex min-w-0 items-center">
                   <span className="absolute left-0 top-1/2 hidden -translate-x-12 -translate-y-1/2 xl:block">
-                    <StatusChip tone={talent.status === "ACTIVE" ? "success" : "danger"}>
+                    <StatusChip
+                      tone={talent.status === "ACTIVE" ? "success" : "danger"}
+                    >
                       {talentStatusLabels[talent.status]}
                     </StatusChip>
                   </span>
-                  <p className="min-w-0 truncate whitespace-nowrap text-xl font-black leading-tight text-zinc-950">
-                    {talent.title}
-                  </p>
+                  <Link
+                    href={`/talents/${talent.talentId}`}
+                    className="min-w-0 truncate whitespace-nowrap text-xl font-black leading-tight text-zinc-950 transition hover:text-[#8c5bff] hover:underline"
+                  >
+                    {formatAdminTalentTitle(talent)}
+                  </Link>
                 </div>
                 <div className="mt-2 xl:hidden">
-                  <StatusChip tone={talent.status === "ACTIVE" ? "success" : "danger"}>
+                  <StatusChip
+                    tone={talent.status === "ACTIVE" ? "success" : "danger"}
+                  >
                     {talentStatusLabels[talent.status]}
                   </StatusChip>
                 </div>
                 <p className="mt-2 min-w-0 truncate whitespace-nowrap text-sm font-semibold leading-6 text-zinc-500">
-                  재능 #{talent.talentId} · 작성자 #{talent.authorId} · {talent.categoryName}
+                  {formatAdminTalentAuthorMeta(talent)} · {formatAdminTalentCategory(talent)}
                 </p>
               </div>
 
               <div className="grid min-w-0 grid-cols-2 gap-2 text-sm sm:grid-cols-4 xl:w-[476px] xl:justify-self-center">
-                <SmallMetric label="크레딧" value={formatCredit(talent.creditPrice)} />
+                <SmallMetric
+                  label="크레딧"
+                  value={formatCredit(talent.creditPrice)}
+                />
                 <SmallMetric
                   label="기간"
                   value={formatEstimatedDuration(talent.estimatedHours)}
@@ -931,7 +1382,7 @@ function AdminTalentsTab() {
 }
 
 function AdminReportsTab() {
-  const [reports, setReports] = useState<AdminTalentReportRes[]>([]);
+  const [reports, setReports] = useState<AdminReportDisplay[]>([]);
   const [status, setStatus] = useState<ReportStatus | "">("");
   const [reason, setReason] = useState<ReportReason | "">("");
   const [page, setPage] = useState(0);
@@ -942,6 +1393,12 @@ function AdminReportsTab() {
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState("");
+  const [reviewDialog, setReviewDialog] = useState<{
+    report: AdminReportDisplay;
+    decision: "ACCEPT" | "REJECT";
+    memo: string;
+  } | null>(null);
+  const [reviewDialogErrorMessage, setReviewDialogErrorMessage] = useState("");
 
   const loadReports = useCallback(async () => {
     setIsLoading(true);
@@ -954,7 +1411,10 @@ function AdminReportsTab() {
         page,
         size: PAGE_SIZE,
       });
-      setReports(response.content);
+      const enrichedReports = await Promise.all(
+        response.content.map((report) => enrichAdminReport(report)),
+      );
+      setReports(enrichedReports);
       setPageInfo(toPageInfo(response));
     } catch (error) {
       setReports([]);
@@ -977,24 +1437,67 @@ function AdminReportsTab() {
     return () => window.clearTimeout(timeoutId);
   }, [loadReports]);
 
-  async function handleResolve(report: AdminTalentReportRes) {
-    const memo = window.prompt("신고 처리 메모를 입력해 주세요.", "");
+  function getDefaultReportMemo(decision: "ACCEPT" | "REJECT") {
+    return decision === "ACCEPT"
+      ? "신고를 수용하여 처리합니다."
+      : "신고를 기각하여 처리합니다.";
+  }
 
-    if (memo === null) {
+  function openResolveDialog(
+    report: AdminReportDisplay,
+    decision: "ACCEPT" | "REJECT",
+  ) {
+    setErrorMessage(null);
+    setSuccessMessage("");
+    setReviewDialogErrorMessage("");
+    setReviewDialog({
+      report,
+      decision,
+      memo: getDefaultReportMemo(decision),
+    });
+  }
+
+  function closeResolveDialog() {
+    if (processingReportId !== null) {
       return;
     }
+
+    setReviewDialog(null);
+    setReviewDialogErrorMessage("");
+  }
+
+  async function handleSubmitResolve() {
+    if (!reviewDialog) {
+      return;
+    }
+
+    const memo = reviewDialog.memo.trim();
+
+    if (!memo) {
+      setReviewDialogErrorMessage("처리 메모를 입력해 주세요.");
+      return;
+    }
+
+    const { report, decision } = reviewDialog;
+    const decisionLabel = decision === "ACCEPT" ? "수용" : "기각";
 
     setProcessingReportId(report.reportId);
     setErrorMessage(null);
     setSuccessMessage("");
+    setReviewDialogErrorMessage("");
 
     try {
-      await adminApi.resolveReport(report.reportId, { memo: memo.trim() });
-      setSuccessMessage("신고가 처리되었습니다.");
+      await adminApi.resolveReport(report.reportId, {
+        memo: `[${decisionLabel}] ${memo}`.trim(),
+      });
+      setReviewDialog(null);
+      setSuccessMessage(`신고가 ${decisionLabel} 처리되었습니다.`);
       await loadReports();
     } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : "신고 처리에 실패했습니다.",
+      setReviewDialogErrorMessage(
+        error instanceof Error
+          ? error.message
+          : `신고 ${decisionLabel} 처리에 실패했습니다.`,
       );
     } finally {
       setProcessingReportId(null);
@@ -1004,7 +1507,7 @@ function AdminReportsTab() {
   return (
     <AdminPanel
       title="신고 관리"
-      description="재능 신고 내역을 조회하고 처리 완료 상태로 변경합니다."
+      description="신고된 게시글을 확인하고 수용 또는 기각 처리합니다."
       action={<RefreshButton onClick={loadReports} disabled={isLoading} />}
     >
       <FilterRow>
@@ -1037,56 +1540,210 @@ function AdminReportsTab() {
       />
 
       <div className="grid gap-3">
-        {reports.map((report) => (
-          <article
-            key={report.reportId}
-            className="rounded-lg border border-[#ded6ff] bg-white p-5 shadow-sm shadow-violet-950/[0.03] sm:px-7"
-          >
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(170px,0.28fr)] lg:items-center">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-xl font-black text-zinc-950">
-                    신고 #{report.reportId}
-                  </p>
-                  <StatusChip tone={report.status === "PENDING" ? "warning" : "success"}>
-                    {reportStatusLabels[report.status]}
-                  </StatusChip>
-                  <StatusChip tone="danger">
-                    {reportReasonLabels[report.reason]}
-                  </StatusChip>
-                </div>
-                <p className="mt-1 text-sm font-semibold text-zinc-500">
-                  재능 #{report.talentId} · 신고자 #{report.reporterId} · {formatDate(report.createdAt)}
-                </p>
-                <p className="mt-3 rounded-lg bg-zinc-50 p-3 text-sm font-semibold leading-6 text-zinc-700">
-                  {report.description || "상세 설명이 없습니다."}
-                </p>
-              </div>
+        {reports.map((report) => {
+          const talentId = getPositiveAdminId(report.talentId);
+          const isPending = report.status === "PENDING";
 
-              <ActionButton
-                disabled={
-                  report.status === "RESOLVED" ||
-                  processingReportId === report.reportId
-                }
-                onClick={() => handleResolve(report)}
-              >
-                처리 완료
-              </ActionButton>
-            </div>
-          </article>
-        ))}
+          return (
+            <article
+              key={report.reportId}
+              className="rounded-lg border border-[#ded6ff] bg-white p-5 shadow-sm shadow-violet-950/[0.03] sm:px-7"
+            >
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(170px,0.28fr)] lg:items-center">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="min-w-0 break-words text-xl font-black text-zinc-950">
+                      {formatAdminReportTalent(report)}
+                    </p>
+                    <StatusChip
+                      tone={isPending ? "warning" : "success"}
+                    >
+                      {reportStatusLabels[report.status] ?? "상태 정보 없음"}
+                    </StatusChip>
+                    <StatusChip tone="danger">
+                      {reportReasonLabels[report.reason] ?? "사유 정보 없음"}
+                    </StatusChip>
+                  </div>
+                  <p className="mt-1 text-sm font-semibold text-zinc-500">
+                    {formatEntityId("신고", report.reportId)} ·{" "}
+                    {formatAdminReportReporter(report)} ·{" "}
+                    {formatAdminDate(report.createdAt)}
+                  </p>
+                  <p
+                    title={
+                      hasText(report.description)
+                        ? report.description.trim()
+                        : "상세 설명이 없습니다."
+                    }
+                    className="mt-3 rounded-lg bg-zinc-50 p-3 text-sm font-semibold leading-6 text-zinc-700"
+                  >
+                    {formatAdminShortText(report.description, "상세 설명이 없습니다.")}
+                  </p>
+                </div>
+
+                <div className="grid gap-2">
+                  {talentId !== null ? (
+                    <Link
+                      href={`/talents/${talentId}`}
+                      className="flex h-12 w-full items-center justify-center rounded-lg border border-[#d9ccff] bg-white text-sm font-black text-[#6f3cff] transition hover:border-[#8c5bff] hover:bg-[#fbf9ff]"
+                    >
+                      게시글 상세 보기
+                    </Link>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        disabled
+                        className="h-12 w-full cursor-not-allowed rounded-lg border border-[#d9ccff] bg-zinc-50 text-sm font-black text-zinc-400"
+                      >
+                        게시글 상세 보기
+                      </button>
+                      <p className="text-xs font-bold leading-5 text-zinc-500">
+                        게시글 정보를 확인할 수 없습니다.
+                      </p>
+                    </>
+                  )}
+                  {isPending ? (
+                    <div className="grid grid-cols-2 gap-2">
+                      <ActionButton
+                        disabled={processingReportId === report.reportId}
+                        onClick={() => openResolveDialog(report, "ACCEPT")}
+                      >
+                        수용
+                      </ActionButton>
+                      <ActionButton
+                        disabled={processingReportId === report.reportId}
+                        onClick={() => openResolveDialog(report, "REJECT")}
+                      >
+                        기각
+                      </ActionButton>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled
+                      className="h-12 w-full cursor-not-allowed rounded-lg border border-zinc-200 bg-zinc-50 text-sm font-black text-zinc-300"
+                    >
+                      처리 완료
+                    </button>
+                  )}
+                </div>
+              </div>
+            </article>
+          );
+        })}
         {!isLoading && reports.length === 0 ? (
           <EmptyState title="조건에 맞는 신고가 없습니다." />
         ) : null}
       </div>
 
       <PageControls pageInfo={pageInfo} page={page} setPage={setPage} />
+
+      {reviewDialog ? (
+        <ReportReviewDialog
+          decision={reviewDialog.decision}
+          memo={reviewDialog.memo}
+          errorMessage={reviewDialogErrorMessage}
+          isSubmitting={processingReportId === reviewDialog.report.reportId}
+          onChangeMemo={(memo) =>
+            setReviewDialog((current) =>
+              current ? { ...current, memo } : current,
+            )
+          }
+          onClose={closeResolveDialog}
+          onSubmit={handleSubmitResolve}
+        />
+      ) : null}
     </AdminPanel>
   );
 }
 
+function ReportReviewDialog({
+  decision,
+  memo,
+  errorMessage,
+  isSubmitting,
+  onChangeMemo,
+  onClose,
+  onSubmit,
+}: {
+  decision: "ACCEPT" | "REJECT";
+  memo: string;
+  errorMessage: string;
+  isSubmitting: boolean;
+  onChangeMemo: (memo: string) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+}) {
+  const decisionLabel = decision === "ACCEPT" ? "수용" : "기각";
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/55 px-4 py-8 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="report-review-dialog-title"
+    >
+      <div className="w-full max-w-lg overflow-hidden rounded-[28px] border border-[#d9ccff] bg-white shadow-[0_28px_80px_rgba(80,60,160,0.24)]">
+        <div
+          className="h-1.5 bg-[linear-gradient(90deg,#8c5bff_0%,#78a9ff_52%,#79e4dd_100%)]"
+          aria-hidden="true"
+        />
+        <div className="p-6 sm:p-7">
+          <h3
+            id="report-review-dialog-title"
+            className="text-2xl font-black tracking-[-0.04em] text-zinc-950"
+          >
+            신고 {decisionLabel} 처리
+          </h3>
+          <p className="mt-2 text-sm font-semibold leading-6 text-zinc-500">
+            처리 메모를 남기면 관리자 조치 로그에서 확인할 수 있습니다.
+          </p>
+
+          <label className="mt-5 block text-sm font-black text-zinc-900">
+            처리 메모
+            <textarea
+              value={memo}
+              onChange={(event) => onChangeMemo(event.target.value)}
+              rows={5}
+              disabled={isSubmitting}
+              className="mt-2 w-full resize-none rounded-2xl border border-[#d9ccff] bg-white px-4 py-3 text-sm font-semibold leading-6 text-zinc-800 outline-none transition placeholder:text-zinc-400 focus:border-[#8c5bff] focus:ring-4 focus:ring-[#f4f0ff] disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-400"
+              placeholder="처리 사유를 입력해 주세요."
+            />
+          </label>
+
+          {errorMessage ? (
+            <p className="mt-3 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-bold text-red-600">
+              {errorMessage}
+            </p>
+          ) : null}
+
+          <div className="mt-6 grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              disabled={isSubmitting}
+              onClick={onClose}
+              className="h-12 rounded-2xl border border-zinc-200 bg-white text-sm font-black text-zinc-600 transition hover:border-zinc-300 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              disabled={isSubmitting}
+              onClick={onSubmit}
+              className="h-12 rounded-2xl bg-[linear-gradient(135deg,#8c5bff_0%,#78a9ff_100%)] text-sm font-black text-white shadow-[0_14px_28px_rgba(140,91,255,0.24)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0"
+            >
+              {isSubmitting ? "처리 중..." : `${decisionLabel} 처리`}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AdminTradesTab() {
-  const [trades, setTrades] = useState<AdminTradeRes[]>([]);
+  const [trades, setTrades] = useState<AdminTradeDisplay[]>([]);
   const [status, setStatus] = useState<TradeStatus | "">("");
   const [tradeType, setTradeType] = useState<TradeType | "">("");
   const [buyerId, setBuyerId] = useState("");
@@ -1109,7 +1766,10 @@ function AdminTradesTab() {
         page,
         size: PAGE_SIZE,
       });
-      setTrades(response.content);
+      const enrichedTrades = await Promise.all(
+        response.content.map((trade) => enrichAdminTrade(trade)),
+      );
+      setTrades(enrichedTrades);
       setPageInfo(toPageInfo(response));
     } catch (error) {
       setTrades([]);
@@ -1160,7 +1820,7 @@ function AdminTradesTab() {
           }}
         />
         <TextFilter
-          label="구매자 ID"
+          label="구매자"
           value={buyerId}
           inputMode="numeric"
           onChange={(value) => {
@@ -1169,7 +1829,7 @@ function AdminTradesTab() {
           }}
         />
         <TextFilter
-          label="판매자 ID"
+          label="판매자"
           value={sellerId}
           inputMode="numeric"
           onChange={(value) => {
@@ -1191,25 +1851,36 @@ function AdminTradesTab() {
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="text-xl font-black text-zinc-950">
-                    거래 #{trade.tradeId}
+                    {formatAdminTradeTitle(trade)}
                   </p>
-                  <StatusChip tone={trade.status === "DISPUTED" ? "danger" : "violet"}>
-                    {tradeStatusLabels[trade.status]}
+                  <StatusChip
+                    tone={trade.status === "DISPUTED" ? "danger" : "violet"}
+                  >
+                    {tradeStatusLabels[trade.status] ?? "상태 정보 없음"}
                   </StatusChip>
                   <StatusChip tone="default">
-                    {tradeTypeLabels[trade.tradeType]}
+                    {tradeTypeLabels[trade.tradeType] ?? "거래 유형 정보 없음"}
                   </StatusChip>
                 </div>
                 <p className="mt-1 text-sm font-semibold text-zinc-500">
-                  재능 #{trade.talentId} · {formatCredit(trade.creditPrice)}
+                  {formatAdminTradeMeta(trade)}
                 </p>
               </div>
 
               <div className="grid min-w-0 grid-cols-2 gap-2 text-sm sm:grid-cols-4">
-                <SmallMetric label="구매자" value={`#${trade.buyerId}`} />
-                <SmallMetric label="판매자" value={`#${trade.sellerId}`} />
-                <SmallMetric label="그룹" value={trade.tradeGroupId ? `#${trade.tradeGroupId}` : "-"} />
-                <SmallMetric label="생성" value={formatDate(trade.createdAt)} />
+                <SmallMetric
+                  label="구매자"
+                  value={formatAdminTradeBuyer(trade)}
+                />
+                <SmallMetric
+                  label="판매자"
+                  value={formatAdminTradeSeller(trade)}
+                />
+                <SmallMetric
+                  label="그룹"
+                  value={formatGroupLabel(trade.tradeGroupId)}
+                />
+                <SmallMetric label="생성" value={formatAdminDate(trade.createdAt)} />
               </div>
             </div>
           </article>
@@ -1225,7 +1896,7 @@ function AdminTradesTab() {
 }
 
 function AdminDisputesTab() {
-  const [disputes, setDisputes] = useState<AdminDisputeRes[]>([]);
+  const [disputes, setDisputes] = useState<AdminDisputeDisplay[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [processingTradeId, setProcessingTradeId] = useState<number | null>(
     null,
@@ -1239,7 +1910,11 @@ function AdminDisputesTab() {
 
     try {
       const response = await adminApi.getDisputes();
-      setDisputes(Array.isArray(response) ? response : []);
+      const nextDisputes = Array.isArray(response) ? response : [];
+      const enrichedDisputes = await Promise.all(
+        nextDisputes.map((dispute) => enrichAdminDispute(dispute)),
+      );
+      setDisputes(enrichedDisputes);
     } catch (error) {
       setDisputes([]);
       setErrorMessage(
@@ -1278,10 +1953,15 @@ function AdminDisputesTab() {
     }
   }
 
+  const disputeGroups = useMemo(
+    () => groupAdminDisputesForView(disputes),
+    [disputes],
+  );
+
   return (
     <AdminPanel
       title="분쟁 관리"
-      description="분쟁 상태의 거래를 조회하고 구매자/판매자 승소 판정을 내립니다."
+      description="분쟁 거래의 게시글과 채팅 내역을 확인하고 판정을 내립니다."
       action={<RefreshButton onClick={loadDisputes} disabled={isLoading} />}
     >
       <AdminMessages
@@ -1291,57 +1971,158 @@ function AdminDisputesTab() {
       />
 
       <div className="grid gap-3">
-        {disputes.map((dispute) => (
-          <article
-            key={dispute.tradeId}
-            className="rounded-lg border border-[#ded6ff] bg-white p-5 shadow-sm shadow-violet-950/[0.03] sm:px-7"
-          >
-            <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,0.9fr)_minmax(180px,0.48fr)] xl:items-center">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-xl font-black text-zinc-950">
-                    거래 #{dispute.tradeId}
+        {disputeGroups.map((group) => {
+          const dispute = group.representativeDispute;
+          const tradeId = getPositiveAdminId(dispute.tradeId);
+          const talentId = getPositiveAdminId(dispute.talentId);
+          const isProcessing = tradeId !== null && processingTradeId === tradeId;
+
+          return (
+            <article
+              key={group.key}
+              className="rounded-lg border border-[#ded6ff] bg-white p-5 shadow-sm shadow-violet-950/[0.03] sm:px-7"
+            >
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,0.9fr)_minmax(180px,0.48fr)] xl:items-center">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-xl font-black text-zinc-950">
+                      {group.title}
+                    </p>
+                    <StatusChip tone="danger">
+                      {tradeStatusLabels[dispute.tradeStatus] ?? "상태 정보 없음"}
+                    </StatusChip>
+                    <StatusChip tone="warning">
+                      {formatOptionalText(dispute.escrowStatus, "에스크로 정보 없음")}
+                    </StatusChip>
+                  </div>
+                  <p className="mt-1 text-sm font-semibold text-zinc-500">
+                    {formatAdminDisputeGroupMeta(group)}
                   </p>
-                  <StatusChip tone="danger">
-                    {tradeStatusLabels[dispute.tradeStatus]}
-                  </StatusChip>
-                  <StatusChip tone="warning">
-                    {dispute.escrowStatus}
-                  </StatusChip>
+                  <p
+                    title={
+                      hasText(dispute.disputeReason)
+                        ? dispute.disputeReason.trim()
+                        : "분쟁 사유가 없습니다."
+                    }
+                    className="mt-3 rounded-lg bg-zinc-50 p-3 text-sm font-semibold leading-6 text-zinc-700"
+                  >
+                    {group.reason}
+                  </p>
+                  {group.isSwapGroup ? (
+                    <div className="mt-3 rounded-lg border border-[#f0ebff] bg-[#fbf9ff] p-3">
+                      <p className="text-xs font-black text-[#6f3cff]">
+                        교환 구성
+                      </p>
+                      <div className="mt-2 grid gap-2">
+                        {group.talentItems.map((item) => (
+                          <div
+                            key={item.key}
+                            className="rounded-md bg-white px-3 py-2"
+                          >
+                            <p className="truncate text-sm font-black text-zinc-900">
+                              {item.tradeLabel} · {item.talentTitle}
+                            </p>
+                            <p className="mt-1 text-xs font-bold leading-5 text-zinc-500">
+                              {item.buyerLabel} · {item.sellerLabel}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {talentId !== null ? (
+                      <Link
+                        href={`/talents/${talentId}`}
+                        className="inline-flex h-10 items-center justify-center rounded-lg border border-[#d9ccff] bg-white px-4 text-sm font-black text-[#6f3cff] transition hover:border-[#8c5bff] hover:bg-[#fbf9ff]"
+                      >
+                        게시글 보기
+                      </Link>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          disabled
+                          className="inline-flex h-10 cursor-not-allowed items-center justify-center rounded-lg border border-[#d9ccff] bg-zinc-50 px-4 text-sm font-black text-zinc-400"
+                        >
+                          게시글 보기
+                        </button>
+                        <span className="self-center text-xs font-bold text-zinc-500">
+                          게시글 정보를 확인할 수 없습니다.
+                        </span>
+                      </>
+                    )}
+                    <button
+                      type="button"
+                      disabled
+                      className="inline-flex h-10 cursor-not-allowed items-center justify-center rounded-lg border border-[#d9ccff] bg-zinc-50 px-4 text-sm font-black text-zinc-400"
+                    >
+                      채팅 내역 보기
+                    </button>
+                  </div>
+                  <p className="mt-2 text-xs font-bold leading-5 text-zinc-500">
+                    {ADMIN_CHAT_HISTORY_UNAVAILABLE_MESSAGE}
+                  </p>
                 </div>
-                <p className="mt-1 text-sm font-semibold text-zinc-500">
-                  재능 #{dispute.talentId} · {formatCredit(dispute.creditPrice)}
-                </p>
-                <p className="mt-3 rounded-lg bg-zinc-50 p-3 text-sm font-semibold leading-6 text-zinc-700">
-                  {dispute.disputeReason ?? "분쟁 사유가 없습니다."}
-                </p>
-              </div>
 
-              <div className="grid min-w-0 grid-cols-2 gap-2 text-sm">
-                <SmallMetric label="구매자" value={`#${dispute.buyerId}`} />
-                <SmallMetric label="판매자" value={`#${dispute.sellerId}`} />
-                <SmallMetric label="유형" value={tradeTypeLabels[dispute.tradeType]} />
-                <SmallMetric label="생성" value={formatDate(dispute.createdAt)} />
-              </div>
+                <div className="grid min-w-0 grid-cols-2 gap-2 text-sm">
+                  <SmallMetric
+                    label="구매자"
+                    value={formatAdminTradeBuyer(dispute)}
+                  />
+                  <SmallMetric
+                    label="판매자"
+                    value={formatAdminTradeSeller(dispute)}
+                  />
+                  <SmallMetric
+                    label="유형"
+                    value={tradeTypeLabels[dispute.tradeType] ?? "거래 유형 정보 없음"}
+                  />
+                  <SmallMetric
+                    label="생성"
+                    value={formatAdminDate(dispute.createdAt)}
+                  />
+                </div>
 
-              <div className="grid min-w-0 grid-cols-2 gap-2">
-                <ActionButton
-                  disabled={processingTradeId === dispute.tradeId}
-                  onClick={() => handleResolve(dispute.tradeId, "BUYER_WIN")}
-                >
-                  구매자 승소
-                </ActionButton>
-                <ActionButton
-                  disabled={processingTradeId === dispute.tradeId}
-                  onClick={() => handleResolve(dispute.tradeId, "SELLER_WIN")}
-                >
-                  판매자 승소
-                </ActionButton>
+                <div className="grid min-w-0 grid-cols-3 gap-2 xl:grid-cols-1">
+                  <ActionButton
+                    disabled={tradeId === null || isProcessing}
+                    className="font-black"
+                    onClick={() => {
+                      if (tradeId !== null) {
+                        void handleResolve(tradeId, "BUYER_WIN");
+                      }
+                    }}
+                  >
+                    구매자 승소
+                  </ActionButton>
+                  <ActionButton
+                    disabled={tradeId === null || isProcessing}
+                    className="font-black"
+                    onClick={() => {
+                      if (tradeId !== null) {
+                        void handleResolve(tradeId, "SELLER_WIN");
+                      }
+                    }}
+                  >
+                    판매자 승소
+                  </ActionButton>
+                  <ActionButton
+                    disabled
+                    className="font-black disabled:text-zinc-400"
+                    onClick={() => undefined}
+                  >
+                    기각
+                  </ActionButton>
+                  <p className="col-span-3 text-xs font-bold leading-5 text-zinc-400 xl:col-span-1">
+                    기각은 현재 백엔드 판정값이 없어 비활성화되어 있습니다.
+                  </p>
+                </div>
               </div>
-            </div>
-          </article>
-        ))}
-        {!isLoading && disputes.length === 0 ? (
+            </article>
+          );
+        })}
+        {!isLoading && disputeGroups.length === 0 ? (
           <EmptyState title="분쟁 중인 거래가 없습니다." />
         ) : null}
       </div>
@@ -1350,7 +2131,7 @@ function AdminDisputesTab() {
 }
 
 function AdminActionLogsTab() {
-  const [logs, setLogs] = useState<AdminActionLogRes[]>([]);
+  const [logs, setLogs] = useState<AdminActionLogDisplay[]>([]);
   const [adminId, setAdminId] = useState("");
   const [targetType, setTargetType] = useState<AdminActionTargetType | "">("");
   const [targetId, setTargetId] = useState("");
@@ -1373,7 +2154,10 @@ function AdminActionLogsTab() {
         page,
         size: PAGE_SIZE,
       });
-      setLogs(response.content);
+      const enrichedLogs = await Promise.all(
+        response.content.map((log) => enrichAdminActionLog(log)),
+      );
+      setLogs(enrichedLogs);
       setPageInfo(toPageInfo(response));
     } catch (error) {
       setLogs([]);
@@ -1404,8 +2188,9 @@ function AdminActionLogsTab() {
     >
       <FilterRow>
         <TextFilter
-          label="관리자 ID"
+          label="관리자"
           value={adminId}
+          placeholder="관리자 번호"
           inputMode="numeric"
           onChange={(value) => {
             setPage(0);
@@ -1423,8 +2208,9 @@ function AdminActionLogsTab() {
           }}
         />
         <TextFilter
-          label="대상 ID"
+          label="대상 번호"
           value={targetId}
+          placeholder="대상 번호"
           inputMode="numeric"
           onChange={(value) => {
             setPage(0);
@@ -1447,8 +2233,8 @@ function AdminActionLogsTab() {
 
       <div className="grid gap-3">
         {logs.map((log) => {
-          const targetLabel = `${targetTypeLabels[log.targetType]} #${log.targetId}`;
-          const actionLabel = actionTypeLabels[log.actionType];
+          const targetLabel = formatAdminActionTarget(log);
+          const actionLabel = actionTypeLabels[log.actionType] ?? "관리자 조치";
 
           return (
             <article
@@ -1470,22 +2256,38 @@ function AdminActionLogsTab() {
                     {getActionLogSummary(log)}
                   </h3>
                   <p className="mt-2 text-sm font-semibold leading-6 text-zinc-500">
-                    관리자 #{log.adminId} · {actionLabel} ·{" "}
-                    {formatDate(log.createdAt)}
+                    {formatAdminActionAdmin(log)} · {actionLabel} ·{" "}
+                    {formatAdminDate(log.createdAt)}
                   </p>
 
                   {log.reason ? (
-                    <p className="mt-3 rounded-lg bg-[#fbf9ff] px-4 py-3 text-sm font-semibold leading-6 text-zinc-600">
-                      {log.reason}
+                    <p
+                      title={log.reason}
+                      className="mt-3 rounded-lg bg-[#fbf9ff] px-4 py-3 text-sm font-semibold leading-6 text-zinc-600"
+                    >
+                      {formatAdminShortText(log.reason, "조치 사유가 없습니다.")}
                     </p>
                   ) : null}
 
                   <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
-                    <SmallMetric label="관리자 ID" value={`#${log.adminId}`} />
-                    <SmallMetric label="대상" value={targetTypeLabels[log.targetType]} />
-                    <SmallMetric label="대상 ID" value={`#${log.targetId}`} />
+                    <SmallMetric
+                      label="관리자"
+                      value={formatAdminActionAdmin(log)}
+                    />
+                    <SmallMetric
+                      label="대상 유형"
+                      value={
+                        log.targetDetailLabel ??
+                        targetTypeLabels[log.targetType] ??
+                        "대상"
+                      }
+                    />
+                    <SmallMetric label="대상 게시물" value={targetLabel} />
                     <SmallMetric label="조치" value={actionLabel} />
-                    <SmallMetric label="날짜" value={formatDate(log.createdAt)} />
+                    <SmallMetric
+                      label="날짜"
+                      value={formatAdminDate(log.createdAt)}
+                    />
                   </div>
                 </div>
               </div>
@@ -1502,8 +2304,8 @@ function AdminActionLogsTab() {
   );
 }
 
-function getActionLogSummary(log: AdminActionLogRes): string {
-  const targetLabel = `${targetTypeLabels[log.targetType]} #${log.targetId}`;
+function getActionLogSummary(log: AdminActionLogDisplay): string {
+  const targetLabel = formatAdminActionTarget(log);
 
   switch (log.actionType) {
     case "USER_STATUS_CHANGED":
@@ -1531,7 +2333,9 @@ function AdminPanel({
     <section className="rounded-lg border border-[#ded6ff] bg-white p-5 shadow-sm shadow-violet-950/[0.04] sm:p-6">
       <div className="mb-5 flex flex-col gap-4 border-b border-[#f0ebff] pb-5 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h2 className="text-2xl font-black text-zinc-950 sm:text-3xl">{title}</h2>
+          <h2 className="text-2xl font-black text-zinc-950 sm:text-3xl">
+            {title}
+          </h2>
           <p className="mt-3 text-base font-semibold leading-7 text-zinc-500 sm:text-lg sm:leading-8">
             {description}
           </p>
@@ -1613,8 +2417,9 @@ function TextFilter({
           placeholder={placeholder}
           inputMode={inputMode}
           onChange={(event) => onChange(event.target.value)}
-          className={`h-11 w-full rounded-lg border border-[#d9ccff] bg-white px-3 text-sm font-semibold text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-[#8c5bff] focus:ring-4 focus:ring-[#f4f0ff] ${inputMode ? "" : "pl-9"
-            }`}
+          className={`h-11 w-full rounded-lg border border-[#d9ccff] bg-white px-3 text-sm font-semibold text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-[#8c5bff] focus:ring-4 focus:ring-[#f4f0ff] ${
+            inputMode ? "" : "pl-9"
+          }`}
         />
       </div>
     </label>
@@ -1632,9 +2437,7 @@ function AdminMessages({
 }) {
   return (
     <>
-      {isLoading ? (
-        <StatusPanel>목록을 불러오는 중입니다.</StatusPanel>
-      ) : null}
+      {isLoading ? <StatusPanel>목록을 불러오는 중입니다.</StatusPanel> : null}
       {errorMessage ? (
         <div className="mb-5">
           <ErrorState message={errorMessage} />
@@ -1681,11 +2484,13 @@ function ActionButton({
   disabled,
   onClick,
   size = "default",
+  className = "",
   children,
 }: {
   disabled: boolean;
   onClick: () => void;
   size?: "default" | "compact";
+  className?: string;
   children: ReactNode;
 }) {
   const sizeClassName =
@@ -1696,7 +2501,7 @@ function ActionButton({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className={`w-full cursor-pointer rounded-lg border border-[#d9ccff] bg-white font-black text-[#6f3cff] transition hover:border-[#8c5bff] hover:bg-[#fbf9ff] disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-300 ${sizeClassName}`}
+      className={`w-full cursor-pointer rounded-lg border border-[#d9ccff] bg-white font-black text-[#6f3cff] transition hover:border-[#8c5bff] hover:bg-[#fbf9ff] disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-300 ${sizeClassName} ${className}`}
     >
       {children}
     </button>
