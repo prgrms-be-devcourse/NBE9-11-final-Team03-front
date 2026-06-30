@@ -35,7 +35,10 @@ export function TalentDetailActions({
   const [isSubmittingSwapRequest, setIsSubmittingSwapRequest] = useState(false);
   const selectRef = useRef<HTMLDivElement | null>(null);
 
-  const visibleMyTalents = isLoggedIn ? (myTalents ?? []) : [];
+  const visibleMyTalents = useMemo(
+    () => (isLoggedIn ? (myTalents ?? []) : []),
+    [isLoggedIn, myTalents],
+  );
   const isLoadingMyTalents = isLoggedIn && myTalents === null;
 
   const selectedTalent = useMemo(

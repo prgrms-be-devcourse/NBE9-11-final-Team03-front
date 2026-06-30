@@ -8,6 +8,7 @@ import type {
   AdminActionLogRes,
   AdminActionLogSearchParams,
   AdminDisputeRes,
+  AdminDashboardSummaryRes,
   AdminPageRes,
   AdminReportResolveReq,
   AdminReportSearchParams,
@@ -15,6 +16,8 @@ import type {
   AdminTalentRes,
   AdminTalentSearchParams,
   AdminTalentStatusUpdateReq,
+  AdminTradeRes,
+  AdminTradeSearchParams,
   AdminUserRes,
   AdminUserSearchParams,
   AdminUserStatusUpdateReq,
@@ -547,6 +550,10 @@ export const tradeApi = {
 };
 
 export const adminApi = {
+  getDashboardSummary(): Promise<AdminDashboardSummaryRes> {
+    return apiFetch<AdminDashboardSummaryRes>("/api/v1/admin/dashboard");
+  },
+
   getUsers(
     params: AdminUserSearchParams = {},
   ): Promise<AdminPageRes<AdminUserRes>> {
@@ -614,6 +621,14 @@ export const adminApi = {
         body: payload,
       },
     );
+  },
+
+  getTrades(
+    params: AdminTradeSearchParams = {},
+  ): Promise<AdminPageRes<AdminTradeRes>> {
+    return apiFetch<AdminPageRes<AdminTradeRes>>("/api/v1/admin/trades", {
+      query: params,
+    });
   },
 
   getActionLogs(

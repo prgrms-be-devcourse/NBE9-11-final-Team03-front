@@ -494,6 +494,19 @@ export interface AdminPageRes<T> {
   hasNext: boolean;
 }
 
+export interface AdminDashboardSummaryRes {
+  totalUsers: number;
+  usersByStatus: Record<string, number>;
+  totalTalents: number;
+  talentsByStatus: Record<string, number>;
+  totalTrades: number;
+  tradesByStatus: Record<string, number>;
+  totalReports: number;
+  reportsByStatus: Record<string, number>;
+  totalEscrows: number;
+  escrowsByStatus: Record<string, number>;
+}
+
 export interface AdminUserSearchParams {
   status?: UserStatus;
   role?: UserRole;
@@ -566,6 +579,29 @@ export interface AdminTalentReportRes {
   reason: ReportReason;
   description: string | null;
   status: ReportStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminTradeSearchParams {
+  status?: TradeStatus;
+  buyerId?: number;
+  sellerId?: number;
+  tradeType?: TradeType;
+  page?: number;
+  size?: number;
+}
+
+export interface AdminTradeRes {
+  tradeId: number;
+  matchId: number | null;
+  tradeGroupId: number | null;
+  talentId: number;
+  buyerId: number;
+  sellerId: number;
+  creditPrice: number;
+  tradeType: TradeType;
+  status: TradeStatus;
   createdAt: string;
   updatedAt: string;
 }
