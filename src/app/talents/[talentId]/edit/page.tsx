@@ -167,7 +167,7 @@ export default function EditTalentPage() {
   }
 
   return (
-    <div className="mx-auto w-[720px] py-10">
+    <div className="fixed-container max-w-[720px] py-10">
       <SectionTitle
         title="재능 수정"
         description="등록한 재능의 카테고리, 제목, 내용, 기간, 크레딧을 수정합니다."
@@ -187,7 +187,7 @@ export default function EditTalentPage() {
         <form
           onSubmit={handleSubmit(onSubmit)}
           noValidate
-          className="space-y-5 rounded-lg border border-zinc-200 bg-white p-6"
+          className="space-y-5 rounded-lg border border-zinc-200 bg-white p-5 sm:p-6"
         >
           <Field label="제목" error={errors.title?.message}>
             <input {...register("title")} className="form-input" />
@@ -220,11 +220,11 @@ export default function EditTalentPage() {
             <textarea
               {...register("content")}
               rows={6}
-              className="form-input min-h-36"
+              className="form-input min-h-36 resize-none"
             />
           </Field>
 
-          <div className="grid grid-cols-2 gap-5">
+          <div className="grid gap-5 sm:grid-cols-2">
             <Field
               label="예상 작업 기간"
               error={errors.estimatedHours?.message}

@@ -494,8 +494,8 @@ export default function TradeDetailPage() {
           aria-hidden="true"
         />
 
-        <div className="fixed-container relative py-16">
-          <div className="mx-auto w-[880px] rounded-lg border border-[#ded6ff] bg-white/90 p-8 text-center text-sm font-black text-zinc-500 shadow-[0_28px_80px_rgba(80,60,160,0.14)] backdrop-blur">
+        <div className="fixed-container relative py-10 sm:py-14 lg:py-16">
+          <div className="mx-auto w-full max-w-[880px] rounded-lg border border-[#ded6ff] bg-white/90 p-6 text-center text-sm font-black text-zinc-500 shadow-[0_28px_80px_rgba(80,60,160,0.14)] backdrop-blur sm:p-8">
             거래 상세를 불러오는 중입니다.
           </div>
         </div>
@@ -514,34 +514,34 @@ export default function TradeDetailPage() {
         aria-hidden="true"
       />
 
-      <div className="fixed-container relative pb-24 pt-16">
+      <div className="fixed-container relative pb-20 pt-10 sm:pb-24 sm:pt-14 lg:pt-16">
         <header className="mx-auto max-w-3xl text-center">
           <p className="text-sm font-black uppercase tracking-[0.32em] text-[#8c5bff]">
             Trade Desk
           </p>
-          <h1 className="mt-4 text-5xl font-black tracking-normal text-zinc-950">
+          <h1 className="baton-page-title mt-4">
             TRADE DETAIL
           </h1>
-          <p className="mx-auto mt-5 max-w-2xl text-lg font-semibold leading-8 text-zinc-600">
+          <p className="mx-auto mt-4 max-w-2xl text-sm font-semibold leading-7 text-zinc-600 sm:mt-5 sm:text-lg sm:leading-8">
             거래 상태, 에스크로, 결과물 제출과 구매 확정을 한 화면에서 확인하세요.
           </p>
         </header>
 
       {errorMessage ? (
-        <div className="mx-auto mt-8 w-[1180px]">
+        <div className="mx-auto mt-8 w-full max-w-[1180px]">
           <ErrorState message={errorMessage} />
         </div>
       ) : null}
 
       {successMessage ? (
-        <p className="mx-auto mt-8 w-[1180px] rounded-lg border border-[#d9ccff] bg-[#fbf9ff] p-4 text-sm font-black text-[#8c5bff] shadow-sm shadow-violet-950/[0.04]">
+        <p className="mx-auto mt-8 w-full max-w-[1180px] rounded-lg border border-[#d9ccff] bg-[#fbf9ff] p-4 text-sm font-black text-[#8c5bff] shadow-sm shadow-violet-950/[0.04]">
           {successMessage}
         </p>
       ) : null}
 
       {trade ? (
-        <div className="mx-auto mt-12 grid w-[1180px] grid-cols-[1fr_360px] gap-6">
-          <section className="relative overflow-hidden rounded-lg border border-[#ded6ff] bg-white/90 p-8 shadow-[0_28px_80px_rgba(80,60,160,0.14)] backdrop-blur">
+        <div className="mx-auto mt-8 grid w-full max-w-[1180px] grid-cols-1 gap-6 lg:mt-12 lg:grid-cols-[1fr_360px]">
+          <section className="relative overflow-hidden rounded-lg border border-[#ded6ff] bg-white/90 p-5 shadow-[0_28px_80px_rgba(80,60,160,0.14)] backdrop-blur sm:p-8">
             <div
               className="absolute inset-x-0 top-0 h-1 rounded-t-lg bg-[linear-gradient(90deg,#8c5bff_0%,#78a9ff_52%,#79e4dd_100%)]"
               aria-hidden="true"
@@ -558,7 +558,7 @@ export default function TradeDetailPage() {
               <TypePill label={getTradeTypeLabel(trade.tradeType)} />
             </div>
 
-            <div className="mt-6 grid grid-cols-3 gap-4 rounded-lg border border-[#eee8ff] bg-[#fbf9ff] p-5">
+            <div className="mt-6 grid grid-cols-1 gap-4 rounded-lg border border-[#eee8ff] bg-[#fbf9ff] p-4 sm:grid-cols-2 sm:p-5 lg:grid-cols-3">
               <SummaryItem title="거래 ID" value={`#${trade.tradeId}`} />
               <SummaryItem title="재능 ID" value={`#${trade.talentId}`} />
               <SummaryItem
@@ -587,7 +587,7 @@ export default function TradeDetailPage() {
               />
             </div>
 
-            <div className="mt-6 grid grid-cols-3 gap-4 rounded-lg border border-[#eee8ff] bg-white/80 p-5">
+            <div className="mt-6 grid grid-cols-1 gap-4 rounded-lg border border-[#eee8ff] bg-white/80 p-4 sm:grid-cols-2 sm:p-5 lg:grid-cols-3">
               <SummaryItem
                 title="거래 상태"
                 value={getTradeStatusLabel(trade.tradeStatus)}
@@ -774,7 +774,7 @@ export default function TradeDetailPage() {
       ) : null}
 
       {shouldShowSubmissionSection ? (
-        <section className="relative mx-auto mt-6 w-[1180px] overflow-hidden rounded-lg border border-[#ded6ff] bg-white/90 p-8 shadow-[0_28px_80px_rgba(80,60,160,0.14)] backdrop-blur">
+        <section className="relative mx-auto mt-6 w-full max-w-[1180px] overflow-hidden rounded-lg border border-[#ded6ff] bg-white/90 p-5 shadow-[0_28px_80px_rgba(80,60,160,0.14)] backdrop-blur sm:p-8">
           <div
             className="absolute inset-x-0 top-0 h-1 rounded-t-lg bg-[linear-gradient(90deg,#8c5bff_0%,#78a9ff_52%,#79e4dd_100%)]"
             aria-hidden="true"
@@ -787,7 +787,7 @@ export default function TradeDetailPage() {
             </div>
           ) : submission ? (
             <>
-              <div className="mt-4 grid grid-cols-4 gap-4 rounded-lg border border-[#eee8ff] bg-[#fbf9ff] p-5">
+              <div className="mt-4 grid grid-cols-1 gap-4 rounded-lg border border-[#eee8ff] bg-[#fbf9ff] p-4 sm:grid-cols-2 sm:p-5 lg:grid-cols-4">
                 <SummaryItem title="제출 ID" value={`#${submission.id}`} />
                 <SummaryItem
                   title="에스크로 ID"

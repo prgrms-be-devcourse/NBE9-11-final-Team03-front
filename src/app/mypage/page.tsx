@@ -145,7 +145,7 @@ export default function MyPage() {
       ) : null}
 
       <section className="rounded-lg border border-zinc-200 bg-white p-6">
-        <div className="flex items-start justify-between gap-6">
+        <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex min-w-0 items-center gap-4">
             {profile?.profileImageUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -171,10 +171,10 @@ export default function MyPage() {
               </p>
             </div>
           </div>
-          <div className="flex shrink-0 gap-2">
+          <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
             <Link
               href="/profile/edit"
-              className="inline-flex h-10 items-center rounded-md border border-zinc-300 px-4 text-sm font-bold text-zinc-700 transition hover:bg-zinc-50"
+              className="inline-flex h-10 items-center justify-center rounded-md border border-zinc-300 px-4 text-sm font-bold text-zinc-700 transition hover:bg-zinc-50"
             >
               프로필 수정
             </Link>
@@ -189,7 +189,7 @@ export default function MyPage() {
         </div>
       </section>
 
-      <section className="mt-6 grid grid-cols-3 gap-4">
+      <section className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Summary title="사용 가능 크레딧" value={formatCredit(balanceValue)} />
         <Summary
           title="에스크로 예치 중"
@@ -225,7 +225,7 @@ export default function MyPage() {
                 <Link
                   key={trade.tradeId}
                   href={`/trades/${trade.tradeId}`}
-                  className="grid grid-cols-[1fr_120px_140px] items-center gap-4 rounded-lg border border-zinc-200 p-4 transition hover:border-teal-300 hover:bg-teal-50/40"
+                  className="grid grid-cols-1 gap-3 rounded-lg border border-zinc-200 p-4 transition hover:border-teal-300 hover:bg-teal-50/40 sm:grid-cols-[1fr_120px_140px] sm:items-center sm:gap-4"
                 >
                   <div>
                     <p className="font-black text-zinc-950">
@@ -238,7 +238,7 @@ export default function MyPage() {
                   <p className="text-sm font-bold text-zinc-700">
                     {TRADE_STATUS_LABELS[trade.tradeStatus]}
                   </p>
-                  <p className="text-right text-sm font-black text-zinc-950">
+                  <p className="text-sm font-black text-zinc-950 sm:text-right">
                     {formatCredit(trade.creditPrice)}
                   </p>
                 </Link>
@@ -284,7 +284,7 @@ function WithdrawConfirmModal({
       aria-labelledby="withdraw-title"
       className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/45 p-6"
     >
-      <div className="w-[420px] rounded-xl border border-zinc-200 bg-white p-7 shadow-2xl">
+      <div className="w-full max-w-[420px] rounded-xl border border-zinc-200 bg-white p-6 shadow-2xl sm:p-7">
         <h2 id="withdraw-title" className="text-xl font-black text-zinc-950">
           회원 탈퇴
         </h2>

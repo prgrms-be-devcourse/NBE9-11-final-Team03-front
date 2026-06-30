@@ -154,12 +154,12 @@ export default function CreditsPage() {
     <main className="relative min-h-[calc(100dvh-64px)] overflow-hidden bg-white">
       <div className="pointer-events-none absolute left-1/2 top-[-220px] h-[420px] w-[720px] -translate-x-1/2 rounded-full bg-[#f4f0ff] blur-3xl" />
 
-      <div className="fixed-container relative py-16">
+      <div className="fixed-container relative py-10 sm:py-14 lg:py-16">
         <header className="mx-auto max-w-3xl text-center">
-          <h1 className="mt-4 text-6xl font-black tracking-normal text-zinc-950">
+          <h1 className="baton-page-title mt-4">
             CREDIT WALLET
           </h1>
-          <p className="mx-auto mt-5 max-w-2xl text-base font-semibold leading-7 text-zinc-500">
+          <p className="mx-auto mt-4 max-w-2xl text-sm font-semibold leading-7 text-zinc-500 sm:mt-5 sm:text-lg sm:leading-8">
             사용 가능한 크레딧과 거래 중 예치된 금액을 한눈에 확인하세요.
             <br />
             적립, 사용, 정산 흐름을 Baton 거래 기준으로 정리해 보여드립니다.
@@ -172,7 +172,7 @@ export default function CreditsPage() {
           </div>
         ) : null}
 
-        <div className="mt-14 grid gap-4 md:grid-cols-3">
+        <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:mt-14 lg:grid-cols-3">
           <Summary
             title="사용 가능 크레딧"
             description="바로 사용할 수 있는 잔액"

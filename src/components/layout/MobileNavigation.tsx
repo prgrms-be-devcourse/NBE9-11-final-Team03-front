@@ -112,9 +112,9 @@ export function MobileNavigation() {
   return (
     <nav
       aria-label="모바일 내비게이션"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-zinc-200 bg-white/95 shadow-[0_-8px_24px_rgba(24,24,27,0.08)] backdrop-blur lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 w-full border-t border-zinc-200 bg-white/95 shadow-[0_-8px_24px_rgba(24,24,27,0.08)] backdrop-blur lg:hidden"
     >
-      <div className={`grid ${gridClassName} pb-[env(safe-area-inset-bottom)]`}>
+      <div className={`grid ${gridClassName} min-w-0 pb-[env(safe-area-inset-bottom)]`}>
         {items.map((item) => {
           const Icon = item.icon;
           const isActive = item.isActive(pathname);
@@ -126,7 +126,7 @@ export function MobileNavigation() {
               aria-current={isActive ? "page" : undefined}
               className={`flex min-h-16 flex-col items-center justify-center gap-1 text-xs font-black transition ${
                 isActive
-                  ? "text-teal-700"
+                  ? "text-[#8c5bff]"
                   : "text-zinc-500 hover:text-zinc-950"
               }`}
             >

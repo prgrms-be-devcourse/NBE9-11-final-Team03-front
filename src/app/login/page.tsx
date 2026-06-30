@@ -131,7 +131,7 @@ export default function LoginPage() {
 
 function AuthShell({ children }: { children: React.ReactNode }) {
   return (
-    <main className="relative min-h-dvh overflow-hidden bg-[linear-gradient(135deg,#f7fbff_0%,#edf5ff_42%,#f4efff_100%)] px-6 py-16">
+    <main className="relative min-h-dvh overflow-hidden bg-[linear-gradient(135deg,#f7fbff_0%,#edf5ff_42%,#f4efff_100%)] px-4 py-12 sm:px-6 sm:py-16">
       <div
         className="pointer-events-none absolute left-[12%] top-28 h-40 w-40 rounded-full bg-cyan-200/35 blur-3xl"
         aria-hidden="true"
@@ -140,7 +140,7 @@ function AuthShell({ children }: { children: React.ReactNode }) {
         className="pointer-events-none absolute right-[14%] top-16 h-52 w-52 rounded-full bg-violet-300/35 blur-3xl"
         aria-hidden="true"
       />
-      <div className="relative mx-auto flex w-[480px] flex-col">
+      <div className="relative mx-auto flex w-full max-w-[480px] flex-col">
         <Link
           href="/"
           className="mx-auto mb-8 inline-flex items-center gap-3 rounded-xl outline-none transition focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2"
@@ -153,7 +153,7 @@ function AuthShell({ children }: { children: React.ReactNode }) {
             className="h-12 w-auto"
           />
         </Link>
-        <section className="rounded-3xl border border-white/80 bg-white/88 p-9 shadow-2xl shadow-violet-950/10 backdrop-blur">
+        <section className="rounded-3xl border border-white/80 bg-white/88 p-6 shadow-2xl shadow-violet-950/10 backdrop-blur sm:p-9">
           <div className="text-center">
             <p className="text-sm font-black uppercase tracking-[0.22em] text-violet-500">
               Welcome Back

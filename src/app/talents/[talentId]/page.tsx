@@ -1,13 +1,11 @@
 "use client";
 
+import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
-import { SectionTitle } from "@/components/common/SectionTitle";
-import { StatusBadge } from "@/components/common/StatusBadge";
-import { TalentAttachmentPanel } from "@/components/talent/TalentAttachmentPanel";
 import { TalentDetailActions } from "@/components/talent/TalentDetailActions";
 import {
   talentApi,
@@ -178,6 +176,8 @@ export default function TalentDetailPage() {
     currentUserId !== null &&
     talentAuthorId !== null &&
     currentUserId === talentAuthorId;
+  const authorIntroduction =
+    talent.author.introduction?.trim() || "아직 등록된 소개가 없습니다.";
 
   async function handleDeleteTalent() {
     if (!talent || !window.confirm("이 재능을 삭제하시겠습니까?")) {
@@ -200,171 +200,214 @@ export default function TalentDetailPage() {
   }
 
   return (
-    <div className="fixed-container py-10">
-      <div className="grid grid-cols-[1fr_340px] gap-8">
-        <article className="rounded-lg border border-zinc-200 bg-white p-6">
-          <div className="flex flex-wrap gap-2">
-            <StatusBadge label={talent.categoryName} tone="info" />
-            <StatusBadge
-              label={talent.status === "ACTIVE" ? "거래 가능" : "마감"}
-              tone={talent.status === "ACTIVE" ? "success" : "default"}
-            />
-          </div>
-          <h1 className="mt-4 text-3xl font-black text-zinc-950">
-            {talent.title}
-          </h1>
-          <p className="mt-4 whitespace-pre-line leading-8 text-zinc-700">
-            {talent.content}
-          </p>
-          <div className="mt-6 grid grid-cols-3 gap-4 rounded-lg bg-zinc-50 p-5">
-            <Metric
-              label="필요 크레딧"
-              value={formatCredit(talent.creditPrice)}
-            />
-            <Metric
-              label="예상 작업 기간"
-              value={formatEstimatedDuration(talent.estimatedHours)}
-            />
-            <Metric
-              label="평점 / 완료"
-              value={`★ ${formatRating(talent.avgRating)} · ${talent.completeCount}건`}
-            />
-          </div>
-          <div className="mt-6 grid grid-cols-3 gap-4 rounded-lg border border-zinc-100 p-5 text-sm">
-            <Metric label="조회수" value={`${talent.viewCount}회`} />
-            <Metric label="등록일" value={formatDate(talent.createdAt)} />
-            <Metric label="수정일" value={formatDate(talent.updatedAt)} />
-          </div>
-          <div className="mt-8">
-            {/* UX guard only; the backend still performs the real permission check. */}
-            {isOwner ? (
-              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4">
-                <p className="text-sm font-black text-zinc-950">
-                  내가 등록한 재능입니다.
-                </p>
-                <div className="mt-4 grid grid-cols-3 gap-3">
-                  <Link
-                    href={`/talents/${talent.id}/edit`}
-                    className="inline-flex h-11 items-center justify-center rounded-md bg-zinc-950 px-4 text-sm font-bold text-white transition hover:bg-zinc-700"
-                  >
-                    수정
-                  </Link>
-                  <button
-                    type="button"
-                    disabled={isDeleting}
-                    onClick={handleDeleteTalent}
-                    className="h-11 rounded-md border border-red-200 bg-white px-4 text-sm font-bold text-red-600 transition hover:bg-red-50 disabled:opacity-60"
-                  >
-                    {isDeleting ? "삭제 중" : "삭제"}
-                  </button>
-                  <a
-                    href="#talent-attachments"
-                    className="inline-flex h-11 items-center justify-center rounded-md border border-zinc-300 bg-white px-4 text-sm font-bold text-zinc-700 transition hover:bg-zinc-50"
-                  >
-                    첨부 관리
-                  </a>
-                </div>
-              </div>
-            ) : currentUserId === null ? (
-              <p className="rounded-md bg-zinc-50 p-3 text-sm font-semibold text-zinc-500">
-                로그인 후 이용해 주세요.
-              </p>
-            ) : talentAuthorId === null ? (
-              <p className="rounded-md bg-zinc-50 p-3 text-sm font-semibold text-zinc-500">
-                제공자 정보를 확인할 수 없어 요청할 수 없습니다.
-              </p>
-            ) : (
-              <TalentDetailActions
-                providerId={talentAuthorId}
-                providerTalentId={talent.id}
-                isOwner={isOwner}
-                isLoggedIn={currentUserId !== null}
+    <main className="min-h-[calc(100dvh-64px)] bg-white">
+      <div className="fixed-container relative py-10 sm:py-14 lg:py-16">
+        <Link
+          href="/talents"
+          className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#ded6ff] bg-white px-4 text-sm font-black text-[#8c5bff] shadow-sm shadow-violet-950/[0.04] transition hover:border-[#8c5bff] hover:bg-[#fbf9ff]"
+        >
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+          재능 둘러보기
+        </Link>
+
+        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-8">
+          <div className="space-y-6">
+            <article className="overflow-hidden rounded-lg border border-[#ded6ff] bg-white shadow-sm shadow-violet-950/[0.04]">
+              <div
+                className="h-1 bg-[linear-gradient(90deg,#8c5bff_0%,#78a9ff_52%,#79e4dd_100%)]"
+                aria-hidden="true"
               />
-            )}
-            {actionMessage ? (
-              <p className="mt-3 rounded-md bg-red-50 p-3 text-sm font-semibold text-red-700">
-                {actionMessage}
-              </p>
-            ) : null}
-          </div>
-        </article>
-
-        <aside className="space-y-5">
-          <div className="rounded-lg border border-zinc-200 bg-white p-5">
-            <p className="font-bold text-zinc-950">제공자 프로필</p>
-            <div className="mt-4 flex items-center gap-3">
-              {talent.author.profileImageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={talent.author.profileImageUrl}
-                  alt=""
-                  className="h-12 w-12 rounded-full object-cover"
-                />
-              ) : (
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-100 text-sm font-black text-zinc-500">
-                  {talent.author.nickname.slice(0, 1)}
+              <div className="p-6 sm:p-8">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap gap-2">
+                    <span className="inline-flex items-center rounded-full border border-[#d9ccff] bg-[#f4f0ff] px-3 py-1.5 text-xs font-black text-[#8c5bff]">
+                      {talent.categoryName}
+                    </span>
+                    <span
+                      className={`inline-flex items-center rounded-full px-3 py-1.5 text-xs font-black ${
+                        talent.status === "ACTIVE"
+                          ? "border border-emerald-200 bg-emerald-50 text-emerald-700"
+                          : "border border-zinc-200 bg-zinc-100 text-zinc-600"
+                      }`}
+                    >
+                      {talent.status === "ACTIVE" ? "거래 가능" : "마감"}
+                    </span>
+                  </div>
+                  <p className="text-sm font-semibold text-zinc-400">
+                    등록일 {formatDate(talent.createdAt)}
+                  </p>
                 </div>
-              )}
-              <div>
-                <p className="text-xl font-black">
-                  {talent.author.nickname}
+
+                <h1 className="mt-6 text-3xl font-black leading-tight tracking-normal text-zinc-950 sm:text-4xl">
+                  {talent.title}
+                </h1>
+                <p className="mt-5 whitespace-pre-line text-base font-semibold leading-8 text-zinc-600">
+                  {talent.content}
                 </p>
-                <p className="mt-1 text-sm text-zinc-500">
-                  신뢰 점수 {formatRating(talent.author.trustScore)}
+
+                <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <MetricCard
+                    label="필요 크레딧"
+                    value={formatCredit(talent.creditPrice)}
+                  />
+                  <MetricCard
+                    label="작업 기간"
+                    value={formatEstimatedDuration(talent.estimatedHours)}
+                  />
+                  <MetricCard
+                    label="평점 / 완료"
+                    value={`★ ${formatRating(talent.avgRating)} · ${talent.completeCount}건`}
+                  />
+                </div>
+
+                <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <MetaCard label="조회수" value={`${talent.viewCount}회`} />
+                  <MetaCard label="수정일" value={formatDate(talent.updatedAt)} />
+                  <MetaCard label="작성자" value={talent.author.nickname} />
+                </div>
+              </div>
+            </article>
+
+            <section className="rounded-lg border border-[#ded6ff] bg-white p-5 shadow-sm shadow-violet-950/[0.04] sm:p-6">
+              {/* UX guard only; the backend still performs the real permission check. */}
+              {isOwner ? (
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.22em] text-[#8c5bff]">
+                    Manage
+                  </p>
+                  <div className="mt-2 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <h2 className="text-xl font-black text-zinc-950">
+                        내가 등록한 재능입니다
+                      </h2>
+                      <p className="mt-2 text-sm font-semibold leading-6 text-zinc-500">
+                        상세 내용을 수정하거나 더 이상 노출하지 않을 수 있습니다.
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 sm:w-64">
+                      <Link
+                        href={`/talents/${talent.id}/edit`}
+                        className="inline-flex h-11 items-center justify-center rounded-lg bg-zinc-950 px-4 text-sm font-black text-white transition hover:bg-zinc-800"
+                      >
+                        수정
+                      </Link>
+                      <button
+                        type="button"
+                        disabled={isDeleting}
+                        onClick={handleDeleteTalent}
+                        className="h-11 rounded-lg border border-red-200 bg-white px-4 text-sm font-black text-red-600 transition hover:bg-red-50 disabled:opacity-60"
+                      >
+                        {isDeleting ? "삭제 중" : "삭제"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : currentUserId === null ? (
+                <p className="rounded-lg border border-[#ded6ff] bg-[#fbf9ff] p-4 text-sm font-black text-[#8c5bff]">
+                  로그인 후 요청할 수 있습니다.
+                </p>
+              ) : talentAuthorId === null ? (
+                <p className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 text-sm font-black text-zinc-500">
+                  제공자 정보를 확인할 수 없어 요청할 수 없습니다.
+                </p>
+              ) : (
+                <TalentDetailActions
+                  providerId={talentAuthorId}
+                  providerTalentId={talent.id}
+                  isOwner={isOwner}
+                  isLoggedIn={currentUserId !== null}
+                />
+              )}
+              {actionMessage ? (
+                <p className="mt-3 rounded-lg border border-red-100 bg-red-50 p-3 text-sm font-bold text-red-700">
+                  {actionMessage}
+                </p>
+              ) : null}
+            </section>
+
+            <section className="rounded-lg border border-[#ded6ff] bg-white p-5 shadow-sm shadow-violet-950/[0.04] sm:p-6">
+              <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.22em] text-[#8c5bff]">
+                    Reviews
+                  </p>
+                  <h2 className="mt-2 text-xl font-black text-zinc-950">
+                    리뷰
+                  </h2>
+                </div>
+                <p className="text-sm font-semibold text-zinc-400">
+                  완료된 거래 후기가 표시됩니다.
                 </p>
               </div>
-            </div>
-            <p className="mt-4 text-sm leading-6 text-zinc-600">
-              {talent.author.introduction}
-            </p>
-            <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-              <p>
-                완료 <b>{talent.completeCount}건</b>
-              </p>
-              <p>
-                평점 <b>{formatRating(talent.avgRating)}</b>
-              </p>
-              <p>
-                조회 <b>{talent.viewCount}회</b>
-              </p>
-              <p>
-                카테고리 <b>{talent.categoryName}</b>
-              </p>
-            </div>
+              <EmptyState
+                title="아직 표시할 리뷰가 없어요"
+                description="백엔드 리뷰 연동 전까지는 상세 정보만 확인할 수 있습니다."
+              />
+            </section>
           </div>
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-5">
-            <p className="font-bold text-amber-950">에스크로 안내</p>
-            <p className="mt-2 text-sm leading-6 text-amber-900">
-              요청 시 크레딧은 즉시 지급되지 않고 에스크로에 보관됩니다. 결과물
-              확인 후 제공자에게 지급되며, 문제 발생 시 분쟁 신청이 가능합니다.
-            </p>
-          </div>
-          {!isOwner && currentUserId !== null ? (
-            <button
-              type="button"
-              onClick={() => setIsReportModalOpen(true)}
-              className="h-11 w-full rounded-md border border-red-200 bg-white px-4 text-sm font-bold text-red-600 transition hover:bg-red-50"
-            >
-              재능 신고
-            </button>
-          ) : null}
-        </aside>
-      </div>
 
-      <div id="talent-attachments" className="mt-10 scroll-mt-24">
-        <TalentAttachmentPanel talentId={talent.id} isOwner={isOwner} />
-      </div>
+          <aside className="space-y-5 lg:sticky lg:top-24 lg:self-start">
+            <div className="rounded-lg border border-[#ded6ff] bg-white p-5 shadow-sm shadow-violet-950/[0.04]">
+              <p className="text-xs font-black uppercase tracking-[0.22em] text-[#8c5bff]">
+                Provider
+              </p>
+              <h2 className="mt-2 text-lg font-black text-zinc-950">
+                제공자 프로필
+              </h2>
+              <div className="mt-5 flex items-center gap-3">
+                {talent.author.profileImageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={talent.author.profileImageUrl}
+                    alt=""
+                    className="h-14 w-14 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-14 w-14 items-center justify-center rounded-full border border-[#ded6ff] bg-[#f4f0ff] text-base font-black text-[#8c5bff]">
+                    {talent.author.nickname.slice(0, 1)}
+                  </div>
+                )}
+                <div>
+                  <p className="text-xl font-black text-zinc-950">
+                    {talent.author.nickname}
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-zinc-500">
+                    신뢰 점수 {formatRating(talent.author.trustScore)}
+                  </p>
+                </div>
+              </div>
+              <p className="mt-5 text-sm font-semibold leading-6 text-zinc-600">
+                {authorIntroduction}
+              </p>
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <MiniStat label="완료" value={`${talent.completeCount}건`} />
+                <MiniStat label="평점" value={formatRating(talent.avgRating)} />
+                <MiniStat label="조회" value={`${talent.viewCount}회`} />
+                <MiniStat label="카테고리" value={talent.categoryName} />
+              </div>
+            </div>
 
-      <section className="mt-10">
-        <SectionTitle
-          title="리뷰"
-          description="리뷰 API가 연결되면 완료된 거래 후기가 이 영역에 표시됩니다."
-        />
-        <EmptyState
-          title="아직 표시할 리뷰가 없어요"
-          description="백엔드 리뷰 연동 전까지는 상세 정보만 확인할 수 있습니다."
-        />
-      </section>
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-5">
+              <p className="font-black text-amber-950">에스크로 안내</p>
+              <p className="mt-3 text-sm font-semibold leading-6 text-amber-900">
+                요청 시 크레딧은 즉시 지급되지 않고 에스크로에 보관됩니다.
+                결과물 확인 후 제공자에게 지급되며, 문제 발생 시 분쟁 신청이
+                가능합니다.
+              </p>
+            </div>
+
+            {!isOwner && currentUserId !== null ? (
+              <button
+                type="button"
+                onClick={() => setIsReportModalOpen(true)}
+                className="h-11 w-full rounded-lg border border-red-200 bg-white px-4 text-sm font-black text-red-600 transition hover:bg-red-50"
+              >
+                재능 신고
+              </button>
+            ) : null}
+          </aside>
+        </div>
+      </div>
 
       {isReportModalOpen ? (
         <TalentReportModal
@@ -376,15 +419,33 @@ export default function TalentDetailPage() {
           }}
         />
       ) : null}
+    </main>
+  );
+}
+
+function MetricCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg bg-[#fbf9ff] p-4">
+      <p className="text-xs font-black text-[#8c5bff]">{label}</p>
+      <p className="mt-2 text-base font-black text-zinc-950">{value}</p>
     </div>
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function MetaCard({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <p className="text-sm text-zinc-500">{label}</p>
-      <p className="mt-1 font-bold text-zinc-950">{value}</p>
+    <div className="rounded-lg border border-zinc-100 bg-white p-4">
+      <p className="text-xs font-bold text-zinc-400">{label}</p>
+      <p className="mt-2 text-sm font-black text-zinc-950">{value}</p>
+    </div>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg bg-zinc-50 p-3">
+      <p className="text-xs font-bold text-zinc-400">{label}</p>
+      <p className="mt-1 truncate text-sm font-black text-zinc-950">{value}</p>
     </div>
   );
 }
@@ -439,7 +500,7 @@ function TalentReportModal({
     >
       <form
         onSubmit={handleSubmit}
-        className="w-[480px] rounded-xl border border-zinc-200 bg-white p-7 shadow-2xl"
+        className="w-full max-w-[480px] rounded-xl border border-zinc-200 bg-white p-6 shadow-2xl sm:p-7"
       >
         <h2 id="talent-report-title" className="text-xl font-black text-zinc-950">
           재능 신고

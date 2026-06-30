@@ -21,7 +21,6 @@ const profileMenuItems = [
 ];
 
 export function ProfileMenu({
-  nickname,
   profileImageUrl,
   isAdmin,
   onLogout,
@@ -75,11 +74,10 @@ export function ProfileMenu({
         aria-haspopup="menu"
         aria-expanded={isOpen}
         onClick={() => setIsOpen((current) => !current)}
-        className={`flex h-10 w-10 cursor-pointer items-center justify-center overflow-hidden rounded-full border transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#8c5bff] focus-visible:ring-offset-2 ${
-          isOpen
+        className={`flex h-10 w-10 cursor-pointer items-center justify-center overflow-hidden rounded-full border transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#8c5bff] focus-visible:ring-offset-2 ${isOpen
             ? "border-[#d9ccff] bg-[#f4f0ff] shadow-sm shadow-violet-500/10"
             : "border-zinc-200 bg-white hover:border-[#d9ccff] hover:bg-[#f8f5ff]"
-        }`}
+          }`}
       >
         {profileImageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element

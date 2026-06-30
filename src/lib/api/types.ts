@@ -59,6 +59,14 @@ export interface UserSignupRes {
   createdAt: string;
 }
 
+export interface UserCheckNicknameReq {
+  nickname: string;
+}
+
+export interface UserCheckNicknameRes {
+  usableNickname: boolean;
+}
+
 export interface EmailSendReq {
   email: string;
 }
@@ -128,6 +136,12 @@ export interface TalentListRes {
   talentId: number;
   categoryName: string;
   title: string;
+  nickname?: string | null;
+  authorNickname?: string | null;
+  sellerNickname?: string | null;
+  providerNickname?: string | null;
+  userNickname?: string | null;
+  author?: AuthorInfo | null;
   creditPrice: number;
   estimatedHours: number;
   avgRating: number;
@@ -220,6 +234,11 @@ export interface TalentAttachmentRes {
 export interface MatchRecommendationRes {
   talentId: number;
   providerId: number;
+  nickname?: string | null;
+  providerNickname?: string | null;
+  sellerNickname?: string | null;
+  authorNickname?: string | null;
+  userNickname?: string | null;
   categoryId: number;
   categoryName: string;
   title: string;

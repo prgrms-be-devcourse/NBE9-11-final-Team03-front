@@ -41,7 +41,7 @@ export function BrandLogo({ compact = false }: BrandLogoProps) {
           />
         </span>
         <span
-          className={`font-black tracking-[-0.055em] text-zinc-950 ${
+          className={`font-black leading-none tracking-normal text-zinc-950 ${
             compact ? "text-[22px]" : "text-[26px]"
           }`}
         >

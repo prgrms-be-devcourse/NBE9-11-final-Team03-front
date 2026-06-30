@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
-import { apiFetch, authApi } from "@/lib/api";
+import { authApi } from "@/lib/api";
 import { validatePassword } from "@/lib/validation/password";
 
 const PASSWORD_FORMAT_ERROR =
@@ -345,9 +345,6 @@ export default function SignupPage() {
               인증 완료 후 이메일이 변경되었습니다. 다시 중복 확인과 인증을 진행해 주세요.
             </StatusMessage>
           ) : null}
-          {isEmailVerified ? (
-            <StatusMessage tone="success">현재 이메일은 인증 완료 상태입니다.</StatusMessage>
-          ) : null}
         </Field>
 
         <div className="grid gap-5 md:grid-cols-2">
@@ -417,9 +414,6 @@ export default function SignupPage() {
             <StatusMessage tone="warning">
               중복 확인 후 닉네임이 변경되었습니다. 다시 중복 확인을 진행해 주세요.
             </StatusMessage>
-          ) : null}
-          {isNicknameChecked ? (
-            <StatusMessage tone="success">현재 닉네임은 중복 확인 완료 상태입니다.</StatusMessage>
           ) : null}
         </Field>
 
@@ -505,7 +499,7 @@ export default function SignupPage() {
 
 function AuthShell({ children }: { children: ReactNode }) {
   return (
-    <main className="relative min-h-dvh overflow-hidden bg-[linear-gradient(135deg,#f7fbff_0%,#edf5ff_42%,#f4efff_100%)] px-6 py-12">
+    <main className="relative min-h-dvh overflow-hidden bg-[linear-gradient(135deg,#f7fbff_0%,#edf5ff_42%,#f4efff_100%)] px-4 py-12 sm:px-6">
       <div
         className="pointer-events-none absolute left-[11%] top-28 h-44 w-44 rounded-full bg-cyan-200/35 blur-3xl"
         aria-hidden="true"
@@ -529,7 +523,7 @@ function AuthShell({ children }: { children: ReactNode }) {
           <img src="/baton-logo.svg" alt="Baton" className="h-12 w-auto" />
         </Link>
 
-        <section className="rounded-3xl border border-white/80 bg-white/88 p-8 shadow-2xl shadow-violet-950/10 backdrop-blur max-sm:p-6">
+        <section className="rounded-3xl border border-white/80 bg-white/88 p-6 shadow-2xl shadow-violet-950/10 backdrop-blur sm:p-8">
           <div className="text-center">
             <p className="text-sm font-black uppercase tracking-[0.22em] text-violet-500">
               Join Baton
@@ -602,10 +596,11 @@ function StatusMessage({
 }
 
 async function checkNicknameAvailability(nickname: string): Promise<void> {
-  await apiFetch<void>("/api/v1/auth/nickname-check", {
-    method: "POST",
-    body: { nickname },
-  });
+  const response = await authApi.checkNickname({ nickname });
+
+  if (!response.usableNickname) {
+    throw new Error("이미 사용 중인 닉네임입니다.");
+  }
 }
 
 function getSignupErrorMessage(error: unknown): string {
