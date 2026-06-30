@@ -4,8 +4,13 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
+import { LoginRequiredState } from "@/components/common/LoginRequiredState";
 import { tradeApi, type TradeListRes, type TradeStatus } from "@/lib/api";
 import { getStoredUserId, hasStoredAccessToken } from "@/lib/auth";
+import {
+  isAuthRequiredError,
+  isAuthRequiredMessage,
+} from "@/lib/auth-required";
 import { formatCredit, formatDate } from "@/utils/format";
 
 const PAGE_SIZE = 20;
@@ -223,7 +228,9 @@ export default function TradesPage() {
         }
 
         setErrorMessage(
-          error instanceof Error
+          isAuthRequiredError(error)
+            ? "로그인 후 이용해 주세요."
+            : error instanceof Error
             ? error.message
             : "거래 목록을 불러오지 못했습니다.",
         );
@@ -261,7 +268,7 @@ export default function TradesPage() {
 
       <div className="fixed-container relative py-10 sm:py-14 lg:py-16">
         <header className="text-center">
-          <h1 className="baton-page-title mt-3">
+          <h1 className="baton-page-title mt-3 !font-bold">
             MY TRADE
           </h1>
           <p className="mx-auto mt-4 max-w-2xl text-sm font-semibold leading-7 text-zinc-500 sm:mt-5 sm:text-lg sm:leading-8">
@@ -281,7 +288,7 @@ export default function TradesPage() {
                 className={`h-11 shrink-0 cursor-pointer rounded-md px-5 text-sm font-black transition ${isActive
                   ? "bg-[#8c5bff] text-white shadow-lg shadow-violet-400/20"
                   : "text-zinc-600 hover:bg-[#f4f0ff] hover:text-[#8c5bff]"
-                }`}
+                  }`}
               >
                 {option.label}
               </button>
@@ -289,7 +296,12 @@ export default function TradesPage() {
           })}
         </div>
 
-        {errorMessage ? (
+        {isAuthRequiredMessage(errorMessage) ? (
+          <LoginRequiredState
+            className="mb-5"
+            description="거래 내역은 로그인 후 확인할 수 있어요."
+          />
+        ) : errorMessage ? (
           <div className="mb-5">
             <ErrorState message={errorMessage} />
           </div>

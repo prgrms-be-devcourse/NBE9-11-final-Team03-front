@@ -13,6 +13,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
+import { LoginRequiredState } from "@/components/common/LoginRequiredState";
 import {
   categoryApi,
   talentApi,
@@ -21,6 +22,10 @@ import {
   type TalentListRes,
   type TalentSortType,
 } from "@/lib/api";
+import {
+  isAuthRequiredError,
+  isAuthRequiredMessage,
+} from "@/lib/auth-required";
 import {
   formatCredit,
   formatDate,
@@ -103,12 +108,7 @@ function getCategoryErrorMessage(error: unknown) {
   const message =
     error instanceof Error ? error.message : "카테고리를 불러오지 못했습니다.";
 
-  if (
-    message.includes("401") ||
-    message.includes("403") ||
-    message.toLowerCase().includes("unauthorized") ||
-    message.toLowerCase().includes("forbidden")
-  ) {
+  if (isAuthRequiredError(error)) {
     return "로그인 후 카테고리를 조회할 수 있습니다.";
   }
 
@@ -476,6 +476,11 @@ export default function TalentsPage() {
   const countLabel = isInitialLoading
     ? "재능을 불러오는 중"
     : `총 ${filteredTalents.length}${hasNext ? "+" : ""}개 재능`;
+  const isCategoryLoginRequired =
+    isAuthRequiredMessage(categoryErrorMessage);
+  const isTalentLoginRequired = isAuthRequiredMessage(errorMessage);
+  const shouldShowLoginRequired =
+    isCategoryLoginRequired || isTalentLoginRequired;
 
   return (
     <main className="relative min-h-[calc(100dvh-64px)] overflow-visible bg-white">
@@ -483,7 +488,7 @@ export default function TalentsPage() {
 
       <div className="fixed-container relative py-10 sm:py-14 lg:py-16">
         <header className="text-center">
-          <h1 className="baton-page-title mt-3">
+        <h1 className="baton-page-title mt-3 !font-bold">
             TALENT MATCHING
           </h1>
           <p className="mx-auto mt-4 max-w-2xl text-sm font-semibold leading-7 text-zinc-500 sm:mt-5 sm:text-lg sm:leading-8">
@@ -527,7 +532,12 @@ export default function TalentsPage() {
           ) : null}
         </nav>
 
-        {categoryErrorMessage ? (
+        {shouldShowLoginRequired ? (
+          <LoginRequiredState
+            className="mt-5"
+            description="재능 검색과 카테고리 조회는 로그인 후 이용할 수 있어요."
+          />
+        ) : categoryErrorMessage ? (
           <div className="mt-5">
             <ErrorState
               title="카테고리를 불러오지 못했어요"
@@ -595,7 +605,7 @@ export default function TalentsPage() {
           </div>
         ) : null}
 
-        {errorMessage ? (
+        {errorMessage && !shouldShowLoginRequired ? (
           <div className="mt-8">
             <ErrorState message={errorMessage} />
           </div>

@@ -3,11 +3,16 @@
 import { ChangeEvent, FormEvent, useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { ErrorState } from "@/components/common/ErrorState";
+import { LoginRequiredState } from "@/components/common/LoginRequiredState";
 import {
   tradeApi,
   type TradeRes,
   type TradeSubmissionRes,
 } from "@/lib/api";
+import {
+  isAuthRequiredError,
+  isAuthRequiredMessage,
+} from "@/lib/auth-required";
 import { formatCredit, formatDate } from "@/utils/format";
 
 const MAX_SUBMISSION_FILE_SIZE_BYTES = 20 * 1024 * 1024;
@@ -209,7 +214,9 @@ export default function TradeDetailPage() {
 
         setTrade(null);
         setErrorMessage(
-          error instanceof Error
+          isAuthRequiredError(error)
+            ? "로그인 후 이용해 주세요."
+            : error instanceof Error
             ? error.message
             : "거래 상세를 불러오지 못했습니다.",
         );
@@ -527,7 +534,12 @@ export default function TradeDetailPage() {
           </p>
         </header>
 
-      {errorMessage ? (
+      {isAuthRequiredMessage(errorMessage) ? (
+        <LoginRequiredState
+          className="mx-auto mt-8 w-full max-w-[1180px]"
+          description="거래 상세와 제출 기능은 로그인 후 확인할 수 있어요."
+        />
+      ) : errorMessage ? (
         <div className="mx-auto mt-8 w-full max-w-[1180px]">
           <ErrorState message={errorMessage} />
         </div>

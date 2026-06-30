@@ -40,7 +40,7 @@ export default function MatchesPage() {
 
       <div className="fixed-container relative py-10 sm:py-14 lg:py-16">
         <header className="text-center">
-          <h1 className="baton-page-title mt-3">
+          <h1 className="baton-page-title mt-3 !font-bold">
             MATCH YOUR TALENT
           </h1>
           <p className="mx-auto mt-4 max-w-2xl text-sm font-semibold leading-7 text-zinc-500 sm:mt-5 sm:text-lg sm:leading-8">

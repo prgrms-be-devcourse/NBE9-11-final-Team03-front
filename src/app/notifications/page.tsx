@@ -4,9 +4,14 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
+import { LoginRequiredState } from "@/components/common/LoginRequiredState";
 import { SectionTitle } from "@/components/common/SectionTitle";
 import { matchApi, type MatchProposalReceivedRes } from "@/lib/api";
 import { hasStoredAccessToken } from "@/lib/auth";
+import {
+  isAuthRequiredError,
+  isAuthRequiredMessage,
+} from "@/lib/auth-required";
 import { formatDate } from "@/utils/format";
 
 function getRequesterTalentTitle(proposal: MatchProposalReceivedRes): string {
@@ -32,9 +37,13 @@ export default function NotificationsPage() {
     try {
       const response = await matchApi.getReceivedProposals("REQUESTED");
       setProposals(Array.isArray(response) ? response : []);
-    } catch {
+    } catch (error) {
       setProposals([]);
-      setErrorMessage("알림을 불러오지 못했습니다.");
+      setErrorMessage(
+        isAuthRequiredError(error)
+          ? "로그인 후 이용해 주세요."
+          : "알림을 불러오지 못했습니다.",
+      );
     } finally {
       setIsLoading(false);
     }
@@ -63,7 +72,11 @@ export default function NotificationsPage() {
         </div>
       ) : null}
 
-      {!isLoading && errorMessage ? (
+      {!isLoading && isAuthRequiredMessage(errorMessage) ? (
+        <LoginRequiredState description="알림은 로그인 후 확인할 수 있어요." />
+      ) : null}
+
+      {!isLoading && errorMessage && !isAuthRequiredMessage(errorMessage) ? (
         <ErrorState message={errorMessage} />
       ) : null}
 
