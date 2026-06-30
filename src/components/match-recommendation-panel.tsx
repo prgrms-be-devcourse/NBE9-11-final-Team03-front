@@ -1,6 +1,7 @@
 "use client";
 
 import { Code2, FileText, Palette, Sparkles } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
@@ -9,6 +10,7 @@ import { UserProfileModal } from "@/components/profile/UserProfileModal";
 import {
   ApiError,
   matchApi,
+  profileApi,
   talentApi,
   type MatchRecommendationDetailRes,
   type MatchRecommendationRes,
@@ -29,11 +31,15 @@ import {
   formatRating,
 } from "@/utils/format";
 
+type RecommendationSource =
+  "MY_TALENT" | "PROFILE_OWN_CATEGORY" | "PROFILE_WANT_CATEGORY";
+
 interface RecommendationItem {
-  requesterTalentId: number;
+  requesterTalentId: number | null;
   requesterTalentTitle: string;
   requesterCategoryName: string;
   recommendation: MatchRecommendationRes;
+  source: RecommendationSource;
 }
 
 interface SelectedRecommendationContext {
@@ -49,9 +55,9 @@ const MY_TALENTS_API_ERROR_MESSAGE =
 const categoryVisuals = {
   development: {
     Icon: Code2,
-    tile: "from-[#fff8e7] via-[#fff3d6] to-[#fef7ed]",
-    panel: "from-[#f59e0b] to-[#ea580c]",
-    accent: "bg-[#0f766e]",
+    tileBg: "bg-[#fff8e7]",
+    panelBg: "bg-[#f97316]",
+    lineBg: "bg-[#f97316]",
     badge: "text-[#b45309]",
     hover: "group-hover:text-[#c2410c]",
     label: "개발",
@@ -59,9 +65,9 @@ const categoryVisuals = {
   },
   design: {
     Icon: Palette,
-    tile: "from-[#f7fee7] via-[#ecfccb] to-[#f0fdfa]",
-    panel: "from-[#84cc16] to-[#10b981]",
-    accent: "bg-[#f59e0b]",
+    tileBg: "bg-[#f7fee7]",
+    panelBg: "bg-[#5ec85a]",
+    lineBg: "bg-[#22c55e]",
     badge: "text-[#3f6212]",
     hover: "group-hover:text-[#4d7c0f]",
     label: "디자인",
@@ -69,9 +75,9 @@ const categoryVisuals = {
   },
   document: {
     Icon: FileText,
-    tile: "from-[#fff1f2] via-[#ffe4e6] to-[#fff7ed]",
-    panel: "from-[#e11d48] to-[#fb7185]",
-    accent: "bg-[#f59e0b]",
+    tileBg: "bg-[#fff1f2]",
+    panelBg: "bg-[#f05267]",
+    lineBg: "bg-[#f43f5e]",
     badge: "text-[#9f1239]",
     hover: "group-hover:text-[#be123c]",
     label: "문서 정리",
@@ -79,9 +85,9 @@ const categoryVisuals = {
   },
   default: {
     Icon: Sparkles,
-    tile: "from-[#fff7ed] via-[#fefce8] to-[#ecfeff]",
-    panel: "from-[#f59e0b] to-[#0f766e]",
-    accent: "bg-[#f97316]",
+    tileBg: "bg-[#fff7ed]",
+    panelBg: "bg-[#f97316]",
+    lineBg: "bg-[#f97316]",
     badge: "text-[#9a3412]",
     hover: "group-hover:text-[#b45309]",
     label: "재능",
@@ -112,9 +118,13 @@ function getCategoryVisual(categoryName: string) {
 }
 
 export function MatchRecommendationPanel() {
+  const router = useRouter();
   const [isHydrated, setIsHydrated] = useState(false);
   const [myTalents, setMyTalents] = useState<TalentListRes[]>([]);
-  const [recommendationItems, setRecommendationItems] = useState<RecommendationItem[]>([]);
+  const [profileCategoryCount, setProfileCategoryCount] = useState(0);
+  const [recommendationItems, setRecommendationItems] = useState<
+    RecommendationItem[]
+  >([]);
   const [selectedRecommendationContext, setSelectedRecommendationContext] =
     useState<SelectedRecommendationContext | null>(null);
   const [selectedDetail, setSelectedDetail] =
@@ -127,7 +137,8 @@ export function MatchRecommendationPanel() {
   const [loadingDetailKey, setLoadingDetailKey] = useState<string | null>(null);
   const [isSubmittingProposal, setIsSubmittingProposal] = useState(false);
 
-  const hasLoadedMyTalents = isHydrated && myTalents.length > 0;
+  const hasRecommendationSources =
+    isHydrated && (myTalents.length > 0 || profileCategoryCount > 0);
 
   const loadAutoRecommendations = useCallback(async () => {
     setErrorMessage(null);
@@ -135,18 +146,21 @@ export function MatchRecommendationPanel() {
     setIsLoadingList(true);
 
     try {
-      const myTalentsResponse = await talentApi.getMyList({ size: 50 });
+      const [myTalentsResponse, profile] = await Promise.all([
+        talentApi.getMyList({ size: 50 }),
+        profileApi.getMe(),
+      ]);
       const activeMyTalents = Array.isArray(myTalentsResponse.content)
         ? myTalentsResponse.content
         : [];
+      const ownTalentIds = new Set(
+        activeMyTalents.map((talent) => talent.talentId),
+      );
+      const seenRecommendationTalentIds = new Set<number>();
+      const profileCategories = getProfileRecommendationCategories(profile);
 
       setMyTalents(activeMyTalents);
-
-      if (activeMyTalents.length === 0) {
-        setRecommendationItems([]);
-        setSelectedRecommendationContext(null);
-        return;
-      }
+      setProfileCategoryCount(profileCategories.length);
 
       const recommendationResults = await Promise.allSettled(
         activeMyTalents.map(async (myTalent) => {
@@ -154,12 +168,17 @@ export function MatchRecommendationPanel() {
             talentId: myTalent.talentId,
           });
 
-          return recommendations.map((recommendation) => ({
-            requesterTalentId: myTalent.talentId,
-            requesterTalentTitle: myTalent.title,
-            requesterCategoryName: myTalent.categoryName,
-            recommendation,
-          }));
+          return recommendations.map((recommendation) => {
+            seenRecommendationTalentIds.add(recommendation.talentId);
+
+            return {
+              requesterTalentId: myTalent.talentId,
+              requesterTalentTitle: myTalent.title,
+              requesterCategoryName: myTalent.categoryName,
+              recommendation,
+              source: "MY_TALENT" as const,
+            };
+          });
         }),
       );
 
@@ -171,19 +190,31 @@ export function MatchRecommendationPanel() {
         throw rejectedResult.reason;
       }
 
-      const nextItems = recommendationResults.flatMap((result) =>
-        result.status === "fulfilled" ? result.value : [],
+      const myTalentRecommendationItems = recommendationResults.flatMap(
+        (result) => (result.status === "fulfilled" ? result.value : []),
       );
+      const profileCategoryRecommendationItems =
+        await loadProfileCategoryRecommendationItems({
+          categories: profileCategories,
+          ownTalentIds,
+          seenRecommendationTalentIds,
+        });
+      const nextItems = [
+        ...myTalentRecommendationItems,
+        ...profileCategoryRecommendationItems,
+      ];
 
       const userId = getStoredUserId();
-      if (userId !== null) {
+      if (userId !== null && activeMyTalents[0]) {
         setStoredLastTalentId(userId, activeMyTalents[0].talentId);
       }
 
       setRecommendationItems(nextItems);
+      setSelectedRecommendationContext(null);
       setStatusMessage("");
     } catch (error) {
       setMyTalents([]);
+      setProfileCategoryCount(0);
       setRecommendationItems([]);
       setSelectedRecommendationContext(null);
       setStatusMessage("");
@@ -191,10 +222,10 @@ export function MatchRecommendationPanel() {
         isAuthRequiredError(error)
           ? "로그인 후 이용해 주세요."
           : error instanceof ApiError && error.status === 404
-          ? MY_TALENTS_API_ERROR_MESSAGE
-          : error instanceof Error
-            ? error.message || RECOMMENDATION_API_ERROR_MESSAGE
-            : RECOMMENDATION_API_ERROR_MESSAGE,
+            ? MY_TALENTS_API_ERROR_MESSAGE
+            : error instanceof Error
+              ? error.message || RECOMMENDATION_API_ERROR_MESSAGE
+              : RECOMMENDATION_API_ERROR_MESSAGE,
       );
     } finally {
       setIsLoadingList(false);
@@ -217,6 +248,16 @@ export function MatchRecommendationPanel() {
   }, [loadAutoRecommendations]);
 
   async function handleOpenDetail(item: RecommendationItem) {
+    if (item.source !== "MY_TALENT") {
+      router.push(`/talents/${item.recommendation.talentId}`);
+      return;
+    }
+
+    if (item.requesterTalentId === null) {
+      setErrorMessage("교환 제안에는 내가 등록한 재능이 필요합니다.");
+      return;
+    }
+
     setErrorMessage(null);
     setStatusMessage("");
     setLoadingDetailKey(getRecommendationItemKey(item));
@@ -270,7 +311,9 @@ export function MatchRecommendationPanel() {
         requestMessage: trimmedMessage,
       });
 
-      setStatusMessage("교환 제안이 전송되었습니다. 상대방의 응답을 기다려 주세요.");
+      setStatusMessage(
+        "교환 제안이 전송되었습니다. 상대방의 응답을 기다려 주세요.",
+      );
       setSelectedDetail(null);
       setSelectedRecommendationContext(null);
       setIsProfileModalOpen(false);
@@ -317,7 +360,7 @@ export function MatchRecommendationPanel() {
         </div>
 
         <p className="text-sm font-bold text-zinc-500 sm:text-right">
-          등록한 재능을 기준으로 자동 조회된 결과입니다.
+          등록한 재능과 프로필 카테고리를 기준으로 자동 조회된 결과입니다.
         </p>
       </div>
 
@@ -338,10 +381,13 @@ export function MatchRecommendationPanel() {
         </div>
       ) : null}
 
-      {isHydrated && !isLoadingList && !hasLoadedMyTalents && !errorMessage ? (
+      {isHydrated &&
+        !isLoadingList &&
+        !hasRecommendationSources &&
+        !errorMessage ? (
         <EmptyState
-          title="등록한 재능이 없습니다."
-          description="재능을 등록하면 내 재능의 카테고리를 기준으로 추천 상대가 자동으로 표시됩니다."
+          title="추천 기준이 없습니다."
+          description="재능을 등록하거나 프로필에서 카테고리를 선택하면 추천 상대가 자동으로 표시됩니다."
           actionLabel="재능 등록하기"
           actionHref="/talents/new"
         />
@@ -349,11 +395,11 @@ export function MatchRecommendationPanel() {
 
       {isHydrated &&
         !isLoadingList &&
-        hasLoadedMyTalents &&
+        hasRecommendationSources &&
         recommendationItems.length === 0 ? (
         <EmptyState
           title="현재 추천 가능한 상대 재능이 없습니다."
-          description="내가 등록한 재능과 같은 카테고리에 다른 사용자의 재능이 생기면 자동으로 추천됩니다."
+          description="내 재능 또는 프로필 카테고리와 연결 가능한 다른 사용자의 재능이 생기면 자동으로 추천됩니다."
         />
       ) : null}
 
@@ -365,7 +411,10 @@ export function MatchRecommendationPanel() {
               recommendation={item.recommendation}
               requesterTalentTitle={item.requesterTalentTitle}
               requesterCategoryName={item.requesterCategoryName}
-              isLoadingDetail={loadingDetailKey === getRecommendationItemKey(item)}
+              source={item.source}
+              isLoadingDetail={
+                loadingDetailKey === getRecommendationItemKey(item)
+              }
               onOpen={() => handleOpenDetail(item)}
             />
           ))}
@@ -377,7 +426,9 @@ export function MatchRecommendationPanel() {
           detail={selectedDetail}
           requestMessage={requestMessage}
           isSubmitting={isSubmittingProposal}
-          requesterTalentTitle={selectedRecommendationContext?.requesterTalentTitle ?? null}
+          requesterTalentTitle={
+            selectedRecommendationContext?.requesterTalentTitle ?? null
+          }
           onRequestMessageChange={setRequestMessage}
           onClose={handleCloseDetail}
           onOpenProfile={handleOpenProfileModal}
@@ -400,20 +451,150 @@ export function MatchRecommendationPanel() {
   );
 }
 
+function getProfileRecommendationCategories(profile: {
+  myTalentCategories?: { id: number; name: string; active: boolean }[];
+  wantTalentCategories?: { id: number; name: string; active: boolean }[];
+}) {
+  const categories = [
+    ...(profile.wantTalentCategories ?? []).map((category) => ({
+      ...category,
+      source: "PROFILE_WANT_CATEGORY" as const,
+    })),
+    ...(profile.myTalentCategories ?? []).map((category) => ({
+      ...category,
+      source: "PROFILE_OWN_CATEGORY" as const,
+    })),
+  ];
+  const seenCategorySourceKeys = new Set<string>();
+
+  return categories.filter((category) => {
+    const key = `${category.source}-${category.id}`;
+
+    if (!category.active || seenCategorySourceKeys.has(key)) {
+      return false;
+    }
+
+    seenCategorySourceKeys.add(key);
+    return true;
+  });
+}
+
+async function loadProfileCategoryRecommendationItems({
+  categories,
+  ownTalentIds,
+  seenRecommendationTalentIds,
+}: {
+  categories: ReturnType<typeof getProfileRecommendationCategories>;
+  ownTalentIds: Set<number>;
+  seenRecommendationTalentIds: Set<number>;
+}): Promise<RecommendationItem[]> {
+  const categoryResults = await Promise.allSettled(
+    categories.map(async (category) => {
+      const page = await talentApi.search({
+        categoryId: category.id,
+        size: 6,
+        sort: "POPULAR",
+      });
+
+      return page.content
+        .filter((talent) => !ownTalentIds.has(talent.talentId))
+        .filter((talent) => !seenRecommendationTalentIds.has(talent.talentId))
+        .slice(0, 3)
+        .map((talent) => {
+          seenRecommendationTalentIds.add(talent.talentId);
+
+          return {
+            requesterTalentId: null,
+            requesterTalentTitle:
+              category.source === "PROFILE_WANT_CATEGORY"
+                ? "원하는 재능 카테고리"
+                : "내가 가진 재능 카테고리",
+            requesterCategoryName: category.name,
+            recommendation: toProfileCategoryRecommendation(talent),
+            source: category.source,
+          };
+        });
+    }),
+  );
+
+  return categoryResults.flatMap((result) =>
+    result.status === "fulfilled" ? result.value : [],
+  );
+}
+
+function toProfileCategoryRecommendation(
+  talent: TalentListRes,
+): MatchRecommendationRes {
+  return {
+    talentId: talent.talentId,
+    providerId: getTalentProviderId(talent),
+    nickname:
+      talent.nickname ??
+      talent.authorNickname ??
+      talent.sellerNickname ??
+      talent.providerNickname ??
+      talent.userNickname ??
+      talent.author?.nickname ??
+      null,
+    providerNickname: talent.providerNickname ?? null,
+    sellerNickname: talent.sellerNickname ?? null,
+    authorNickname: talent.authorNickname ?? talent.author?.nickname ?? null,
+    userNickname: talent.userNickname ?? null,
+    categoryId: 0,
+    categoryName: talent.categoryName,
+    title: talent.title,
+    content: "프로필에서 선택한 카테고리를 기준으로 추천된 재능입니다.",
+    creditPrice: talent.creditPrice,
+    estimatedHours: talent.estimatedHours,
+    avgRating: talent.avgRating,
+    completeCount: talent.completeCount,
+    proposalRequestEnabled: false,
+    proposalRequestDisabledReason: null,
+  };
+}
+
+function getTalentProviderId(talent: TalentListRes): number {
+  return (
+    talent.author?.id ??
+    talent.author?.userId ??
+    talent.author?.authorId ??
+    talent.author?.providerId ??
+    talent.author?.sellerId ??
+    0
+  );
+}
+
+function getRecommendationReason(source: RecommendationSource): string {
+  switch (source) {
+    case "MY_TALENT":
+      return "내가 등록한 재능을 기반으로 추천";
+    case "PROFILE_OWN_CATEGORY":
+      return "내가 가진 재능 기반 추천";
+    case "PROFILE_WANT_CATEGORY":
+      return "원하는 재능 기반 추천";
+  }
+}
+
+function getRecommendationActionLabel(source: RecommendationSource): string {
+  return source === "MY_TALENT" ? "교환 상세 보기" : "재능 상세로 이동";
+}
+
 function getRecommendationItemKey(item: RecommendationItem): string {
-  return `${item.requesterTalentId}-${item.recommendation.talentId}`;
+  return `${item.source}-${item.requesterTalentId ?? item.requesterCategoryName}-${item.recommendation.talentId}`;
 }
 
 function RecommendationCard({
   recommendation,
   requesterTalentTitle,
   requesterCategoryName,
+  source,
   isLoadingDetail,
   onOpen,
 }: {
   recommendation: MatchRecommendationRes;
   requesterTalentTitle: string;
   requesterCategoryName: string;
+  source: RecommendationSource;
   isLoadingDetail: boolean;
   onOpen: () => void;
 }) {
@@ -427,36 +608,42 @@ function RecommendationCard({
       className="group block cursor-pointer text-left outline-none"
     >
       <div
-        className={`relative aspect-square overflow-hidden bg-gradient-to-br ${visual.tile}`}
+        className={`relative aspect-square overflow-hidden ${visual.tileBg}`}
       >
         <div
-          className={`absolute -right-10 -top-10 h-36 w-36 rounded-[44px] bg-gradient-to-br ${visual.panel} opacity-90 blur-[1px] transition group-hover:scale-105`}
-        />
-        <div
-          className={`absolute right-[20%] top-[22%] h-16 w-16 rounded-full ${visual.accent} opacity-[0.42] blur-xl`}
+          className={`absolute right-0 top-0 h-[40%] w-[40%] rounded-bl-[48px] ${visual.panelBg} transition group-hover:scale-[1.02]`}
         />
         <div className="absolute left-8 top-[76px] z-20 flex h-10 w-16 items-center justify-center rounded-t-[18px] rounded-b-none border border-b-0 border-white/88 bg-white/76 backdrop-blur">
-          <CategoryIcon className={`h-7 w-7 ${visual.badge}`} aria-hidden="true" />
+          <CategoryIcon
+            className={`h-7 w-7 ${visual.badge}`}
+            aria-hidden="true"
+          />
         </div>
         <div className="absolute inset-x-8 top-[116px] bottom-8 z-10 rounded-b-[24px] rounded-tr-[24px] border border-t-0 border-white/88 bg-white/76 p-6 shadow-xl shadow-orange-950/10 backdrop-blur">
           <span className="block text-[42px] font-black leading-none tracking-normal text-zinc-950">
             {visual.headline}
           </span>
           <div
-            className={`mt-5 h-2 w-20 rounded-full bg-gradient-to-r ${visual.panel}`}
+            className={`mt-5 h-2 w-20 rounded-full ${visual.lineBg}`}
             aria-hidden="true"
           />
         </div>
-        <span className={`absolute right-5 top-5 rounded-full bg-white/88 px-3 py-1 text-xs font-black ${visual.badge} shadow-sm`}>
+        <span
+          className={`absolute right-5 top-5 rounded-full bg-white/88 px-3 py-1 text-xs font-black ${visual.badge} shadow-sm`}
+        >
           {recommendation.categoryName}
         </span>
       </div>
 
       <div className="pt-5">
         <p className="mb-2 line-clamp-1 text-xs font-black text-[#8c5bff]">
-          내 재능: {requesterCategoryName} · {requesterTalentTitle}
+          {source === "MY_TALENT"
+            ? `내 재능: ${requesterCategoryName} · ${requesterTalentTitle}`
+            : `프로필 관심: ${requesterCategoryName}`}
         </p>
-        <h2 className={`line-clamp-2 min-h-14 text-[17px] font-black leading-7 text-zinc-950 transition ${visual.hover}`}>
+        <h2
+          className={`line-clamp-2 min-h-14 text-[17px] font-black leading-7 text-zinc-950 transition ${visual.hover}`}
+        >
           {recommendation.title}
         </h2>
         <p className="mt-2 line-clamp-2 min-h-12 text-sm font-semibold leading-6 text-zinc-500">
@@ -473,21 +660,21 @@ function RecommendationCard({
         </div>
 
         <p className="mt-2 text-sm font-semibold text-zinc-500">
-          ★ {formatRating(recommendation.avgRating)} · 완료 {recommendation.completeCount}건
+          ★ {formatRating(recommendation.avgRating)} · 완료{" "}
+          {recommendation.completeCount}건
         </p>
 
-        {recommendation.proposalRequestDisabledReason ? (
-          <p className="mt-3 line-clamp-2 text-xs font-black text-amber-700">
-            {recommendation.proposalRequestDisabledReason}
-          </p>
-        ) : (
-          <p className="mt-3 text-xs font-black text-[#0f766e]">
-            제안 가능
-          </p>
-        )}
+        <p
+          className={`mt-3 line-clamp-2 text-xs font-black ${source === "MY_TALENT" ? "text-[#0f766e]" : "text-[#b45309]"
+            }`}
+        >
+          {getRecommendationReason(source)}
+        </p>
 
         <span className="mt-4 inline-flex border-b-2 border-[#8c5bff] pb-1 text-sm font-black text-[#8c5bff] transition group-hover:text-zinc-950">
-          {isLoadingDetail ? "상세 불러오는 중..." : "상세 보기"}
+          {isLoadingDetail
+            ? "상세 불러오는 중..."
+            : getRecommendationActionLabel(source)}
         </span>
       </div>
     </button>
@@ -541,17 +728,19 @@ function RecommendationDetailModal({
       <div className="relative max-h-[90vh] w-full max-w-5xl overflow-hidden rounded-[28px] border border-white/70 bg-white shadow-2xl shadow-zinc-950/25">
         <div className="grid max-h-[90vh] overflow-y-auto lg:grid-cols-[0.9fr_1.1fr]">
           <aside
-            className={`relative min-h-[360px] overflow-hidden bg-gradient-to-br ${visual.tile} p-8 lg:min-h-full`}
+            className={`relative min-h-[360px] overflow-hidden ${visual.tileBg} p-8 lg:min-h-full`}
           >
             <div
-              className={`absolute -right-14 -top-14 h-52 w-52 rounded-[60px] bg-gradient-to-br ${visual.panel} opacity-90 blur-[1px]`}
+              className={`absolute -right-14 -top-14 h-52 w-52 rounded-[60px] ${visual.panelBg} opacity-90 blur-[1px]`}
             />
             <div
-              className={`absolute right-16 top-24 h-24 w-24 rounded-full ${visual.accent} opacity-30 blur-2xl`}
+              className={`absolute right-16 top-24 h-24 w-24 rounded-full ${visual.panelBg} opacity-20 blur-2xl`}
             />
 
             <div className="relative z-10 flex items-center justify-between gap-3">
-              <span className={`rounded-full bg-white/90 px-4 py-2 text-sm font-black ${visual.badge} shadow-sm`}>
+              <span
+                className={`rounded-full bg-white/90 px-4 py-2 text-sm font-black ${visual.badge} shadow-sm`}
+              >
                 {categoryName}
               </span>
               <span className="rounded-full bg-white/90 px-4 py-2 text-sm font-black text-[#0f766e] shadow-sm">
@@ -561,7 +750,10 @@ function RecommendationDetailModal({
 
             <div className="relative z-10 mt-16">
               <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/90 shadow-lg shadow-zinc-950/10">
-                <CategoryIcon className={`h-8 w-8 ${visual.badge}`} aria-hidden="true" />
+                <CategoryIcon
+                  className={`h-8 w-8 ${visual.badge}`}
+                  aria-hidden="true"
+                />
               </div>
               <p className="mt-8 text-xs font-black uppercase tracking-[0.28em] text-zinc-500">
                 Recommended Talent
@@ -573,7 +765,7 @@ function RecommendationDetailModal({
                 {title}
               </h2>
               <div
-                className={`mt-6 h-2 w-24 rounded-full bg-gradient-to-r ${visual.panel}`}
+                className={`mt-6 h-2 w-24 rounded-full ${visual.lineBg}`}
                 aria-hidden="true"
               />
             </div>
@@ -598,7 +790,8 @@ function RecommendationDetailModal({
                     {providerName}
                   </p>
                   <p className="mt-1 text-sm font-semibold text-zinc-500">
-                    조회 {formatOptionalCount(viewCount)}회 · 완료 {formatOptionalCount(completeCount)}건
+                    조회 {formatOptionalCount(viewCount)}회 · 완료{" "}
+                    {formatOptionalCount(completeCount)}건
                   </p>
                 </div>
               </button>
@@ -622,7 +815,8 @@ function RecommendationDetailModal({
                 이 재능과 교환을 제안해 보세요
               </h3>
               <p className="mt-3 text-sm font-semibold leading-6 text-zinc-500">
-                상대 재능의 조건을 확인하고, 내가 제공할 수 있는 재능을 기준으로 제안 메시지를 보낼 수 있습니다.
+                상대 재능의 조건을 확인하고, 내가 제공할 수 있는 재능을 기준으로
+                제안 메시지를 보낼 수 있습니다.
               </p>
             </div>
 
@@ -641,7 +835,9 @@ function RecommendationDetailModal({
               />
               <MetricCard
                 label="평점"
-                value={avgRating === null ? "-" : `★ ${formatRating(avgRating)}`}
+                value={
+                  avgRating === null ? "-" : `★ ${formatRating(avgRating)}`
+                }
               />
               <MetricCard
                 label="완료"
@@ -695,7 +891,9 @@ function RecommendationDetailModal({
                 제안 메시지
                 <textarea
                   value={requestMessage}
-                  onChange={(event) => onRequestMessageChange(event.target.value)}
+                  onChange={(event) =>
+                    onRequestMessageChange(event.target.value)
+                  }
                   rows={5}
                   className="mt-3 w-full resize-none rounded-2xl border border-zinc-200 bg-white px-5 py-4 text-sm font-semibold leading-6 text-zinc-800 outline-none transition placeholder:text-zinc-400 focus:border-[#0f766e] focus:ring-4 focus:ring-[#ccfbf1]/70"
                   placeholder="상대에게 어떤 재능을 제공할 수 있는지, 원하는 교환 방식은 무엇인지 적어 주세요."
@@ -780,7 +978,6 @@ function ProviderAvatar({
     </div>
   );
 }
-
 
 function getDisplayName(nickname: string | null | undefined): string {
   return nickname?.trim() || "프로필";

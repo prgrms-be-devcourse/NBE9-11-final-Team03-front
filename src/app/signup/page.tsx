@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { authApi } from "@/lib/api";
@@ -11,6 +11,10 @@ import { validatePassword } from "@/lib/validation/password";
 
 const PASSWORD_FORMAT_ERROR =
   "비밀번호 양식이 올바르지 않습니다. 영문, 숫자, 특수문자(!@#$%^*()_+~)를 포함한 8~20자로 입력해 주세요.";
+
+const EMAIL_VERIFICATION_COOLDOWN_SECONDS = 300;
+const EMAIL_VERIFICATION_COOLDOWN_STORAGE_KEY =
+  "baton-email-verification-cooldown";
 
 const schema = z
   .object({
@@ -77,18 +81,27 @@ interface EmailMessage {
   text: string;
 }
 
+type EmailVerificationCooldowns = Record<string, number>;
+
+
 export default function SignupPage() {
   const router = useRouter();
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [emailVerificationCode, setEmailVerificationCode] = useState("");
   const [emailMessage, setEmailMessage] = useState<EmailMessage | null>(null);
+  const [emailCooldownModalMessage, setEmailCooldownModalMessage] = useState<string | null>(null);
+  const [emailCooldowns, setEmailCooldowns] =
+    useState<EmailVerificationCooldowns>(() => getStoredEmailVerificationCooldowns());
+  const [cooldownTick, setCooldownTick] = useState(0);
   const [verificationRequestedEmail, setVerificationRequestedEmail] = useState<
     string | null
   >(null);
   const [verifiedEmail, setVerifiedEmail] = useState<string | null>(null);
   const [isCheckingEmail, setIsCheckingEmail] = useState(false);
   const [isVerifyingEmail, setIsVerifyingEmail] = useState(false);
-  const [nicknameMessage, setNicknameMessage] = useState<EmailMessage | null>(null);
+  const [nicknameMessage, setNicknameMessage] = useState<EmailMessage | null>(
+    null,
+  );
   const [checkedNickname, setCheckedNickname] = useState<string | null>(null);
   const [isCheckingNickname, setIsCheckingNickname] = useState(false);
   const [profileImageUrlPreview, setProfileImageUrlPreview] = useState("");
@@ -104,6 +117,16 @@ export default function SignupPage() {
   const currentEmail = useWatch({ control, name: "email" })?.trim() ?? "";
   const currentNickname = useWatch({ control, name: "nickname" })?.trim() ?? "";
   const normalizedCurrentEmail = normalizeEmail(currentEmail);
+  const emailCooldownExpiresAt =
+    normalizedCurrentEmail.length > 0
+      ? (emailCooldowns[normalizedCurrentEmail] ?? null)
+      : null;
+  const emailCooldownRemainingSeconds = getEmailCooldownRemainingSeconds(
+    emailCooldownExpiresAt,
+    cooldownTick,
+  );
+  const isCurrentEmailOnCooldown =
+    normalizedCurrentEmail.length > 0 && emailCooldownRemainingSeconds > 0;
   const isEmailVerified =
     verifiedEmail !== null &&
     normalizedCurrentEmail.length > 0 &&
@@ -130,6 +153,21 @@ export default function SignupPage() {
     normalizedCurrentNickname.length > 0 &&
     checkedNickname !== normalizedCurrentNickname;
 
+  useEffect(() => {
+    if (
+      emailCooldownExpiresAt === null ||
+      emailCooldownExpiresAt <= Date.now()
+    ) {
+      return;
+    }
+
+    const timerId = window.setInterval(() => {
+      setCooldownTick((currentTick) => currentTick + 1);
+    }, 1000);
+
+    return () => window.clearInterval(timerId);
+  }, [emailCooldownExpiresAt]);
+
   async function handleSendEmailVerification() {
     setSubmitError(null);
     setEmailMessage(null);
@@ -138,26 +176,81 @@ export default function SignupPage() {
 
     const parsedEmail = z.string().trim().email().safeParse(currentEmail);
     if (!parsedEmail.success) {
-      setEmailMessage({ tone: "warning", text: "이메일 형식으로 입력해 주세요." });
+      setEmailMessage({
+        tone: "warning",
+        text: "이메일 형식으로 입력해 주세요.",
+      });
       return;
     }
 
     const email = normalizeEmail(parsedEmail.data);
+
+    const cooldownRemainingSeconds = getEmailCooldownRemainingSeconds(
+      emailCooldowns[email] ?? null,
+      cooldownTick,
+    );
+
+    if (cooldownRemainingSeconds > 0) {
+      const cooldownMessage = `이미 인증번호를 발송했습니다. ${formatCountdown(
+        cooldownRemainingSeconds,
+      )} 후 재전송할 수 있습니다.`;
+
+      setEmailMessage(null);
+      setEmailCooldownModalMessage(cooldownMessage);
+      return;
+    }
+
     setIsCheckingEmail(true);
 
     try {
       await authApi.sendEmail({ email });
+
+      const cooldownExpiresAt =
+        Date.now() + EMAIL_VERIFICATION_COOLDOWN_SECONDS * 1000;
+
+      setEmailCooldowns((currentCooldowns) => {
+        const nextCooldowns = {
+          ...currentCooldowns,
+          [email]: cooldownExpiresAt,
+        };
+        storeEmailVerificationCooldowns(nextCooldowns);
+        return nextCooldowns;
+      });
+      setCooldownTick(0);
       setVerificationRequestedEmail(email);
-      setEmailMessage({
-        tone: "success",
-        text: "사용 가능한 이메일입니다. 인증번호를 발송했습니다.",
-      });
+      setEmailMessage(null);
     } catch (error) {
+      const errorMessage = getEmailErrorMessage(
+        error,
+        "이메일 확인에 실패했습니다.",
+      );
+
+      if (isEmailVerificationAlreadySentError(error)) {
+        const cooldownExpiresAt =
+          Date.now() + EMAIL_VERIFICATION_COOLDOWN_SECONDS * 1000;
+
+        setEmailCooldowns((currentCooldowns) => {
+          const nextCooldowns = {
+            ...currentCooldowns,
+            [email]: cooldownExpiresAt,
+          };
+          storeEmailVerificationCooldowns(nextCooldowns);
+          return nextCooldowns;
+        });
+        setCooldownTick(0);
+      }
+
       setVerificationRequestedEmail(null);
-      setEmailMessage({
-        tone: "error",
-        text: getEmailErrorMessage(error, "이메일 확인에 실패했습니다."),
-      });
+
+      if (isEmailVerificationAlreadySentError(error)) {
+        setEmailCooldownModalMessage(errorMessage);
+        setEmailMessage(null);
+      } else {
+        setEmailMessage({
+          tone: "error",
+          text: errorMessage,
+        });
+      }
     } finally {
       setIsCheckingEmail(false);
     }
@@ -198,7 +291,10 @@ export default function SignupPage() {
         verificationCode: emailVerificationCode,
       });
       setVerifiedEmail(normalizedCurrentEmail);
-      setEmailMessage({ tone: "success", text: "이메일 인증이 완료되었습니다." });
+      setEmailMessage({
+        tone: "success",
+        text: "이메일 인증이 완료되었습니다.",
+      });
     } catch (error) {
       setVerifiedEmail(null);
       setEmailMessage({
@@ -225,7 +321,8 @@ export default function SignupPage() {
     if (!parsedNickname.success) {
       setNicknameMessage({
         tone: "warning",
-        text: parsedNickname.error.issues[0]?.message ?? "닉네임을 확인해 주세요.",
+        text:
+          parsedNickname.error.issues[0]?.message ?? "닉네임을 확인해 주세요.",
       });
       return;
     }
@@ -339,10 +436,22 @@ export default function SignupPage() {
             </button>
           </div>
 
-          {emailMessage ? <StatusMessage tone={emailMessage.tone}>{emailMessage.text}</StatusMessage> : null}
+          {emailMessage ? (
+            <StatusMessage tone={emailMessage.tone}>
+              {emailMessage.text}
+            </StatusMessage>
+          ) : null}
+          {isCurrentEmailOnCooldown ? (
+            <StatusMessage tone="info">
+              인증번호가 전송되었습니다.{" "}
+              {formatCountdown(emailCooldownRemainingSeconds)} 후 재전송할 수
+              있습니다.
+            </StatusMessage>
+          ) : null}
           {isEmailChangedAfterVerification ? (
             <StatusMessage tone="warning">
-              인증 완료 후 이메일이 변경되었습니다. 다시 중복 확인과 인증을 진행해 주세요.
+              인증 완료 후 이메일이 변경되었습니다. 다시 중복 확인과 인증을
+              진행해 주세요.
             </StatusMessage>
           ) : null}
         </Field>
@@ -371,7 +480,8 @@ export default function SignupPage() {
         <div className="rounded-2xl bg-violet-50/70 px-4 py-3 text-xs font-semibold leading-6 text-violet-700 ring-1 ring-violet-100">
           영문, 숫자, 특수문자(!@#$%^*()_+~)를 포함한 8~20자여야 합니다.
           <br />
-          같은 문자를 3번 연속 사용할 수 없고, 이메일 아이디를 포함할 수 없습니다.
+          같은 문자를 3번 연속 사용할 수 없고, 이메일 아이디를 포함할 수
+          없습니다.
         </div>
 
         <Field
@@ -412,7 +522,8 @@ export default function SignupPage() {
           ) : null}
           {isNicknameChangedAfterCheck ? (
             <StatusMessage tone="warning">
-              중복 확인 후 닉네임이 변경되었습니다. 다시 중복 확인을 진행해 주세요.
+              중복 확인 후 닉네임이 변경되었습니다. 다시 중복 확인을 진행해
+              주세요.
             </StatusMessage>
           ) : null}
         </Field>
@@ -493,7 +604,68 @@ export default function SignupPage() {
           로그인하기
         </Link>
       </div>
+
+      {emailCooldownModalMessage ? (
+        <EmailCooldownModal
+          message={emailCooldownModalMessage}
+          onClose={() => setEmailCooldownModalMessage(null)}
+        />
+      ) : null}
     </AuthShell>
+  );
+}
+
+function EmailCooldownModal({
+  message,
+  onClose,
+}: {
+  message: string;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="false"
+      aria-labelledby="email-cooldown-modal-title"
+      className="pointer-events-none fixed inset-x-0 top-0 z-50 flex justify-center px-4 pt-20 sm:pt-24"
+    >
+      <div className="pointer-events-auto relative w-full max-w-[520px] overflow-hidden rounded-3xl border border-violet-100 bg-white p-8 text-center shadow-[0_28px_90px_rgba(39,39,42,0.24)] sm:p-10">
+        <div className="absolute inset-x-0 top-0 h-1.5 bg-[linear-gradient(90deg,#8c5bff_0%,#78a9ff_58%,#79e4dd_100%)]" />
+        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-[linear-gradient(135deg,#f4f0ff_0%,#eff8ff_100%)] text-4xl text-violet-500 shadow-lg shadow-violet-400/10">
+          ⏱
+        </div>
+        <h2
+          id="email-cooldown-modal-title"
+          className="mt-6 text-2xl font-black tracking-[-0.03em] text-zinc-950"
+        >
+          인증번호를 이미 발송했습니다
+        </h2>
+        <p className="mt-4 text-sm font-bold leading-7 text-zinc-500">
+          {message}
+        </p>
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-8 h-14 w-full rounded-2xl bg-[linear-gradient(135deg,#8c5bff_0%,#8973ff_38%,#78a9ff_72%,#79e4dd_100%)] text-base font-black text-white shadow-lg shadow-violet-400/20 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-violet-400/25"
+        >
+          확인
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -565,7 +737,9 @@ function Field({
           </span>
         ) : null}
       </span>
-      {help ? <p className="mt-1 text-xs font-semibold text-zinc-500">{help}</p> : null}
+      {help ? (
+        <p className="mt-1 text-xs font-semibold text-zinc-500">{help}</p>
+      ) : null}
       <div className="mt-2">{children}</div>
       {error ? (
         <p className="mt-2 text-xs font-semibold text-red-600">{error}</p>
@@ -589,7 +763,9 @@ function StatusMessage({
   }[tone];
 
   return (
-    <p className={`mt-2 rounded-xl px-4 py-3 text-xs font-semibold ring-1 ${toneClassName}`}>
+    <p
+      className={`mt-2 rounded-xl px-4 py-3 text-xs font-semibold ring-1 ${toneClassName}`}
+    >
       {children}
     </p>
   );
@@ -662,6 +838,14 @@ function getNicknameErrorMessage(error: unknown): string {
   return error.message;
 }
 
+function isEmailVerificationAlreadySentError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error.message.includes("USER-429-001") ||
+      error.message.includes("이미 인증번호가 발송되었습니다"))
+  );
+}
+
 function getEmailErrorMessage(error: unknown, fallbackMessage: string): string {
   if (!(error instanceof Error)) {
     return fallbackMessage;
@@ -679,6 +863,10 @@ function getEmailErrorMessage(error: unknown, fallbackMessage: string): string {
     error.message.includes("가입할 수 없는 이메일입니다.")
   ) {
     return "가입할 수 없는 이메일입니다.";
+  }
+
+  if (isEmailVerificationAlreadySentError(error)) {
+    return "이미 인증번호가 발송되었습니다. 잠시 후 다시 시도해 주세요.";
   }
 
   if (
@@ -710,6 +898,118 @@ function getEmailErrorMessage(error: unknown, fallbackMessage: string): string {
   }
 
   return error.message;
+}
+
+function getStoredEmailVerificationCooldowns(): EmailVerificationCooldowns {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  try {
+    const storedValue = window.localStorage.getItem(
+      EMAIL_VERIFICATION_COOLDOWN_STORAGE_KEY,
+    );
+
+    if (storedValue === null) {
+      return {};
+    }
+
+    const parsedValue = JSON.parse(storedValue) as unknown;
+
+    if (!isRecord(parsedValue)) {
+      window.localStorage.removeItem(EMAIL_VERIFICATION_COOLDOWN_STORAGE_KEY);
+      return {};
+    }
+
+    const now = Date.now();
+
+    if (
+      typeof parsedValue.email === "string" &&
+      typeof parsedValue.expiresAt === "number"
+    ) {
+      if (parsedValue.expiresAt <= now) {
+        window.localStorage.removeItem(EMAIL_VERIFICATION_COOLDOWN_STORAGE_KEY);
+        return {};
+      }
+
+      return {
+        [normalizeEmail(parsedValue.email)]: parsedValue.expiresAt,
+      };
+    }
+
+    const validCooldowns = Object.entries(parsedValue).reduce<
+      EmailVerificationCooldowns
+    >((cooldowns, [email, expiresAt]) => {
+      if (typeof expiresAt === "number" && expiresAt > now) {
+        cooldowns[normalizeEmail(email)] = expiresAt;
+      }
+
+      return cooldowns;
+    }, {});
+
+    if (Object.keys(validCooldowns).length === 0) {
+      window.localStorage.removeItem(EMAIL_VERIFICATION_COOLDOWN_STORAGE_KEY);
+    }
+
+    return validCooldowns;
+  } catch {
+    window.localStorage.removeItem(EMAIL_VERIFICATION_COOLDOWN_STORAGE_KEY);
+    return {};
+  }
+}
+
+function storeEmailVerificationCooldowns(
+  cooldowns: EmailVerificationCooldowns,
+): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const now = Date.now();
+  const validCooldowns = Object.entries(cooldowns).reduce<
+    EmailVerificationCooldowns
+  >((nextCooldowns, [email, expiresAt]) => {
+    if (expiresAt > now) {
+      nextCooldowns[normalizeEmail(email)] = expiresAt;
+    }
+
+    return nextCooldowns;
+  }, {});
+
+  if (Object.keys(validCooldowns).length === 0) {
+    window.localStorage.removeItem(EMAIL_VERIFICATION_COOLDOWN_STORAGE_KEY);
+    return;
+  }
+
+  window.localStorage.setItem(
+    EMAIL_VERIFICATION_COOLDOWN_STORAGE_KEY,
+    JSON.stringify(validCooldowns),
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function getEmailCooldownRemainingSeconds(
+  expiresAt: number | null,
+  tick: number,
+): number {
+  void tick;
+
+  if (expiresAt === null) {
+    return 0;
+  }
+
+  return Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000));
+}
+
+function formatCountdown(totalSeconds: number): string {
+  const safeTotalSeconds = Math.max(0, totalSeconds);
+  const minutes = Math.floor(safeTotalSeconds / 60);
+  const seconds = safeTotalSeconds % 60;
+
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
 function normalizeEmail(email: string): string {
