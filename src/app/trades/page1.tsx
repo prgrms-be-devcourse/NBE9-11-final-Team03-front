@@ -5,17 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoginRequiredState } from "@/components/common/LoginRequiredState";
-import {
-  chatApi,
-  profileApi,
-  talentApi,
-  tradeApi,
-  type ChatRoomListItem,
-  type MyProfileDetailRes,
-  type TalentDetailRes,
-  type TradeListRes,
-  type TradeStatus,
-} from "@/lib/api";
+import { tradeApi, type TradeListRes, type TradeStatus } from "@/lib/api";
 import { getStoredUserId, hasStoredAccessToken } from "@/lib/auth";
 import {
   isAuthRequiredError,
@@ -245,195 +235,9 @@ function formatTradeTitle(trade: TradeListItem) {
     return title;
   }
 
-  const talentTitle = trade.talentTitle?.trim();
-  if (talentTitle) {
-    return talentTitle;
-  }
-
   const tradeId = getPositiveInteger(trade.tradeId);
 
   return tradeId === null ? "거래 정보 없음" : `거래 #${tradeId}`;
-}
-
-function getNonEmptyText(value: unknown) {
-  return typeof value === "string" && value.trim().length > 0
-    ? value.trim()
-    : null;
-}
-
-function getTalentAuthorId(talent: TalentDetailRes) {
-  return (
-    getPositiveInteger(talent.author?.id) ??
-    getPositiveInteger(talent.author?.userId) ??
-    getPositiveInteger(talent.author?.authorId) ??
-    getPositiveInteger(talent.author?.sellerId) ??
-    getPositiveInteger(talent.userId) ??
-    getPositiveInteger(talent.authorId) ??
-    getPositiveInteger(talent.sellerId)
-  );
-}
-
-function findMatchingChatRoom(
-  trade: TradeListItem,
-  chatRooms: ChatRoomListItem[],
-) {
-  const tradeId = getPositiveInteger(trade.tradeId);
-  const tradeGroupId = getPositiveInteger(trade.tradeGroupId);
-  const talentId = getPositiveInteger(trade.talentId);
-  const buyerId = getPositiveInteger(trade.buyerId);
-  const sellerId = getPositiveInteger(trade.sellerId);
-
-  return (
-    chatRooms.find((room) => {
-      const roomTradeId = getPositiveInteger(room.tradeId);
-      return tradeId !== null && roomTradeId === tradeId;
-    }) ??
-    chatRooms.find((room) => {
-      const roomTradeGroupId = getPositiveInteger(room.tradeGroupId);
-      return tradeGroupId !== null && roomTradeGroupId === tradeGroupId;
-    }) ??
-    chatRooms.find((room) => {
-      const roomTalentId = getPositiveInteger(room.talentId);
-      const roomBuyerId = getPositiveInteger(room.buyerId);
-      const roomSellerId = getPositiveInteger(room.sellerId);
-
-      return (
-        talentId !== null &&
-        buyerId !== null &&
-        sellerId !== null &&
-        roomTalentId === talentId &&
-        roomBuyerId === buyerId &&
-        roomSellerId === sellerId
-      );
-    }) ??
-    null
-  );
-}
-
-async function getTalentDetailMap(trades: TradeListItem[]) {
-  const talentIds = Array.from(
-    new Set(
-      trades
-        .map((trade) => getPositiveInteger(trade.talentId))
-        .filter((talentId): talentId is number => talentId !== null),
-    ),
-  );
-
-  const settledDetails = await Promise.allSettled(
-    talentIds.map((talentId) => talentApi.getDetail(talentId)),
-  );
-
-  const talentDetailMap = new Map<number, TalentDetailRes>();
-
-  for (const result of settledDetails) {
-    if (result.status === "fulfilled") {
-      const talentId =
-        getPositiveInteger(result.value.id) ??
-        getPositiveInteger(result.value.talentId);
-
-      if (talentId !== null) {
-        talentDetailMap.set(talentId, result.value);
-      }
-    }
-  }
-
-  return talentDetailMap;
-}
-
-function applyTradeDisplayFields({
-  trade,
-  currentUserId,
-  myProfile,
-  chatRooms,
-  talentDetailMap,
-}: {
-  trade: TradeListItem;
-  currentUserId: number | null;
-  myProfile: MyProfileDetailRes | null;
-  chatRooms: ChatRoomListItem[];
-  talentDetailMap: Map<number, TalentDetailRes>;
-}): TradeListItem {
-  const enrichedTrade: TradeListItem = { ...trade };
-  const talentId = getPositiveInteger(enrichedTrade.talentId);
-  const talentDetail = talentId === null ? null : talentDetailMap.get(talentId) ?? null;
-  const myNickname = getNonEmptyText(myProfile?.nickname);
-  const matchingRoom = findMatchingChatRoom(enrichedTrade, chatRooms);
-  const opponentNickname = getNonEmptyText(matchingRoom?.opponentNickname);
-
-  enrichedTrade.talentTitle =
-    getNonEmptyText(enrichedTrade.talentTitle) ??
-    getNonEmptyText(matchingRoom?.talentTitle) ??
-    getNonEmptyText(talentDetail?.title) ??
-    enrichedTrade.talentTitle;
-
-  if (currentUserId !== null && myNickname !== null) {
-    if (currentUserId === getPositiveInteger(enrichedTrade.buyerId)) {
-      enrichedTrade.buyerNickname =
-        getNonEmptyText(enrichedTrade.buyerNickname) ?? myNickname;
-    }
-
-    if (currentUserId === getPositiveInteger(enrichedTrade.sellerId)) {
-      enrichedTrade.sellerNickname =
-        getNonEmptyText(enrichedTrade.sellerNickname) ?? myNickname;
-    }
-  }
-
-  if (currentUserId !== null && opponentNickname !== null) {
-    if (currentUserId === getPositiveInteger(enrichedTrade.buyerId)) {
-      enrichedTrade.sellerNickname =
-        getNonEmptyText(enrichedTrade.sellerNickname) ?? opponentNickname;
-    }
-
-    if (currentUserId === getPositiveInteger(enrichedTrade.sellerId)) {
-      enrichedTrade.buyerNickname =
-        getNonEmptyText(enrichedTrade.buyerNickname) ?? opponentNickname;
-    }
-  }
-
-  const talentAuthorId = talentDetail ? getTalentAuthorId(talentDetail) : null;
-  const talentAuthorNickname = getNonEmptyText(talentDetail?.author?.nickname);
-
-  if (
-    talentAuthorId !== null &&
-    talentAuthorId === getPositiveInteger(enrichedTrade.sellerId) &&
-    talentAuthorNickname !== null
-  ) {
-    enrichedTrade.sellerNickname =
-      getNonEmptyText(enrichedTrade.sellerNickname) ?? talentAuthorNickname;
-  }
-
-  return enrichedTrade;
-}
-
-async function enrichTradeListDisplayFields(
-  trades: TradeListItem[],
-  currentUserId: number | null,
-) {
-  if (trades.length === 0) {
-    return trades;
-  }
-
-  const [profileResult, chatRoomsResult, talentDetailMap] = await Promise.all([
-    profileApi.getMe().then(
-      (profile) => profile,
-      () => null,
-    ),
-    chatApi.getMyChatRooms({ size: 100 }).then(
-      (response) => response.content,
-      () => [],
-    ),
-    getTalentDetailMap(trades),
-  ]);
-
-  return trades.map((trade) =>
-    applyTradeDisplayFields({
-      trade,
-      currentUserId,
-      myProfile: profileResult,
-      chatRooms: chatRoomsResult,
-      talentDetailMap,
-    }),
-  );
 }
 
 function getTradeHref(trade: TradeListItem) {
@@ -467,8 +271,7 @@ export default function TradesPage() {
         return;
       }
 
-      const nextCurrentUserId = getStoredUserId();
-      setCurrentUserId(nextCurrentUserId);
+      setCurrentUserId(getStoredUserId());
 
       if (append) {
         setIsLoadingMore(true);
@@ -485,13 +288,10 @@ export default function TradesPage() {
           size: PAGE_SIZE,
         });
 
-        const enrichedTrades = await enrichTradeListDisplayFields(
-          response.content,
-          nextCurrentUserId,
-        );
-
         setTrades((current) =>
-          append ? [...current, ...enrichedTrades] : enrichedTrades,
+          append
+            ? [...current, ...response.content]
+            : response.content,
         );
         setHasNext(response.hasNext);
         setNextCursor(response.nextCursor);

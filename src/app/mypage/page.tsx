@@ -138,26 +138,10 @@ export default function MyPage() {
 
   if (!hasStoredAccessToken()) {
     return (
-      <main className="relative min-h-[calc(100dvh-64px)] overflow-visible bg-[linear-gradient(135deg,#fbfdff_0%,#edf5ff_46%,#f4efff_100%)]">
-        <div
-          className="pointer-events-none absolute left-1/2 top-20 h-[420px] w-[720px] -translate-x-1/2 rounded-full bg-[#8c5bff]/12 blur-3xl"
-          aria-hidden="true"
-        />
-        <div
-          className="pointer-events-none absolute right-[8%] top-48 h-52 w-52 rounded-full bg-[#79e4dd]/20 blur-3xl"
-          aria-hidden="true"
-        />
-
-        <div className="fixed-container relative pb-28 pt-10 sm:pb-40 sm:pt-14 lg:pb-72 lg:pt-16">
-          <header className="mx-auto max-w-3xl text-center">
-            <h1 className="baton-page-title mt-3 !font-bold">MY PAGE</h1>
-            <p className="mx-auto mt-4 max-w-2xl text-sm font-semibold leading-7 text-zinc-500 sm:mt-5 sm:text-lg sm:leading-8">
-              프로필, 크레딧, 최근 거래 상태를 한 곳에서 확인합니다.
-            </p>
-          </header>
-
+      <main className="min-h-[calc(100dvh-64px)] bg-white">
+        <div className="fixed-container py-12 sm:py-16 lg:py-24">
           <LoginRequiredState
-            className="mx-auto mt-8 w-full max-w-[880px] bg-white/90 shadow-[0_28px_80px_rgba(80,60,160,0.14)] backdrop-blur sm:mt-12"
+            className="w-full bg-[#fbf9ff] !py-12 shadow-sm shadow-violet-950/[0.04] sm:!py-16"
             description="마이페이지는 로그인 후 이용할 수 있어요. 로그인하면 프로필, 크레딧, 최근 거래 상태를 바로 확인할 수 있습니다."
           />
         </div>

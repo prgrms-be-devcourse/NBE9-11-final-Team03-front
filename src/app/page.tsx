@@ -1,8 +1,18 @@
 ﻿"use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type MouseEvent, type ReactNode } from "react";
 import { BrandLogoContent } from "@/components/layout/BrandLogo";
+import {
+  getHeaderProfileImageUrl,
+  type HeaderAuthState,
+  readHeaderAuthState,
+} from "@/components/layout/headerAuth";
+import { ProfileMenu } from "@/components/layout/ProfileMenu";
+import { NotificationDropdown } from "@/components/notification/NotificationDropdown";
+import { authApi } from "@/lib/api";
+import { clearAuthSession, subscribeAuthChanged } from "@/lib/auth";
 import { SiFigma, SiGoogle, SiNotion, SiSlack } from "react-icons/si";
 import { BsChatDotsFill } from "react-icons/bs";
 import {
@@ -173,10 +183,35 @@ const landingNavItems = [
   { href: "/credits", label: "크레딧" },
 ];
 
+const landingAdminNavItems = [
+  { href: "/talents", label: "재능 둘러보기" },
+  { href: "/admin", label: "관리자" },
+];
+
 export default function Home() {
+  const router = useRouter();
   const [current, setCurrent] = useState(0);
+  const [authState, setAuthState] = useState<HeaderAuthState>({
+    isLoggedIn: false,
+    nickname: null,
+    profileImageUrl: null,
+    role: null,
+  });
 
   const activeSlide = useMemo(() => heroSlides[current], [current]);
+  const isAdmin = authState.role === "ADMIN";
+  const visibleNavItems = isAdmin ? landingAdminNavItems : landingNavItems;
+
+  async function handleLogout(): Promise<void> {
+    try {
+      await authApi.logout();
+    } catch {
+      // 로그아웃 API 실패 여부와 관계없이 로컬 세션은 정리합니다.
+    } finally {
+      clearAuthSession();
+      router.push("/login");
+    }
+  }
 
   // 무료 시작 버튼 스크롤 속도 조절
   function scrollToStart(event: MouseEvent<HTMLAnchorElement>) {
@@ -214,6 +249,20 @@ export default function Home() {
   }
 
   useEffect(() => {
+    function syncAuthState(): void {
+      setAuthState(readHeaderAuthState());
+    }
+
+    const timeoutId = window.setTimeout(syncAuthState, 0);
+    const unsubscribe = subscribeAuthChanged(syncAuthState);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
     const timer = window.setInterval(() => {
       setCurrent((prev) => (prev + 1) % heroSlides.length);
     }, 5200);
@@ -249,7 +298,7 @@ export default function Home() {
           </Link>
 
           <nav className="navMenu" aria-label="메인 메뉴">
-            {landingNavItems.map((item) => (
+            {visibleNavItems.map((item) => (
               <Link key={item.href} href={item.href}>
                 {item.label}
               </Link>
@@ -257,12 +306,26 @@ export default function Home() {
           </nav>
 
           <div className="headerActions">
-            <Link href="/login" className="ghostBtn">
-              로그인
-            </Link>
-            <Link href="/signup" className="purpleBtn">
-              회원가입
-            </Link>
+            {authState.isLoggedIn ? (
+              <>
+                <NotificationDropdown />
+                <ProfileMenu
+                  nickname={authState.nickname}
+                  profileImageUrl={getHeaderProfileImageUrl(authState)}
+                  isAdmin={isAdmin}
+                  onLogout={handleLogout}
+                />
+              </>
+            ) : (
+              <>
+                <Link href="/login" className="ghostBtn">
+                  로그인
+                </Link>
+                <Link href="/signup" className="purpleBtn">
+                  회원가입
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -2537,7 +2600,9 @@ export default function Home() {
         }
 
         .startSticker {
-          top: 84px !important;
+          top: -50px !important;
+          left: auto !important;
+          right: -200px !important;
           background: #15151f !important;
           color: #ffffff !important;
           animation: startFloat 5.2s ease-in-out infinite;
@@ -2586,8 +2651,8 @@ export default function Home() {
 
         .startMiniCardOne {
           left: 35%;
-          top: 34%;
-          transform: rotate(-12deg);
+          top: 28%;
+          transform: rotate(12deg);
         }
 
         .startMiniCardTwo {

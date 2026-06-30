@@ -29,6 +29,7 @@ import type {
   ChatRoomRes,
   CreditBalanceRes,
   CreditTransactionRes,
+  CreditTransactionSearchParams,
   CursorPageRes,
   EmailSendReq,
   EmailVerificationReq,
@@ -666,7 +667,7 @@ export const creditApi = {
   },
 
   getTransactions(
-    params: CursorParams = {},
+    params: CreditTransactionSearchParams = {},
   ): Promise<CursorPageRes<CreditTransactionRes>> {
     return apiFetch<CursorPageRes<CreditTransactionRes>>(
       "/api/v1/credit/transactions",

@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -17,6 +17,8 @@ import {
   creditApi,
   type CreditBalanceRes,
   type CreditTransactionRes,
+  type CreditTransactionSearchParams,
+  type CreditTransactionType,
 } from "@/lib/api";
 import { isAuthRequiredMessage } from "@/lib/auth-required";
 import { formatCredit, formatDate } from "@/utils/format";
@@ -25,7 +27,9 @@ const CREDIT_ACCOUNT_NOT_FOUND_MESSAGE =
   "크레딧 계좌가 없습니다. 기존 가입 계정일 수 있습니다. 새로 회원가입한 계정으로 다시 확인해 주세요.";
 const TRANSACTION_PAGE_SIZE = 10;
 
-const transactionTypeLabels: Record<CreditTransactionRes["type"], string> = {
+type TransactionTypeFilter = "" | CreditTransactionType;
+
+const transactionTypeLabels: Record<CreditTransactionType, string> = {
   WELCOME: "가입 보너스",
   PURCHASE_DEBIT: "크레딧 사용",
   ESCROW_HOLD: "에스크로 예치",
@@ -35,6 +39,17 @@ const transactionTypeLabels: Record<CreditTransactionRes["type"], string> = {
   REFERRAL_REWARD: "추천 보상",
   ADJUSTMENT: "관리자 조정",
 };
+
+const transactionTypeOptions: Array<{
+  value: TransactionTypeFilter;
+  label: string;
+}> = [
+  { value: "", label: "전체 유형" },
+  ...Object.entries(transactionTypeLabels).map(([value, label]) => ({
+    value: value as CreditTransactionType,
+    label,
+  })),
+];
 
 function hasStoredAccessToken(): boolean {
   if (typeof window === "undefined") {
@@ -59,6 +74,38 @@ function getCreditErrorMessage(error: unknown): string {
   return error.message;
 }
 
+function toStartOfDay(date: string): string | undefined {
+  return date ? `${date}T00:00:00` : undefined;
+}
+
+function toEndOfDay(date: string): string | undefined {
+  return date ? `${date}T23:59:59` : undefined;
+}
+
+function buildTransactionParams({
+  cursor,
+  type,
+  fromDate,
+  toDate,
+}: {
+  cursor?: number | null;
+  type: TransactionTypeFilter;
+  fromDate: string;
+  toDate: string;
+}): CreditTransactionSearchParams {
+  return {
+    cursor,
+    size: TRANSACTION_PAGE_SIZE,
+    type: type || undefined,
+    from: toStartOfDay(fromDate),
+    to: toEndOfDay(toDate),
+  };
+}
+
+function isInvalidDateRange(fromDate: string, toDate: string): boolean {
+  return Boolean(fromDate && toDate && fromDate > toDate);
+}
+
 export default function CreditsPage() {
   const [balance, setBalance] = useState<CreditBalanceRes | null>(null);
   const [transactions, setTransactions] = useState<CreditTransactionRes[]>([]);
@@ -68,6 +115,66 @@ export default function CreditsPage() {
   const [isTransactionsLoading, setIsTransactionsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [filterErrorMessage, setFilterErrorMessage] = useState<string | null>(
+    null,
+  );
+  const [typeFilter, setTypeFilter] = useState<TransactionTypeFilter>("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [appliedTypeFilter, setAppliedTypeFilter] =
+    useState<TransactionTypeFilter>("");
+  const [appliedFromDate, setAppliedFromDate] = useState("");
+  const [appliedToDate, setAppliedToDate] = useState("");
+
+  const activeFilterDescription = useMemo(() => {
+    const descriptions: string[] = [];
+
+    if (appliedTypeFilter) {
+      descriptions.push(transactionTypeLabels[appliedTypeFilter]);
+    }
+
+    if (appliedFromDate || appliedToDate) {
+      descriptions.push(
+        `${appliedFromDate || "처음"} ~ ${appliedToDate || "오늘"}`,
+      );
+    }
+
+    return descriptions.join(" · ");
+  }, [appliedFromDate, appliedToDate, appliedTypeFilter]);
+
+  const loadTransactions = useCallback(
+    async ({
+      cursor = null,
+      append = false,
+      type = appliedTypeFilter,
+      from = appliedFromDate,
+      to = appliedToDate,
+    }: {
+      cursor?: number | null;
+      append?: boolean;
+      type?: TransactionTypeFilter;
+      from?: string;
+      to?: string;
+    } = {}) => {
+      const transactionPage = await creditApi.getTransactions(
+        buildTransactionParams({
+          cursor,
+          type,
+          fromDate: from,
+          toDate: to,
+        }),
+      );
+
+      setTransactions((prevTransactions) =>
+        append
+          ? [...prevTransactions, ...transactionPage.content]
+          : transactionPage.content,
+      );
+      setNextCursor(transactionPage.nextCursor);
+      setHasNext(transactionPage.hasNext);
+    },
+    [appliedFromDate, appliedToDate, appliedTypeFilter],
+  );
 
   useEffect(() => {
     let ignore = false;
@@ -125,6 +232,63 @@ export default function CreditsPage() {
   const balanceValue = balance?.balance ?? 0;
   const escrowBalanceValue = balance?.escrowBalance ?? 0;
   const isLoginRequired = isAuthRequiredMessage(errorMessage);
+  const isFilterDisabled = isTransactionsLoading || isLoadingMore;
+
+  async function handleApplyFilters() {
+    if (isInvalidDateRange(fromDate, toDate)) {
+      setFilterErrorMessage("시작일은 종료일보다 늦을 수 없습니다.");
+      return;
+    }
+
+    setFilterErrorMessage(null);
+    setErrorMessage(null);
+    setIsTransactionsLoading(true);
+    setAppliedTypeFilter(typeFilter);
+    setAppliedFromDate(fromDate);
+    setAppliedToDate(toDate);
+
+    try {
+      await loadTransactions({
+        type: typeFilter,
+        from: fromDate,
+        to: toDate,
+      });
+    } catch (error) {
+      setTransactions([]);
+      setNextCursor(null);
+      setHasNext(false);
+      setErrorMessage(getCreditErrorMessage(error));
+    } finally {
+      setIsTransactionsLoading(false);
+    }
+  }
+
+  async function handleResetFilters() {
+    setTypeFilter("");
+    setFromDate("");
+    setToDate("");
+    setAppliedTypeFilter("");
+    setAppliedFromDate("");
+    setAppliedToDate("");
+    setFilterErrorMessage(null);
+    setErrorMessage(null);
+    setIsTransactionsLoading(true);
+
+    try {
+      await loadTransactions({
+        type: "",
+        from: "",
+        to: "",
+      });
+    } catch (error) {
+      setTransactions([]);
+      setNextCursor(null);
+      setHasNext(false);
+      setErrorMessage(getCreditErrorMessage(error));
+    } finally {
+      setIsTransactionsLoading(false);
+    }
+  }
 
   async function handleLoadMore() {
     if (!hasNext || nextCursor === null || isLoadingMore) {
@@ -135,17 +299,10 @@ export default function CreditsPage() {
     setErrorMessage(null);
 
     try {
-      const transactionPage = await creditApi.getTransactions({
+      await loadTransactions({
         cursor: nextCursor,
-        size: TRANSACTION_PAGE_SIZE,
+        append: true,
       });
-
-      setTransactions((prevTransactions) => [
-        ...prevTransactions,
-        ...transactionPage.content,
-      ]);
-      setNextCursor(transactionPage.nextCursor);
-      setHasNext(transactionPage.hasNext);
     } catch (error) {
       setErrorMessage(getCreditErrorMessage(error));
     } finally {
@@ -226,6 +383,85 @@ export default function CreditsPage() {
             </div>
           </div>
 
+          <div className="mt-6 rounded-lg border border-[#ded6ff] bg-white/95 p-4 shadow-sm shadow-violet-950/[0.04] sm:p-5">
+            <div className="grid gap-3 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
+              <label className="block">
+                <span className="text-xs font-black text-[#8c5bff]">
+                  거래 유형
+                </span>
+                <select
+                  value={typeFilter}
+                  disabled={isFilterDisabled}
+                  onChange={(event) =>
+                    setTypeFilter(event.target.value as TransactionTypeFilter)
+                  }
+                  className="mt-2 h-11 w-full rounded-lg border border-[#ded6ff] bg-white px-3 text-sm font-black text-zinc-800 outline-none transition focus:border-[#8c5bff] disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-400"
+                >
+                  {transactionTypeOptions.map((option) => (
+                    <option key={option.value || "ALL"} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block">
+                <span className="text-xs font-black text-[#8c5bff]">
+                  시작일
+                </span>
+                <input
+                  type="date"
+                  value={fromDate}
+                  disabled={isFilterDisabled}
+                  onChange={(event) => setFromDate(event.target.value)}
+                  className="mt-2 h-11 w-full rounded-lg border border-[#ded6ff] bg-white px-3 text-sm font-black text-zinc-800 outline-none transition focus:border-[#8c5bff] disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-400"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-xs font-black text-[#8c5bff]">
+                  종료일
+                </span>
+                <input
+                  type="date"
+                  value={toDate}
+                  disabled={isFilterDisabled}
+                  onChange={(event) => setToDate(event.target.value)}
+                  className="mt-2 h-11 w-full rounded-lg border border-[#ded6ff] bg-white px-3 text-sm font-black text-zinc-800 outline-none transition focus:border-[#8c5bff] disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-400"
+                />
+              </label>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={isFilterDisabled}
+                  onClick={handleApplyFilters}
+                  className="h-11 flex-1 cursor-pointer rounded-lg bg-[#8c5bff] px-4 text-sm font-black text-white shadow-sm shadow-violet-950/[0.08] transition hover:bg-[#7847f5] disabled:cursor-not-allowed disabled:opacity-60 md:flex-none"
+                >
+                  필터 적용
+                </button>
+                <button
+                  type="button"
+                  disabled={isFilterDisabled}
+                  onClick={handleResetFilters}
+                  className="h-11 flex-1 cursor-pointer rounded-lg border border-[#ded6ff] bg-white px-4 text-sm font-black text-zinc-700 shadow-sm shadow-violet-950/[0.04] transition hover:border-[#8c5bff] hover:bg-[#fbf9ff] hover:text-[#8c5bff] disabled:cursor-not-allowed disabled:opacity-60 md:flex-none"
+                >
+                  초기화
+                </button>
+              </div>
+            </div>
+
+            {filterErrorMessage ? (
+              <p className="mt-3 text-sm font-bold text-rose-600">
+                {filterErrorMessage}
+              </p>
+            ) : activeFilterDescription ? (
+              <p className="mt-3 text-sm font-semibold text-zinc-500">
+                적용 중인 필터: {activeFilterDescription}
+              </p>
+            ) : null}
+          </div>
+
           <div className="mt-6">
             {isTransactionsLoading ? (
               <div className="rounded-lg border border-[#ded6ff] bg-white/95 p-8 text-center text-sm font-semibold text-zinc-600 shadow-sm shadow-violet-950/[0.04]">
@@ -294,10 +530,10 @@ function CreditTransactionCard({
             ) : (
               <ArrowUpRight className="size-3.5" aria-hidden="true" />
             )}
-            {transactionTypeLabels[transaction.type]}
+            {transactionTypeLabels[transaction.type] ?? transaction.type}
           </span>
           <p className="mt-3 text-base font-black text-zinc-950">
-            {transaction.defaultReason}
+            {transaction.defaultReason || "상세 사유 없음"}
           </p>
           <p className="mt-1 text-xs font-semibold text-zinc-500">
             {formatDate(transaction.createdAt)}

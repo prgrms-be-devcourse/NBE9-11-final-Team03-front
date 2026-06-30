@@ -19,37 +19,87 @@ import {
   isAuthRequiredMessage,
 } from "@/lib/auth-required";
 
+function numberInput(value: unknown) {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  if (typeof value === "number") {
+    return Number.isNaN(value) ? undefined : value;
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+
+    return trimmed === "" ? undefined : Number(trimmed);
+  }
+
+  return value;
+}
+
+function creditPriceInput(value: unknown) {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  if (typeof value === "number") {
+    return Number.isNaN(value) ? undefined : String(value);
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+
+    return trimmed === "" ? undefined : trimmed;
+  }
+
+  return value;
+}
+
 const schema = z.object({
-  title: z.string().min(5, "제목은 5자 이상 입력해 주세요."),
-  categoryId: z.coerce.number().min(1, "카테고리를 선택해 주세요."),
-  content: z.string().min(30, "제공 내용은 30자 이상 입력해 주세요."),
-  estimatedHours: z.coerce
-    .number()
-    .int("예상 작업 기간을 선택해 주세요.")
-    .positive("예상 작업 기간을 선택해 주세요."),
-  creditPrice: z.preprocess(
-    (value) => {
-      if (value === "" || value === undefined || value === null) {
-        return undefined;
-      }
-
-      if (typeof value === "number" && Number.isNaN(value)) {
-        return undefined;
-      }
-
-      return Number(value);
-    },
+  title: z
+    .string()
+    .trim()
+    .min(1, "제목을 입력해 주세요.")
+    .max(100, "제목은 100자 이하로 입력해 주세요."),
+  categoryId: z.preprocess(
+    numberInput,
     z
-      .number({
-        error: "필요 크레딧을 입력해 주세요.",
-      })
-      .int("크레딧은 숫자만 입력해 주세요.")
-      .min(0, "크레딧은 0 이상으로 입력해 주세요."),
+      .number({ error: "카테고리를 선택해 주세요." })
+      .int("카테고리를 선택해 주세요.")
+      .min(1, "카테고리를 선택해 주세요."),
+  ),
+  content: z
+    .string()
+    .trim()
+    .min(1, "제공 내용을 입력해 주세요.")
+    .max(10000, "제공 내용은 10000자 이하로 입력해 주세요."),
+  estimatedHours: z.preprocess(
+    numberInput,
+    z
+      .number({ error: "예상 작업 기간을 선택해 주세요." })
+      .int("예상 작업 기간은 1 이상이어야 합니다.")
+      .min(1, "예상 작업 기간은 1 이상이어야 합니다."),
+  ),
+  creditPrice: z.preprocess(
+    creditPriceInput,
+    z
+      .string({ error: "필요 크레딧을 입력해 주세요." })
+      .regex(/^-?\d+$/, "크레딧은 숫자만 입력해 주세요.")
+      .transform(Number)
+      .pipe(
+        z
+          .number()
+          .int("크레딧은 숫자만 입력해 주세요.")
+          .min(0, "크레딧은 0 이상으로 입력해 주세요."),
+      ),
   ),
 });
 
 type FormInput = z.input<typeof schema>;
 type FormValues = z.output<typeof schema>;
+
+const TITLE_MAX_LENGTH = 100;
+const CONTENT_MAX_LENGTH = 10000;
 
 const estimatedDurationOptions: ListboxOption<string>[] = [
   { value: "8", label: "당일" },
@@ -86,6 +136,10 @@ function getCreatedTalentId(response: { id?: number; talentId?: number }) {
     : null;
 }
 
+function getTextLength(value: unknown) {
+  return typeof value === "string" ? value.length : 0;
+}
+
 export default function NewTalentPage() {
   const router = useRouter();
   const [message, setMessage] = useState("");
@@ -103,6 +157,7 @@ export default function NewTalentPage() {
     register,
     control,
     handleSubmit,
+    setError,
     setValue,
     formState: { errors, isSubmitting },
   } = useForm<FormInput, unknown, FormValues>({
@@ -121,6 +176,10 @@ export default function NewTalentPage() {
     control,
     name: "creditPrice",
   });
+  const currentTitle = useWatch({ control, name: "title" });
+  const currentContent = useWatch({ control, name: "content" });
+  const titleLength = getTextLength(currentTitle);
+  const contentLength = getTextLength(currentContent);
 
   useEffect(() => {
     let ignore = false;
@@ -191,6 +250,24 @@ export default function NewTalentPage() {
 
   async function onSubmit(values: FormValues) {
     setMessage("");
+    const title = values.title.trim();
+    const content = values.content.trim();
+
+    if (title.length > TITLE_MAX_LENGTH) {
+      setError("title", {
+        type: "maxLength",
+        message: "제목은 100자 이하로 입력해 주세요.",
+      });
+      return;
+    }
+
+    if (content.length > CONTENT_MAX_LENGTH) {
+      setError("content", {
+        type: "maxLength",
+        message: "제공 내용은 10000자 이하로 입력해 주세요.",
+      });
+      return;
+    }
 
     const userId = getStoredUserId();
 
@@ -203,8 +280,8 @@ export default function NewTalentPage() {
     try {
       const response = await talentApi.create({
         categoryId: values.categoryId,
-        title: values.title.trim(),
-        content: values.content.trim(),
+        title,
+        content,
         estimatedHours: values.estimatedHours,
         creditPrice: values.creditPrice,
       });
@@ -281,8 +358,21 @@ export default function NewTalentPage() {
             />
 
             <div className="grid gap-6">
-              <Field label="제목" error={errors.title?.message}>
-                <input {...register("title")} className={inputClassName} />
+              <Field
+                label="제목"
+                error={errors.title?.message}
+                counter={
+                  <CharacterCount
+                    count={titleLength}
+                    limit={TITLE_MAX_LENGTH}
+                  />
+                }
+              >
+                <input
+                  {...register("title")}
+                  maxLength={TITLE_MAX_LENGTH}
+                  className={inputClassName}
+                />
               </Field>
 
               <Field label="카테고리" error={errors.categoryId?.message}>
@@ -330,9 +420,19 @@ export default function NewTalentPage() {
                 ) : null}
               </Field>
 
-              <Field label="제공 내용" error={errors.content?.message}>
+              <Field
+                label="제공 내용"
+                error={errors.content?.message}
+                counter={
+                  <CharacterCount
+                    count={contentLength}
+                    limit={CONTENT_MAX_LENGTH}
+                  />
+                }
+              >
                 <textarea
                   {...register("content")}
+                  maxLength={CONTENT_MAX_LENGTH}
                   rows={7}
                   className={textareaClassName}
                 />
@@ -365,7 +465,7 @@ export default function NewTalentPage() {
                   />
                 </Field>
 
-                <Field label="필요 크레딧">
+                <Field label="필요 크레딧" error={errors.creditPrice?.message}>
                   <input
                     type="text"
                     inputMode="numeric"
@@ -389,14 +489,6 @@ export default function NewTalentPage() {
                       );
                     }}
                   />
-
-                  <div className="mt-2 min-h-5">
-                    {errors.creditPrice?.message ? (
-                      <p className="text-xs font-semibold text-red-600">
-                        {errors.creditPrice.message}
-                      </p>
-                    ) : null}
-                  </div>
                 </Field>
               </div>
 
@@ -437,19 +529,48 @@ export default function NewTalentPage() {
 function Field({
   label,
   error,
+  counter,
   children,
 }: {
   label: string;
   error?: string;
+  counter?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <label className="block text-[15px] font-black text-zinc-900">
       {label}
       <div className="mt-2.5">{children}</div>
-      {error ? (
-        <p className="mt-1.5 text-xs font-semibold text-red-600">{error}</p>
+      {error || counter ? (
+        <div className="mt-1.5 flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+          {error ? (
+            <p className="min-w-0 flex-1 text-xs font-semibold text-red-600">
+              {error}
+            </p>
+          ) : null}
+          {counter ? <div className="ml-auto shrink-0">{counter}</div> : null}
+        </div>
       ) : null}
     </label>
+  );
+}
+
+function CharacterCount({
+  count,
+  limit,
+}: {
+  count: number;
+  limit: number;
+}) {
+  const isOverLimit = count > limit;
+
+  return (
+    <span
+      className={`text-xs font-semibold ${
+        isOverLimit ? "text-red-600" : "text-zinc-500"
+      }`}
+    >
+      {count.toLocaleString("en-US")}/{limit.toLocaleString("en-US")}
+    </span>
   );
 }

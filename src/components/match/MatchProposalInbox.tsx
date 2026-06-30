@@ -9,6 +9,7 @@ import { MatchProposalCard } from "@/components/match/MatchProposalCard";
 import {
   chatApi,
   matchApi,
+  type ChatRoomListItem,
   type MatchProposalReceivedRes,
   type MatchProposalSentRes,
 } from "@/lib/api";
@@ -20,6 +21,54 @@ import {
 
 interface MatchProposalInboxProps {
   type: "received" | "sent";
+}
+
+const ACCEPT_SUCCESS_CHAT_LIST_MESSAGE =
+  "제안이 수락되었습니다. 생성된 채팅방은 채팅 목록에서 확인해 주세요.";
+
+function getChatRoomId(room: ChatRoomListItem) {
+  return Number.isInteger(room.roomId) && room.roomId > 0
+    ? room.roomId
+    : null;
+}
+
+function getChatRoomIdSet(rooms: ChatRoomListItem[]) {
+  return new Set(
+    rooms
+      .map((room) => getChatRoomId(room))
+      .filter((roomId): roomId is number => roomId !== null),
+  );
+}
+
+function getSafeChatRooms(
+  response: Awaited<ReturnType<typeof chatApi.getMyChatRooms>>,
+) {
+  return Array.isArray(response.content) ? response.content : [];
+}
+
+function findConfirmedNewChatRoom(
+  beforeRoomIds: Set<number> | null,
+  afterRooms: ChatRoomListItem[],
+) {
+  if (beforeRoomIds === null) {
+    return null;
+  }
+
+  const newRooms = afterRooms.filter((room) => {
+    const roomId = getChatRoomId(room);
+
+    return roomId !== null && !beforeRoomIds.has(roomId);
+  });
+
+  if (newRooms.length === 1) {
+    return newRooms[0];
+  }
+
+  const transactionRooms = newRooms.filter(
+    (room) => room.roomType === "TRANSACTION",
+  );
+
+  return transactionRooms.length === 1 ? transactionRooms[0] : null;
 }
 
 export function MatchProposalInbox({ type }: MatchProposalInboxProps) {
@@ -101,25 +150,38 @@ export function MatchProposalInbox({ type }: MatchProposalInboxProps) {
     setProcessingProposalId(proposalId);
 
     try {
+      let beforeRoomIds: Set<number> | null = null;
+
+      try {
+        const beforeRoomsResponse = await chatApi.getMyChatRooms({ size: 20 });
+        beforeRoomIds = getChatRoomIdSet(getSafeChatRooms(beforeRoomsResponse));
+      } catch {
+        beforeRoomIds = null;
+      }
+
       await matchApi.acceptProposal(proposalId);
 
       try {
-        const chatRooms = await chatApi.getMyChatRooms({ size: 20 });
-        const transactionRoom = chatRooms.content.find(
-          (room) =>
-            room.talentId === proposal.providerTalentId &&
-            room.roomType === "TRANSACTION",
+        const afterRoomsResponse = await chatApi.getMyChatRooms({ size: 20 });
+        const confirmedRoom = findConfirmedNewChatRoom(
+          beforeRoomIds,
+          getSafeChatRooms(afterRoomsResponse),
         );
+        const confirmedRoomId =
+          confirmedRoom === null ? null : getChatRoomId(confirmedRoom);
 
-        setPreparedChatHref(
-          transactionRoom ? `/chats?roomId=${transactionRoom.roomId}` : "/chats",
-        );
-        setSuccessMessage("제안을 수락했습니다. 생성된 거래 채팅을 확인해 주세요.");
+        if (confirmedRoomId !== null) {
+          setPreparedChatHref(`/chats?roomId=${confirmedRoomId}`);
+          setSuccessMessage(
+            "제안을 수락했습니다. 생성된 거래 채팅을 확인해 주세요.",
+          );
+        } else {
+          setPreparedChatHref("/chats");
+          setSuccessMessage(ACCEPT_SUCCESS_CHAT_LIST_MESSAGE);
+        }
       } catch {
         setPreparedChatHref("/chats");
-        setSuccessMessage(
-          "제안은 수락되었습니다. 채팅 메뉴에서 생성된 거래 채팅을 확인해 주세요.",
-        );
+        setSuccessMessage(ACCEPT_SUCCESS_CHAT_LIST_MESSAGE);
       }
 
       await loadProposals(false);
