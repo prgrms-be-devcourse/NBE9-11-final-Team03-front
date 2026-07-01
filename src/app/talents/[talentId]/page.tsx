@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
+import { Listbox } from "@/components/common/Listbox";
 import { TalentAttachmentPanel } from "@/components/talent/TalentAttachmentPanel";
 import { TalentDetailActions } from "@/components/talent/TalentDetailActions";
 import {
@@ -513,42 +514,46 @@ function TalentReportModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="talent-report-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/45 p-6"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/45 p-6 backdrop-blur-sm"
     >
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-[480px] rounded-xl border border-zinc-200 bg-white p-6 shadow-2xl sm:p-7"
+        className="relative w-full max-w-[520px] overflow-visible rounded-2xl border border-[#ded6ff] bg-white/95 p-6 shadow-[0_28px_80px_rgba(80,60,160,0.24)] sm:p-7"
       >
-        <h2 id="talent-report-title" className="text-xl font-black text-zinc-950">
+        <div
+          className="absolute inset-x-0 top-0 h-1 rounded-t-2xl bg-[linear-gradient(90deg,#8c5bff_0%,#78a9ff_52%,#79e4dd_100%)]"
+          aria-hidden="true"
+        />
+
+        <h2 id="talent-report-title" className="text-2xl font-black text-zinc-950">
           재능 신고
         </h2>
-        <p className="mt-2 text-sm leading-6 text-zinc-600">
+        <p className="mt-2 text-sm font-semibold leading-6 text-zinc-600">
           신고 사유와 상세 설명을 남기면 관리자가 확인합니다.
         </p>
 
-        <label className="mt-5 block text-sm font-semibold text-zinc-800">
-          신고 사유
-          <select
+        <div className="mt-5">
+          <p className="mb-2 text-sm font-black text-zinc-900">신고 사유</p>
+          <Listbox
+            label="신고 사유"
             value={reason}
-            onChange={(event) => setReason(event.target.value as ReportReason)}
-            className="form-input mt-2"
-          >
-            {reportReasons.map((item) => (
-              <option key={item.value} value={item.value}>
-                {item.label}
-              </option>
-            ))}
-          </select>
-        </label>
+            options={reportReasons}
+            onChange={setReason}
+            placeholder="신고 사유를 선택해 주세요"
+            className="mt-0"
+            placement="bottom"
+          />
+        </div>
 
-        <label className="mt-4 block text-sm font-semibold text-zinc-800">
+        <label className="mt-4 block text-sm font-black text-zinc-900">
           상세 설명
           <textarea
             value={description}
             onChange={(event) => setDescription(event.target.value)}
             maxLength={1000}
             rows={5}
-            className="form-input mt-2 min-h-32 resize-none"
+            className="mt-2 min-h-32 w-full resize-none rounded-lg border border-[#d9ccff] bg-white px-4 py-3 text-sm font-semibold leading-6 text-zinc-800 shadow-sm shadow-violet-950/[0.03] outline-none transition placeholder:text-zinc-400 focus:border-[#8c5bff] focus:ring-4 focus:ring-[#f4f0ff] disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-400"
+            placeholder="신고 내용을 입력해 주세요."
           />
         </label>
 
@@ -563,14 +568,14 @@ function TalentReportModal({
             type="button"
             disabled={isSubmitting}
             onClick={onClose}
-            className="h-11 rounded-md border border-zinc-300 text-sm font-bold text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-60"
+            className="h-12 rounded-xl border border-zinc-300 bg-white text-sm font-black text-zinc-700 transition hover:border-zinc-500 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
             취소
           </button>
           <button
             type="submit"
             disabled={isSubmitting}
-            className="h-11 rounded-md bg-red-600 text-sm font-bold text-white transition hover:bg-red-700 disabled:opacity-60"
+            className="h-12 rounded-xl bg-[linear-gradient(135deg,#8c5bff_0%,#8973ff_48%,#79e4dd_100%)] text-sm font-black text-white shadow-lg shadow-violet-400/20 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-violet-400/25 disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isSubmitting ? "접수 중..." : "신고 접수"}
           </button>

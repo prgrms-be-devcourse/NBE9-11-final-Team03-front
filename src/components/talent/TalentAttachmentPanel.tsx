@@ -468,7 +468,7 @@ export function TalentAttachmentPanel({
               }
             />
           ) : (
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid items-stretch gap-4 md:grid-cols-2">
               {attachments.map((attachment) => (
                 <AttachmentPreviewCard
                   key={attachment.attachmentId}
@@ -612,12 +612,12 @@ function AttachmentPreviewCard({
       : null;
 
   return (
-    <article className="overflow-hidden rounded-lg border border-[#ded6ff] bg-white shadow-sm shadow-violet-950/[0.03]">
+    <article className="flex h-full flex-col overflow-hidden rounded-lg border border-[#ded6ff] bg-white shadow-sm shadow-violet-950/[0.03]">
       <a
         href={attachment.url}
         target="_blank"
         rel="noreferrer"
-        className="group block"
+        className="group block shrink-0"
       >
         {isImage ? (
           <div className="relative aspect-[16/10] overflow-hidden bg-[#fbf9ff]">
@@ -636,8 +636,8 @@ function AttachmentPreviewCard({
           />
         )}
       </a>
-      <div className="p-4">
-        <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-1 flex-col p-4">
+        <div className="flex flex-1 items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="inline-flex items-center gap-1.5 rounded-full bg-[#f4f0ff] px-2.5 py-1 text-xs font-black text-[#8c5bff]">
               {isImage ? (
