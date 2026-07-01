@@ -78,12 +78,12 @@ export function Header() {
     ...(isAdmin
       ? [{ href: "/admin", label: "관리자", isActive: isAdminActive }]
       : [
-          { href: "/talents/new", label: "재능 등록", isActive: isTalentNewActive },
-          { href: "/matches", label: "매칭 추천", isActive: isMatchesActive },
-          { href: "/trades", label: "거래", isActive: isTradesActive },
-          { href: "/chats", label: "채팅", isActive: isChatsActive },
-          { href: "/credits", label: "크레딧", isActive: isCreditsActive },
-        ]),
+        { href: "/talents/new", label: "재능 등록", isActive: isTalentNewActive },
+        { href: "/matches", label: "매칭 추천", isActive: isMatchesActive },
+        { href: "/trades", label: "거래", isActive: isTradesActive },
+        { href: "/chats", label: "채팅", isActive: isChatsActive },
+        { href: "/credits", label: "크레딧", isActive: isCreditsActive },
+      ]),
   ];
 
   return (
@@ -134,14 +134,17 @@ export function Header() {
 
       <style jsx global>{`
         .siteHeader {
-          position: sticky !important;
-          top: 0;
-          z-index: 1000;
+          position: fixed !important;
+          top: 0 !important;
+          left: 0 !important;
+          right: 0 !important;
+          z-index: 1100 !important;
+          width: 100% !important;
           height: 64px !important;
-          background: rgba(255, 255, 255, 0.88) !important;
-          border-bottom: 1px solid rgba(140, 91, 255, 0.08) !important;
-          backdrop-filter: blur(20px);
-          -webkit-backdrop-filter: blur(20px);
+          background: #ffffff !important;
+          border-bottom: 1px solid rgba(15, 23, 42, 0.08) !important;
+          backdrop-filter: none !important;
+          -webkit-backdrop-filter: none !important;
         }
 
         .headerInner {

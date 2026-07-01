@@ -710,6 +710,7 @@ export default function Home() {
         // }
 
         body {
+          width: 100%;
           margin: 0;
           overflow-x: hidden;
           background: #ffffff;
@@ -723,20 +724,26 @@ export default function Home() {
         }
 
         .handlyPage {
+          width: 100%;
           min-height: 100vh;
+          padding-top: 64px;
           background: #ffffff;
           color: #15151f;
           word-break: keep-all;
         }
 
         .siteHeader {
-          position: sticky;
+          position: fixed;
           top: 0;
-          z-index: 100;
+          left: 0;
+          right: 0;
+          z-index: 1100;
+          width: 100%;
           height: 72px;
-          background: rgba(255, 255, 255, 0.78);
+          background: #ffffff;
           border-bottom: 1px solid rgba(15, 23, 42, 0.08);
-          backdrop-filter: blur(18px);
+          backdrop-filter: none;
+          -webkit-backdrop-filter: none;
         }
 
         .headerInner {
@@ -2401,14 +2408,17 @@ export default function Home() {
 
         /* Handly-style header refinement */
         .siteHeader {
-          position: sticky !important;
-          top: 0;
-          z-index: 1000;
+          position: fixed !important;
+          top: 0 !important;
+          left: 0 !important;
+          right: 0 !important;
+          z-index: 1100 !important;
+          width: 100% !important;
           height: 64px !important;
-          background: rgba(255, 255, 255, 0.88) !important;
-          border-bottom: 1px solid rgba(140, 91, 255, 0.08) !important;
-          backdrop-filter: blur(20px);
-          -webkit-backdrop-filter: blur(20px);
+          background: #ffffff !important;
+          border-bottom: 1px solid rgba(15, 23, 42, 0.08) !important;
+          backdrop-filter: none !important;
+          -webkit-backdrop-filter: none !important;
         }
 
         .headerInner {
@@ -3541,12 +3551,16 @@ export default function Home() {
 
         @media (max-width: 760px) {
           .handlyPage {
+            padding-top: 60px !important;
             overflow-x: hidden !important;
             width: 100% !important;
             max-width: 100vw !important;
           }
 
           .siteHeader {
+            left: 0 !important;
+            right: 0 !important;
+            width: 100% !important;
             height: 60px !important;
             overflow: hidden !important;
           }

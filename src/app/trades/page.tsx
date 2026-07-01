@@ -8,10 +8,13 @@ import { LoginRequiredState } from "@/components/common/LoginRequiredState";
 import {
   chatApi,
   profileApi,
+  talentApi,
   tradeApi,
   type ChatRoomListItem,
   type MyProfileDetailRes,
+  type TalentDetailRes,
   type TradeListRes,
+  type TradeRes,
   type TradeStatus,
 } from "@/lib/api";
 import {
@@ -239,17 +242,12 @@ function getRepresentativeTrade(
   return group.trades[0];
 }
 
-async function enrichSwapTradeGroupIds(
+async function enrichTradeDetails(
   trades: TradeListItem[],
 ): Promise<TradeListItem[]> {
   const targetTradeIds = Array.from(
     new Set(
       trades
-        .filter(
-          (trade) =>
-            trade.tradeType === "SWAP" &&
-            getPositiveInteger(trade.tradeGroupId) === null,
-        )
         .map((trade) => getPositiveInteger(trade.tradeId))
         .filter((tradeId): tradeId is number => tradeId !== null),
     ),
@@ -259,38 +257,92 @@ async function enrichSwapTradeGroupIds(
     return trades;
   }
 
-  const settledDetails = await Promise.allSettled(
+  const settledTradeDetails = await Promise.allSettled(
     targetTradeIds.map(async (tradeId) => ({
       tradeId,
       detail: await tradeApi.getDetail(tradeId),
     })),
   );
 
-  const groupIdsByTradeId = new Map<number, number>();
+  const detailsByTradeId = new Map<number, TradeRes>();
 
-  settledDetails.forEach((result) => {
+  settledTradeDetails.forEach((result) => {
     if (result.status !== "fulfilled") {
       return;
     }
 
     const tradeId = getPositiveInteger(result.value.tradeId);
-    const tradeGroupId = getPositiveInteger(result.value.detail.tradeGroupId);
 
-    if (tradeId !== null && tradeGroupId !== null) {
-      groupIdsByTradeId.set(tradeId, tradeGroupId);
+    if (tradeId !== null) {
+      detailsByTradeId.set(tradeId, result.value.detail);
     }
   });
 
-  if (groupIdsByTradeId.size === 0) {
+  const targetTalentIds = Array.from(
+    new Set(
+      trades
+        .map((trade) => {
+          const tradeId = getPositiveInteger(trade.tradeId);
+          const detail = tradeId === null ? null : detailsByTradeId.get(tradeId);
+
+          return getPositiveInteger(detail?.talentId) ?? getPositiveInteger(trade.talentId);
+        })
+        .filter((talentId): talentId is number => talentId !== null),
+    ),
+  );
+
+  const settledTalentDetails = await Promise.allSettled(
+    targetTalentIds.map(async (talentId) => ({
+      talentId,
+      detail: await talentApi.getDetail(talentId),
+    })),
+  );
+
+  const talentDetailsById = new Map<number, TalentDetailRes>();
+
+  settledTalentDetails.forEach((result) => {
+    if (result.status !== "fulfilled") {
+      return;
+    }
+
+    const talentId = getPositiveInteger(result.value.talentId);
+
+    if (talentId !== null) {
+      talentDetailsById.set(talentId, result.value.detail);
+    }
+  });
+
+  if (detailsByTradeId.size === 0 && talentDetailsById.size === 0) {
     return trades;
   }
 
   return trades.map((trade) => {
     const tradeId = getPositiveInteger(trade.tradeId);
-    const tradeGroupId =
-      tradeId === null ? null : groupIdsByTradeId.get(tradeId) ?? null;
+    const detail = tradeId === null ? null : detailsByTradeId.get(tradeId);
+    const talentId = getPositiveInteger(detail?.talentId) ?? getPositiveInteger(trade.talentId);
+    const talentDetail = talentId === null ? null : talentDetailsById.get(talentId);
 
-    return tradeGroupId === null ? trade : { ...trade, tradeGroupId };
+    return {
+      ...trade,
+      title: getBestDisplayTitle(detail?.title, talentDetail?.title, trade.title),
+      tradeGroupId: getPositiveInteger(detail?.tradeGroupId) ?? trade.tradeGroupId,
+      talentId: talentId ?? trade.talentId,
+      talentTitle: getBestDisplayTitle(
+        detail?.talentTitle,
+        talentDetail?.title,
+        trade.talentTitle,
+      ),
+      buyerId: getPositiveInteger(detail?.buyerId) ?? trade.buyerId,
+      sellerId: getPositiveInteger(detail?.sellerId) ?? trade.sellerId,
+      buyerNickname: getNonEmptyText(detail?.buyerNickname) ?? trade.buyerNickname,
+      sellerNickname: getNonEmptyText(detail?.sellerNickname) ?? trade.sellerNickname,
+      creditPrice:
+        typeof detail?.creditPrice === "number" && Number.isFinite(detail.creditPrice)
+          ? detail.creditPrice
+          : trade.creditPrice,
+      tradeStatus: detail?.tradeStatus ?? trade.tradeStatus,
+      updatedAt: getNonEmptyText(detail?.updatedAt) ?? trade.updatedAt,
+    };
   });
 }
 
@@ -390,6 +442,17 @@ function getNonEmptyText(value: unknown) {
     : null;
 }
 
+function isGeneratedFallbackTitle(value: string | null) {
+  return value !== null && /^재능\s*#\d+$/.test(value);
+}
+
+function getBestDisplayTitle(...values: unknown[]) {
+  const titles = values.map(getNonEmptyText).filter((value): value is string => value !== null);
+  const explicitTitle = titles.find((title) => !isGeneratedFallbackTitle(title));
+
+  return explicitTitle ?? titles[0] ?? null;
+}
+
 function findMatchingChatRoom(
   trade: TradeListItem,
   chatRooms: ChatRoomListItem[],
@@ -430,12 +493,35 @@ function findMatchingChatRoom(
 function getChatRoomTalentTitleForTrade(
   trade: TradeListItem,
   room: ChatRoomListItem | null,
+  currentUserId: number | null,
 ) {
   if (!room) {
     return null;
   }
 
+  const sellerId = getPositiveInteger(trade.sellerId);
   const talentId = getPositiveInteger(trade.talentId);
+  const requesterId = getPositiveInteger(room.requesterId);
+  const providerId = getPositiveInteger(room.providerId);
+  const opponentId = getPositiveInteger(room.opponentId);
+
+  if (sellerId !== null) {
+    if (requesterId !== null && sellerId === requesterId) {
+      return getNonEmptyText(room.requesterTalentTitle);
+    }
+
+    if (providerId !== null && sellerId === providerId) {
+      return getNonEmptyText(room.providerTalentTitle);
+    }
+
+    if (currentUserId !== null && sellerId === currentUserId) {
+      return getNonEmptyText(room.myTalentTitle);
+    }
+
+    if (opponentId !== null && sellerId === opponentId) {
+      return getNonEmptyText(room.opponentTalentTitle);
+    }
+  }
 
   if (talentId !== null) {
     if (talentId === getPositiveInteger(room.myTalentId)) {
@@ -474,10 +560,19 @@ function applyTradeDisplayFields({
   const matchingRoom = findMatchingChatRoom(enrichedTrade, chatRooms);
   const opponentNickname = getNonEmptyText(matchingRoom?.opponentNickname);
 
+  const chatRoomTalentTitle = getChatRoomTalentTitleForTrade(
+    enrichedTrade,
+    matchingRoom,
+    currentUserId,
+  );
+  const fallbackTalentTitle = getNonEmptyText(enrichedTrade.talentTitle);
+
   enrichedTrade.talentTitle =
-    getNonEmptyText(enrichedTrade.talentTitle) ??
-    getChatRoomTalentTitleForTrade(enrichedTrade, matchingRoom) ??
-    enrichedTrade.talentTitle;
+    enrichedTrade.tradeType === "SWAP"
+      ? getBestDisplayTitle(chatRoomTalentTitle, fallbackTalentTitle) ??
+      enrichedTrade.talentTitle
+      : getBestDisplayTitle(fallbackTalentTitle, chatRoomTalentTitle) ??
+      enrichedTrade.talentTitle;
 
   if (currentUserId !== null && myNickname !== null) {
     if (currentUserId === getPositiveInteger(enrichedTrade.buyerId)) {
@@ -685,7 +780,7 @@ function getParticipantLabels(group: TradeGroupView) {
 
   const labels = [...labelsById.values(), ...labelsWithoutId];
 
-  return labels.length > 0 ? labels.join(" · ") : "참여자 정보 없음";
+  return labels.length > 0 ? labels.join(" → ") : "참여자 정보 없음";
 }
 
 function getSwapLegSummaries(
@@ -775,12 +870,12 @@ export default function TradesPage() {
           cursor,
           size: PAGE_SIZE,
         });
-        const tradesWithGroupIds = await enrichSwapTradeGroupIds(
+        const tradesWithDetails = await enrichTradeDetails(
           response.content,
         );
 
         const enrichedTrades = await enrichTradeListDisplayFields(
-          tradesWithGroupIds,
+          tradesWithDetails,
           nextCurrentUserId,
         );
 
@@ -1033,7 +1128,7 @@ function TradeLegSummary({
             />
           </div>
           <p className="mt-3 text-sm font-bold text-zinc-700">
-            거래 #{trade.tradeId} · {formatTradeCredit(trade.creditPrice)}
+            거래 #{trade.tradeId} - {formatTradeCredit(trade.creditPrice)}
           </p>
           <TradeDirectionPills trade={trade} />
         </>
@@ -1124,11 +1219,11 @@ function TradeListCard({
             {myRoleLabel} · {formatTradeTitle(trade)}
           </p>
           <p className="mt-1 text-sm font-semibold text-zinc-500">
-            {formatBuyerName(trade)} · {formatSellerName(trade)}
+            {formatSellerName(trade)} → {formatBuyerName(trade)}
           </p>
         </div>
 
-        <div className="rounded-lg border border-[#eee8ff] bg-[#fbf9ff] px-4 py-3 text-sm font-bold text-zinc-600">
+        <div className="rounded-lg border border-[#eee8ff] bg-[#fbf9ff] px-4 py-3 text-center text-sm font-bold text-zinc-600">
           {getDisplayDate(trade.updatedAt)}
         </div>
 
