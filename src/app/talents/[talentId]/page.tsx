@@ -67,9 +67,11 @@ function getTalentDetailOnce(talentId: number): Promise<TalentDetailRes> {
     return pendingRequest;
   }
 
-  const request = talentApi.getDetail(talentId).finally(() => {
-    talentDetailRequests.delete(talentId);
-  });
+  const request = talentApi
+    .getDetail(talentId, { increaseView: true })
+    .finally(() => {
+      talentDetailRequests.delete(talentId);
+    });
 
   talentDetailRequests.set(talentId, request);
 
@@ -244,11 +246,10 @@ export default function TalentDetailPage() {
                       {talent.categoryName}
                     </span>
                     <span
-                      className={`inline-flex items-center rounded-full px-3 py-1.5 text-xs font-black ${
-                        talent.status === "ACTIVE"
+                      className={`inline-flex items-center rounded-full px-3 py-1.5 text-xs font-black ${talent.status === "ACTIVE"
                           ? "border border-emerald-200 bg-emerald-50 text-emerald-700"
                           : "border border-zinc-200 bg-zinc-100 text-zinc-600"
-                      }`}
+                        }`}
                     >
                       {talent.status === "ACTIVE" ? "거래 가능" : "마감"}
                     </span>
