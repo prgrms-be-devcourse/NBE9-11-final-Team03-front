@@ -69,49 +69,49 @@ const tabs: {
   description: string;
   Icon: typeof LayoutDashboard;
 }[] = [
-  {
-    value: "overview",
-    label: "요약",
-    description: "서비스 운영 지표",
-    Icon: LayoutDashboard,
-  },
-  {
-    value: "users",
-    label: "사용자",
-    description: "계정 조회와 상태 변경",
-    Icon: Users,
-  },
-  {
-    value: "talents",
-    label: "재능",
-    description: "게시글 조회와 노출 관리",
-    Icon: FileText,
-  },
-  {
-    value: "reports",
-    label: "신고",
-    description: "신고 조회와 처리",
-    Icon: AlertTriangle,
-  },
-  {
-    value: "trades",
-    label: "거래",
-    description: "거래 상태와 참여자 조회",
-    Icon: ClipboardList,
-  },
-  {
-    value: "disputes",
-    label: "분쟁",
-    description: "분쟁 거래 판정",
-    Icon: Gavel,
-  },
-  {
-    value: "logs",
-    label: "로그",
-    description: "관리자 조치 이력",
-    Icon: History,
-  },
-];
+    {
+      value: "overview",
+      label: "요약",
+      description: "서비스 운영 지표",
+      Icon: LayoutDashboard,
+    },
+    {
+      value: "users",
+      label: "사용자",
+      description: "계정 조회와 상태 변경",
+      Icon: Users,
+    },
+    {
+      value: "talents",
+      label: "재능",
+      description: "게시글 조회와 노출 관리",
+      Icon: FileText,
+    },
+    {
+      value: "reports",
+      label: "신고",
+      description: "신고 조회와 처리",
+      Icon: AlertTriangle,
+    },
+    {
+      value: "trades",
+      label: "거래",
+      description: "거래 상태와 참여자 조회",
+      Icon: ClipboardList,
+    },
+    {
+      value: "disputes",
+      label: "분쟁",
+      description: "분쟁 거래 판정",
+      Icon: Gavel,
+    },
+    {
+      value: "logs",
+      label: "로그",
+      description: "관리자 조치 이력",
+      Icon: History,
+    },
+  ];
 
 const userStatusOptions: UserStatus[] = [
   "ACTIVE",
@@ -237,6 +237,13 @@ interface AdminDisputeTalentItem {
   sellerLabel: string;
 }
 
+interface AdminDisputeReasonView {
+  category: string;
+  title: string;
+  content: string;
+  raw: string;
+}
+
 interface AdminDisputeGroupView {
   key: string;
   tradeGroupId: number | null;
@@ -245,6 +252,7 @@ interface AdminDisputeGroupView {
   isSwapGroup: boolean;
   title: string;
   reason: string;
+  reasonDetail: AdminDisputeReasonView;
   talentItems: AdminDisputeTalentItem[];
 }
 
@@ -366,8 +374,41 @@ function formatAdminTradeMeta(trade: AdminTradeDisplay | AdminDisputeDisplay): s
   return `${formatEntityId("거래", trade.tradeId)} · ${formatAdminCredit(trade.creditPrice)}`;
 }
 
-function formatAdminDisputeReason(reason: string | null | undefined): string {
-  return formatAdminShortText(reason, "분쟁 사유가 없습니다.", 42);
+function parseAdminDisputeReason(
+  reason: string | null | undefined,
+): AdminDisputeReasonView {
+  const raw = hasText(reason) ? reason.trim() : "";
+
+  if (!raw) {
+    return {
+      category: "신고 항목 없음",
+      title: "분쟁 제목이 없습니다.",
+      content: "분쟁 내용이 없습니다.",
+      raw: "",
+    };
+  }
+
+  const [firstLine = "", ...contentLines] = raw.split(/\r?\n/);
+  const matched = firstLine.match(/^\[([^\]]+)]\s*(.*)$/);
+
+  if (matched) {
+    const [, category, title] = matched;
+    const content = contentLines.join("\n").trim();
+
+    return {
+      category: category.trim() || "신고 항목 없음",
+      title: title.trim() || "분쟁 제목이 없습니다.",
+      content: content || "분쟁 내용이 없습니다.",
+      raw,
+    };
+  }
+
+  return {
+    category: "기존 분쟁 사유",
+    title: formatAdminShortText(firstLine, "분쟁 제목이 없습니다.", 42),
+    content: contentLines.join("\n").trim() || firstLine.trim(),
+    raw,
+  };
 }
 
 function formatAdminTradeBuyer(
@@ -465,6 +506,9 @@ function groupAdminDisputesForView(
     );
     const isSwapGroup =
       tradeGroupId !== null && representativeDispute.tradeType === "SWAP";
+    const reasonDetail = parseAdminDisputeReason(
+      representativeDispute.disputeReason,
+    );
 
     return {
       key,
@@ -475,7 +519,8 @@ function groupAdminDisputesForView(
       title: isSwapGroup
         ? `교환 분쟁 · 그룹 ${tradeGroupId}`
         : formatAdminTradeTitle(representativeDispute),
-      reason: formatAdminDisputeReason(representativeDispute.disputeReason),
+      reason: reasonDetail.title,
+      reasonDetail,
       talentItems: getAdminDisputeTalentItems(groupedDisputes),
     };
   });
@@ -794,24 +839,21 @@ export default function AdminPage() {
                 key={tab.value}
                 type="button"
                 onClick={() => setActiveTab(tab.value)}
-                className={`grid min-h-[138px] cursor-pointer grid-rows-[58px_1fr] overflow-hidden rounded-lg border p-0 text-center transition hover:-translate-y-0.5 ${
-                  selected
+                className={`grid min-h-[138px] cursor-pointer grid-rows-[58px_1fr] overflow-hidden rounded-lg border p-0 text-center transition hover:-translate-y-0.5 ${selected
                     ? "border-[#8c5bff] bg-[#8c5bff] text-white shadow-lg shadow-violet-400/20"
                     : "border-[#ded6ff] bg-white text-zinc-700 shadow-sm shadow-violet-950/[0.03] hover:border-[#d9ccff] hover:bg-[#fbf9ff] hover:text-[#8c5bff]"
-                }`}
+                  }`}
               >
                 <span
-                  className={`flex h-full items-center justify-center gap-3 border-b px-5 text-lg font-black leading-none ${
-                    selected ? "border-white/20" : "border-[#f0ebff]"
-                  }`}
+                  className={`flex h-full items-center justify-center gap-3 border-b px-5 text-lg font-black leading-none ${selected ? "border-white/20" : "border-[#f0ebff]"
+                    }`}
                 >
                   <Icon className="h-6 w-6 shrink-0" aria-hidden="true" />
                   <span className="truncate">{tab.label}</span>
                 </span>
                 <span
-                  className={`flex h-full items-center justify-center whitespace-nowrap px-5 py-4 text-sm font-bold leading-none ${
-                    selected ? "text-white/85" : "text-zinc-500"
-                  }`}
+                  className={`flex h-full items-center justify-center whitespace-nowrap px-5 py-4 text-sm font-bold leading-none ${selected ? "text-white/85" : "text-zinc-500"
+                    }`}
                 >
                   {tab.description}
                 </span>
@@ -1998,16 +2040,24 @@ function AdminDisputesTab() {
                   <p className="mt-1 text-sm font-semibold text-zinc-500">
                     {formatAdminDisputeGroupMeta(group)}
                   </p>
-                  <p
+                  <div
                     title={
-                      hasText(dispute.disputeReason)
-                        ? dispute.disputeReason.trim()
-                        : "분쟁 사유가 없습니다."
+                      group.reasonDetail.raw || "분쟁 사유가 없습니다."
                     }
                     className="mt-3 rounded-lg bg-zinc-50 p-3 text-sm font-semibold leading-6 text-zinc-700"
                   >
-                    {group.reason}
-                  </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <StatusChip tone="warning">
+                        {group.reasonDetail.category}
+                      </StatusChip>
+                      <p className="min-w-0 flex-1 truncate text-base font-black text-zinc-950">
+                        {group.reasonDetail.title}
+                      </p>
+                    </div>
+                    <p className="mt-2 whitespace-pre-wrap text-sm font-semibold leading-6 text-zinc-700">
+                      {group.reasonDetail.content}
+                    </p>
+                  </div>
                   {group.isSwapGroup ? (
                     <div className="mt-3 rounded-lg border border-[#f0ebff] bg-[#fbf9ff] p-3">
                       <p className="text-xs font-black text-[#6f3cff]">
@@ -2417,9 +2467,8 @@ function TextFilter({
           placeholder={placeholder}
           inputMode={inputMode}
           onChange={(event) => onChange(event.target.value)}
-          className={`h-11 w-full rounded-lg border border-[#d9ccff] bg-white px-3 text-sm font-semibold text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-[#8c5bff] focus:ring-4 focus:ring-[#f4f0ff] ${
-            inputMode ? "" : "pl-9"
-          }`}
+          className={`h-11 w-full rounded-lg border border-[#d9ccff] bg-white px-3 text-sm font-semibold text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-[#8c5bff] focus:ring-4 focus:ring-[#f4f0ff] ${inputMode ? "" : "pl-9"
+            }`}
         />
       </div>
     </label>

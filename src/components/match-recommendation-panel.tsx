@@ -808,10 +808,14 @@ function RecommendationDetailModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="match-detail-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/55 p-5 backdrop-blur-sm"
+      onClick={onClose}
+      className="fixed inset-x-0 bottom-0 top-16 z-50 flex items-center justify-center overflow-y-auto bg-zinc-950/55 p-4 backdrop-blur-sm sm:top-[72px] sm:p-5"
     >
-      <div className="relative max-h-[90vh] w-full max-w-5xl overflow-hidden rounded-[28px] border border-white/70 bg-white shadow-2xl shadow-zinc-950/25">
-        <div className="grid max-h-[90vh] overflow-y-auto lg:grid-cols-[0.9fr_1.1fr]">
+      <div
+        onClick={(event) => event.stopPropagation()}
+        className="relative my-auto max-h-[calc(100dvh-96px)] w-full max-w-5xl overflow-hidden rounded-[28px] border border-white/70 bg-white shadow-2xl shadow-zinc-950/25 sm:max-h-[calc(100dvh-112px)]"
+      >
+        <div className="grid max-h-[calc(100dvh-96px)] overflow-y-auto sm:max-h-[calc(100dvh-112px)] lg:grid-cols-[0.9fr_1.1fr]">
           <aside
             className={`relative min-h-[360px] overflow-hidden ${visual.tileBg} p-8 lg:min-h-full`}
           >

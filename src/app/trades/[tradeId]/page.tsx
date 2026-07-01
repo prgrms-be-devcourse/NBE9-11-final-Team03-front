@@ -3,6 +3,7 @@
 import { ChangeEvent, FormEvent, useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { ErrorState } from "@/components/common/ErrorState";
+import { Listbox } from "@/components/common/Listbox";
 import { extractAuthClaimsFromAccessToken, getAccessToken } from "@/lib/auth";
 import { LoginRequiredState } from "@/components/common/LoginRequiredState";
 import {
@@ -13,6 +14,7 @@ import {
   type ChatRoomListItem,
   type MyProfileDetailRes,
   type TalentDetailRes,
+  type ReportReason,
   type TradeListRes,
   type TradeRes,
   type TradeSubmissionRes,
@@ -47,6 +49,45 @@ const TRADE_TYPE_LABELS: Record<string, string> = {
   PURCHASE: "크레딧 구매",
   SWAP: "재능 교환",
 };
+
+const DISPUTE_REASON_OPTIONS: { value: ReportReason; label: string }[] = [
+  { value: "ILLEGAL_OR_CHEATING", label: "불법·사기성 거래" },
+  { value: "EXTERNAL_CONTACT_OR_AD", label: "외부 연락·광고 유도" },
+  { value: "INAPPROPRIATE_CONTENT", label: "부적절한 콘텐츠" },
+  { value: "ETC", label: "기타" },
+];
+
+const DISPUTE_REASON_LISTBOX_OPTIONS: {
+  value: ReportReason | "";
+  label: string;
+  disabled?: boolean;
+}[] = [
+    { value: "", label: "신고 항목을 선택해 주세요", disabled: true },
+    ...DISPUTE_REASON_OPTIONS,
+  ];
+
+const DISPUTE_TITLE_MAX_LENGTH = 50;
+const DISPUTE_CONTENT_MAX_LENGTH = 120;
+const DISPUTE_REASON_MAX_LENGTH = 200;
+
+function getDisputeReasonLabel(reason: ReportReason): string {
+  return (
+    DISPUTE_REASON_OPTIONS.find((option) => option.value === reason)?.label ??
+    "기타"
+  );
+}
+
+function buildDisputeReasonPayload({
+  category,
+  title,
+  content,
+}: {
+  category: ReportReason;
+  title: string;
+  content: string;
+}): string {
+  return `[${getDisputeReasonLabel(category)}] ${title.trim()}\n${content.trim()}`;
+}
 
 const inputClassName =
   "form-input rounded-lg border-[#d9ccff] bg-white/95 px-4 py-3 text-[15px] font-semibold leading-7 shadow-sm shadow-violet-950/[0.03] transition focus:border-[#8c5bff] focus:ring-4 focus:ring-[#f4f0ff]";
@@ -810,7 +851,7 @@ function getCurrentUserDisplayName(
   trade: TradeRes,
   currentUserId: number | null,
 ): string {
-  if (currentUserId === trade.buyerId) {
+  if (currentUserId === getPositiveInteger(trade.buyerId)) {
     return getParticipantDisplayName(
       "buyer",
       trade.buyerNickname,
@@ -818,7 +859,7 @@ function getCurrentUserDisplayName(
     );
   }
 
-  if (currentUserId === trade.sellerId) {
+  if (currentUserId === getPositiveInteger(trade.sellerId)) {
     return getParticipantDisplayName(
       "seller",
       trade.sellerNickname,
@@ -973,7 +1014,9 @@ export default function TradeDetailPage() {
   const [submission, setSubmission] = useState<TradeSubmissionRes | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [description, setDescription] = useState("");
-  const [disputeReason, setDisputeReason] = useState("");
+  const [disputeCategory, setDisputeCategory] = useState<ReportReason | "">("");
+  const [disputeTitle, setDisputeTitle] = useState("");
+  const [disputeContent, setDisputeContent] = useState("");
   const [disputeReasonError, setDisputeReasonError] = useState("");
   const [isDisputeDialogOpen, setIsDisputeDialogOpen] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
@@ -1152,7 +1195,7 @@ export default function TradeDetailPage() {
     if (
       !trade ||
       currentUserId === null ||
-      currentUserId !== trade.buyerId ||
+      currentUserId !== getPositiveInteger(trade.buyerId) ||
       trade.tradeStatus !== "UNDER_REVIEW"
     ) {
       return;
@@ -1265,9 +1308,35 @@ export default function TradeDetailPage() {
       return;
     }
 
-    const reason = disputeReason.trim();
-    if (reason.length < 5 || reason.length > 200) {
-      setDisputeReasonError("분쟁 사유는 5자 이상 200자 이하로 입력해 주세요.");
+    const category = disputeCategory;
+    const title = disputeTitle.trim();
+    const content = disputeContent.trim();
+
+    if (!category) {
+      setDisputeReasonError("신고 항목을 선택해 주세요.");
+      return;
+    }
+
+    if (title.length < 2 || title.length > DISPUTE_TITLE_MAX_LENGTH) {
+      setDisputeReasonError(
+        `제목은 2자 이상 ${DISPUTE_TITLE_MAX_LENGTH}자 이하로 입력해 주세요.`,
+      );
+      return;
+    }
+
+    if (content.length < 5 || content.length > DISPUTE_CONTENT_MAX_LENGTH) {
+      setDisputeReasonError(
+        `내용은 5자 이상 ${DISPUTE_CONTENT_MAX_LENGTH}자 이하로 입력해 주세요.`,
+      );
+      return;
+    }
+
+    const reason = buildDisputeReasonPayload({ category, title, content });
+
+    if (reason.length > DISPUTE_REASON_MAX_LENGTH) {
+      setDisputeReasonError(
+        `제목과 내용을 합쳐 ${DISPUTE_REASON_MAX_LENGTH}자 이하로 입력해 주세요.`,
+      );
       return;
     }
 
@@ -1278,7 +1347,9 @@ export default function TradeDetailPage() {
 
     try {
       await tradeApi.dispute(trade.tradeId, { reason });
-      setDisputeReason("");
+      setDisputeCategory("");
+      setDisputeTitle("");
+      setDisputeContent("");
       setIsDisputeDialogOpen(false);
       await refreshTrade("분쟁이 신청되었습니다. 관리자 검토가 완료될 때까지 에스크로가 동결됩니다.");
     } catch (error) {
@@ -1374,7 +1445,7 @@ export default function TradeDetailPage() {
       return;
     }
 
-    if (currentUserId !== trade.sellerId) {
+    if (currentUserId !== getPositiveInteger(trade.sellerId)) {
       setErrorMessage("판매자만 결과물을 제출할 수 있습니다.");
       return;
     }
@@ -1463,8 +1534,13 @@ export default function TradeDetailPage() {
     }
   }
 
-  const isBuyer = trade !== null && currentUserId === trade.buyerId;
-  const isSeller = trade !== null && currentUserId === trade.sellerId;
+  const tradeBuyerId = trade === null ? null : getPositiveInteger(trade.buyerId);
+  const tradeSellerId =
+    trade === null ? null : getPositiveInteger(trade.sellerId);
+  const isBuyer =
+    trade !== null && currentUserId !== null && currentUserId === tradeBuyerId;
+  const isSeller =
+    trade !== null && currentUserId !== null && currentUserId === tradeSellerId;
   const canSubmitResult =
     trade !== null && isSeller && trade.tradeStatus === "IN_PROGRESS";
   const canReviewResult =
@@ -1692,7 +1768,8 @@ export default function TradeDetailPage() {
                 <section className={sideCardClassName}>
                   <p className="font-black text-zinc-950">구매자 액션</p>
                   <p className="mt-2 text-sm leading-6 text-zinc-600">
-                    결과물을 확인한 뒤 구매를 확정할 수 있습니다.
+                    결과물을 확인한 뒤 구매 확정 또는 분쟁 신청을 선택할 수
+                    있습니다.
                   </p>
                   <div className="mt-5 grid gap-2">
                     <button
@@ -1711,25 +1788,15 @@ export default function TradeDetailPage() {
                     >
                       구매 확정
                     </button>
+                    <button
+                      type="button"
+                      disabled={isActionLoading || !canDisputeTrade}
+                      onClick={openDisputeDialog}
+                      className="h-11 cursor-pointer rounded-lg border border-amber-200 bg-white px-4 text-sm font-black text-amber-700 transition hover:border-amber-300 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      분쟁 신청
+                    </button>
                   </div>
-                </section>
-              ) : null}
-
-              {!terminalTradeMessage && canDisputeTrade ? (
-                <section className={sideCardClassName}>
-                  <p className="font-black text-zinc-950">분쟁 신청</p>
-                  <p className="mt-2 text-sm leading-6 text-zinc-600">
-                    결과물이 약속과 다를 경우 분쟁을 신청할 수 있습니다.
-                    신청 후 관리자 검토가 완료될 때까지 에스크로가 동결됩니다.
-                  </p>
-                  <button
-                    type="button"
-                    disabled={isActionLoading}
-                    onClick={openDisputeDialog}
-                    className="mt-4 h-11 w-full cursor-pointer rounded-lg border border-amber-200 bg-white px-4 text-sm font-black text-amber-700 transition hover:border-amber-300 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    분쟁 신청
-                  </button>
                 </section>
               ) : null}
 
@@ -1876,12 +1943,26 @@ export default function TradeDetailPage() {
 
         {trade && isDisputeDialogOpen ? (
           <DisputeRequestDialog
-            reason={disputeReason}
+            category={disputeCategory}
+            title={disputeTitle}
+            content={disputeContent}
             errorMessage={disputeReasonError}
             isSubmitting={isActionLoading}
             tradeTitle={formatTradeTitle(trade)}
-            onChangeReason={(value) => {
-              setDisputeReason(value);
+            onChangeCategory={(value) => {
+              setDisputeCategory(value);
+              if (disputeReasonError) {
+                setDisputeReasonError("");
+              }
+            }}
+            onChangeTitle={(value) => {
+              setDisputeTitle(value);
+              if (disputeReasonError) {
+                setDisputeReasonError("");
+              }
+            }}
+            onChangeContent={(value) => {
+              setDisputeContent(value);
               if (disputeReasonError) {
                 setDisputeReasonError("");
               }
@@ -1965,24 +2046,34 @@ function ConfirmActionDialog({
 }
 
 function DisputeRequestDialog({
-  reason,
+  category,
+  title,
+  content,
   errorMessage,
   isSubmitting,
   tradeTitle,
-  onChangeReason,
+  onChangeCategory,
+  onChangeTitle,
+  onChangeContent,
   onClose,
   onSubmit,
 }: {
-  reason: string;
+  category: ReportReason | "";
+  title: string;
+  content: string;
   errorMessage: string;
   isSubmitting: boolean;
   tradeTitle: string;
-  onChangeReason: (reason: string) => void;
+  onChangeCategory: (category: ReportReason | "") => void;
+  onChangeTitle: (title: string) => void;
+  onChangeContent: (content: string) => void;
   onClose: () => void;
   onSubmit: () => void;
 }) {
-  const reasonLength = reason.length;
-  const isOverLimit = reasonLength > 200;
+  const titleLength = title.length;
+  const contentLength = content.length;
+  const isTitleOverLimit = titleLength > DISPUTE_TITLE_MAX_LENGTH;
+  const isContentOverLimit = contentLength > DISPUTE_CONTENT_MAX_LENGTH;
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -2012,22 +2103,62 @@ function DisputeRequestDialog({
           분쟁 신청
         </h2>
         <p className="mt-2 text-sm font-semibold leading-6 text-zinc-600">
-          관리자에게 전달할 분쟁 사유를 입력해 주세요. 신청 후 관리자
-          검토가 끝날 때까지 에스크로가 동결됩니다.
+          신고 항목, 제목, 내용을 입력해 주세요. 신청 후 관리자 검토가
+          끝날 때까지 에스크로가 동결됩니다.
         </p>
         <p className="mt-3 rounded-2xl border border-[#eee8ff] bg-[#fbf9ff] px-4 py-3 text-sm font-bold text-zinc-700">
           대상 거래: {tradeTitle}
         </p>
 
-        <label className="mt-5 block text-sm font-black text-zinc-900">
-          분쟁 사유
+        <div className="mt-5">
+          <p className="mb-2 text-sm font-black text-zinc-900">신고 항목</p>
+          <Listbox
+            label="신고 항목"
+            value={category}
+            options={DISPUTE_REASON_LISTBOX_OPTIONS}
+            onChange={onChangeCategory}
+            placeholder="신고 항목을 선택해 주세요"
+            className="mt-0"
+            placement="bottom"
+          />
+          {!category ? (
+            <p className="mt-1.5 text-xs font-semibold text-zinc-500">
+              분쟁 신청 전에 항목을 선택해 주세요.
+            </p>
+          ) : null}
+        </div>
+
+        <label className="mt-4 block text-sm font-black text-zinc-900">
+          제목
+          <input
+            type="text"
+            value={title}
+            onChange={(event) => onChangeTitle(event.target.value)}
+            maxLength={DISPUTE_TITLE_MAX_LENGTH}
+            disabled={isSubmitting}
+            className="mt-2 w-full rounded-2xl border border-[#d9ccff] bg-white px-4 py-3 text-sm font-semibold leading-6 text-zinc-800 outline-none transition placeholder:text-zinc-400 focus:border-[#8c5bff] focus:ring-4 focus:ring-[#f4f0ff] disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-400"
+            placeholder="예: 제출 결과물 파일 확인 불가"
+          />
+        </label>
+        <div className="mt-1.5 flex justify-end">
+          <span
+            className={`text-xs font-semibold ${isTitleOverLimit ? "text-red-600" : "text-zinc-500"
+              }`}
+          >
+            {titleLength.toLocaleString("en-US")}/{DISPUTE_TITLE_MAX_LENGTH}
+          </span>
+        </div>
+
+        <label className="mt-4 block text-sm font-black text-zinc-900">
+          내용
           <textarea
-            value={reason}
-            onChange={(event) => onChangeReason(event.target.value)}
-            rows={7}
+            value={content}
+            onChange={(event) => onChangeContent(event.target.value)}
+            rows={6}
+            maxLength={DISPUTE_CONTENT_MAX_LENGTH}
             disabled={isSubmitting}
             className="mt-2 w-full resize-none rounded-2xl border border-[#d9ccff] bg-white px-4 py-3 text-sm font-semibold leading-6 text-zinc-800 outline-none transition placeholder:text-zinc-400 focus:border-[#8c5bff] focus:ring-4 focus:ring-[#f4f0ff] disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-400"
-            placeholder="예: 결과물이 약속한 내용과 다르거나 파일 확인이 어렵습니다."
+            placeholder="예: 스팸 같아요. 결과물이 약속한 내용과 다르거나 파일 확인이 어렵습니다."
           />
         </label>
 
@@ -2038,10 +2169,10 @@ function DisputeRequestDialog({
             </p>
           ) : null}
           <span
-            className={`ml-auto shrink-0 text-xs font-semibold ${isOverLimit ? "text-red-600" : "text-zinc-500"
+            className={`ml-auto shrink-0 text-xs font-semibold ${isContentOverLimit ? "text-red-600" : "text-zinc-500"
               }`}
           >
-            {reasonLength.toLocaleString("en-US")}/200
+            {contentLength.toLocaleString("en-US")}/{DISPUTE_CONTENT_MAX_LENGTH}
           </span>
         </div>
 
