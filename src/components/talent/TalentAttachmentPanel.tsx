@@ -113,6 +113,10 @@ function getAttachmentDomain(url: string): string {
   }
 }
 
+function getProxiedPreviewImageUrl(url: string): string {
+  return `/api/link-preview/image?url=${encodeURIComponent(url)}`;
+}
+
 async function requestLinkPreview(url: string): Promise<LinkPreviewData | null> {
   const response = await fetch(
     `/api/link-preview?url=${encodeURIComponent(url)}`,
@@ -712,7 +716,7 @@ function LinkPreviewMedia({
       <div className="relative aspect-[16/10] overflow-hidden bg-[#fbf9ff]">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={imageUrl}
+          src={getProxiedPreviewImageUrl(imageUrl)}
           alt={preview?.title ?? "링크 미리보기 이미지"}
           onError={() => setFailedImageUrl(imageUrl)}
           className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
