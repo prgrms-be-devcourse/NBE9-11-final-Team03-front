@@ -8,31 +8,46 @@ import {
   useRef,
   useState,
 } from "react";
+import Link from "next/link";
 import { MessageCircle, Send } from "lucide-react";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoginRequiredState } from "@/components/common/LoginRequiredState";
 import {
   chatApi,
+  talentApi,
+  tradeApi,
   type ChatMessageRes,
   type ChatRoomListItem,
   type ChatRoomRes,
+  type TalentDetailRes,
+  type TradeListRes,
+  type TradeRes,
 } from "@/lib/api";
 import {
+  connectChatRoomListSocket,
   connectChatSocket,
+  type ChatRoomListSocketConnection,
   type ChatSocketConnection,
 } from "@/lib/api/chatSocket";
 import { isAuthRequiredMessage } from "@/lib/auth-required";
+import {
+  extractAuthClaimsFromAccessToken,
+  getAccessToken,
+  getStoredUserId,
+} from "@/lib/auth";
+import { getUserProfileImageUrl } from "@/utils/profileImage";
 
 function readStoredUserId(): number | null {
   if (typeof window === "undefined") {
     return null;
   }
 
-  const storedUserId = window.localStorage.getItem("baton_user_id");
-  const userId = storedUserId === null ? NaN : Number(storedUserId);
+  const tokenUserId = extractAuthClaimsFromAccessToken(
+    getAccessToken() ?? "",
+  ).userId;
 
-  return Number.isInteger(userId) && userId > 0 ? userId : null;
+  return tokenUserId ?? getStoredUserId();
 }
 
 function formatMessageTime(date: string): string {
@@ -89,15 +104,37 @@ function getValidDate(value: unknown): Date | null {
 }
 
 function getPositiveInteger(value: unknown): number | null {
-  return typeof value === "number" && Number.isInteger(value) && value > 0
-    ? value
-    : null;
+  if (typeof value === "number" && Number.isInteger(value) && value > 0) {
+    return value;
+  }
+
+  if (typeof value === "string" && value.trim().length > 0) {
+    const numericValue = Number(value);
+
+    return Number.isInteger(numericValue) && numericValue > 0
+      ? numericValue
+      : null;
+  }
+
+  return null;
 }
 
 function getNonEmptyText(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0
     ? value.trim()
     : null;
+}
+
+function getFirstNonEmptyText(...values: unknown[]): string | null {
+  for (const value of values) {
+    const text = getNonEmptyText(value);
+
+    if (text !== null) {
+      return text;
+    }
+  }
+
+  return null;
 }
 
 function isYesterday(date: Date, today: Date): boolean {
@@ -156,10 +193,6 @@ function getRoomStatusLabel(status: ChatRoomRes["status"]): string {
   return labels[status] ?? status;
 }
 
-function getInitial(name: string): string {
-  return name.trim().slice(0, 1) || "?";
-}
-
 function getMessageSenderLabel({
   senderId,
   currentUserId,
@@ -210,138 +243,135 @@ function hasRequesterProviderTalentPair(room: ChatRoomListItem): boolean {
   );
 }
 
-function getMyTalentLabel(
+type ChatRoomTalentLine = {
+  label: string;
+  value: string;
+  talentId: number | null;
+};
+
+function getCounterpartyTalentId(
   room: ChatRoomListItem,
   currentUserId: number | null,
-): string | null {
+): number | null {
+  const hasTradeGroup = getPositiveInteger(room.tradeGroupId) !== null;
+
+  if (room.roomType === "TRANSACTION" || hasTradeGroup) {
+    const runtimeRoom = room as ChatRoomRuntimeFields;
+    const receivedTalentId =
+      getPositiveInteger(runtimeRoom.myReceiveTalentId) ??
+      getPositiveInteger(runtimeRoom.receivedTalentId);
+
+    if (receivedTalentId !== null) {
+      return receivedTalentId;
+    }
+
+    if (hasTradeGroup) {
+      return null;
+    }
+  }
+
+  if (hasRequesterProviderTalentPair(room) && currentUserId !== null) {
+    if (getPositiveInteger(room.requesterId) === currentUserId) {
+      return getPositiveInteger(room.providerTalentId);
+    }
+
+    if (getPositiveInteger(room.providerId) === currentUserId) {
+      return getPositiveInteger(room.requesterTalentId);
+    }
+  }
+
   if (hasExplicitTalentPair(room)) {
-    return getFallbackTalentLabel(
-      room.myTalentTitle,
-      room.myTalentId,
-      "내 재능 정보 없음",
-    );
-  }
-
-  if (!hasRequesterProviderTalentPair(room) || currentUserId === null) {
-    return null;
-  }
-
-  if (getPositiveInteger(room.requesterId) === currentUserId) {
-    return getFallbackTalentLabel(
-      room.requesterTalentTitle,
-      room.requesterTalentId,
-      "내 재능 정보 없음",
-    );
-  }
-
-  if (getPositiveInteger(room.providerId) === currentUserId) {
-    return getFallbackTalentLabel(
-      room.providerTalentTitle,
-      room.providerTalentId,
-      "내 재능 정보 없음",
-    );
+    return getPositiveInteger(room.opponentTalentId);
   }
 
   return null;
 }
 
-function getOpponentTalentLabel(
-  room: ChatRoomListItem,
-  currentUserId: number | null,
-): string | null {
-  if (hasExplicitTalentPair(room)) {
-    return getFallbackTalentLabel(
-      room.opponentTalentTitle,
-      room.opponentTalentId,
-      "상대 재능 정보 없음",
-    );
+function getChatRoomTalentLines(room: ChatRoomListItem): ChatRoomTalentLine[] {
+  const runtimeRoom = room as ChatRoomRuntimeFields;
+  const displayTalentLines = Array.isArray(runtimeRoom.displayTalentLines)
+    ? runtimeRoom.displayTalentLines.filter(
+      (line) => getNonEmptyText(line.value) !== null,
+    )
+    : [];
+
+  if (displayTalentLines.length > 0) {
+    return displayTalentLines;
   }
 
-  if (!hasRequesterProviderTalentPair(room) || currentUserId === null) {
-    return null;
+  const receiveTalentTitle =
+    getNonEmptyText(runtimeRoom.myReceiveTalentTitle) ??
+    getNonEmptyText(runtimeRoom.receivedTalentTitle);
+  const receiveTalentId =
+    getPositiveInteger(runtimeRoom.myReceiveTalentId) ??
+    getPositiveInteger(runtimeRoom.receivedTalentId);
+  const provideTalentTitle = getNonEmptyText(runtimeRoom.myProvideTalentTitle);
+  const provideTalentId = getPositiveInteger(runtimeRoom.myProvideTalentId);
+
+  const fallbackLines: ChatRoomTalentLine[] = [];
+
+  if (receiveTalentTitle !== null || receiveTalentId !== null) {
+    fallbackLines.push({
+      label: "상대방 재능",
+      value:
+        receiveTalentTitle ??
+        (receiveTalentId === null ? "재능 정보 없음" : `재능 #${receiveTalentId}`),
+      talentId: receiveTalentId,
+    });
   }
 
-  if (getPositiveInteger(room.requesterId) === currentUserId) {
-    return getFallbackTalentLabel(
-      room.providerTalentTitle,
-      room.providerTalentId,
-      "상대 재능 정보 없음",
-    );
+  if (provideTalentTitle !== null || provideTalentId !== null) {
+    fallbackLines.push({
+      label: "내 재능",
+      value:
+        provideTalentTitle ??
+        (provideTalentId === null ? "재능 정보 없음" : `재능 #${provideTalentId}`),
+      talentId: provideTalentId,
+    });
   }
 
-  if (getPositiveInteger(room.providerId) === currentUserId) {
-    return getFallbackTalentLabel(
-      room.requesterTalentTitle,
-      room.requesterTalentId,
-      "상대 재능 정보 없음",
-    );
+  if (fallbackLines.length > 0) {
+    return fallbackLines;
   }
 
-  return null;
-}
+  if (getPositiveInteger(room.tradeGroupId) !== null) {
+    return [
+      {
+        label: "상대방 재능",
+        value: "재능 정보 없음",
+        talentId: null,
+      },
+    ];
+  }
 
-function getChatRoomTalentLines(
-  room: ChatRoomListItem,
-  currentUserId: number | null,
-): { label: string; value: string }[] {
-  if (room.roomType === "TRANSACTION") {
-    const myTalentLabel = getMyTalentLabel(room, currentUserId);
-    const opponentTalentLabel = getOpponentTalentLabel(room, currentUserId);
+  const opponentTalentTitle = getNonEmptyText(room.opponentTalentTitle);
+  const opponentTalentId = getPositiveInteger(room.opponentTalentId);
 
-    if (myTalentLabel !== null || opponentTalentLabel !== null) {
-      return [
-        {
-          label: "내 재능",
-          value: myTalentLabel ?? "내 재능 정보 없음",
-        },
-        {
-          label: "상대 재능",
-          value: opponentTalentLabel ?? "상대 재능 정보 없음",
-        },
-      ];
-    }
-
-    if (hasRequesterProviderTalentPair(room)) {
-      return [
-        {
-          label: "요청자 재능",
-          value: getFallbackTalentLabel(
-            room.requesterTalentTitle,
-            room.requesterTalentId,
-            "요청자 재능 정보 없음",
-          ),
-        },
-        {
-          label: "제공자 재능",
-          value: getFallbackTalentLabel(
-            room.providerTalentTitle,
-            room.providerTalentId,
-            "제공자 재능 정보 없음",
-          ),
-        },
-      ];
-    }
+  if (opponentTalentTitle !== null || opponentTalentId !== null) {
+    return [
+      {
+        label: "상대방 재능",
+        value:
+          opponentTalentTitle ??
+          (opponentTalentId === null
+            ? "재능 정보 없음"
+            : `재능 #${opponentTalentId}`),
+        talentId: null,
+      },
+    ];
   }
 
   return [
     {
-      label: "재능",
+      label: "상대방 재능",
       value: getFallbackTalentLabel(
         room.talentTitle,
         room.talentId,
         "재능 정보 없음",
       ),
+      talentId: null,
     },
   ];
-}
-
-function getChatRoomTalentSummary(
-  room: ChatRoomListItem,
-  currentUserId: number | null,
-): string {
-  return getChatRoomTalentLines(room, currentUserId)
-    .map((line) => `${line.label}: ${line.value}`)
-    .join(" · ");
 }
 
 type ChatMessageRuntimeFields = ChatMessageRes & {
@@ -349,7 +379,264 @@ type ChatMessageRuntimeFields = ChatMessageRes & {
   sentAt?: string | null;
   createdDate?: string | null;
   message?: string | null;
+  read?: boolean | null;
+  isRead?: boolean | null;
 };
+
+type ChatUserRuntimeFields = {
+  id?: number | null;
+  userId?: number | null;
+  profileImageUrl?: string | null;
+  profileImage?: string | null;
+  profileUrl?: string | null;
+  imageUrl?: string | null;
+  avatarUrl?: string | null;
+};
+
+type ChatRoomRuntimeFields = ChatRoomListItem & {
+  displayTalentLines?: ChatRoomTalentLine[] | null;
+  myReceiveTalentId?: number | null;
+  myReceiveTalentTitle?: string | null;
+  myProvideTalentId?: number | null;
+  myProvideTalentTitle?: string | null;
+  receivedTalentId?: number | null;
+  receivedTalentTitle?: string | null;
+  profileImageUrl?: string | null;
+  opponentProfileImage?: string | null;
+  opponentProfileUrl?: string | null;
+  opponentImageUrl?: string | null;
+  opponentAvatarUrl?: string | null;
+  requesterProfileImageUrl?: string | null;
+  providerProfileImageUrl?: string | null;
+  buyerProfileImageUrl?: string | null;
+  sellerProfileImageUrl?: string | null;
+  opponent?: ChatUserRuntimeFields | null;
+  opponentProfile?: ChatUserRuntimeFields | null;
+  requester?: ChatUserRuntimeFields | null;
+  provider?: ChatUserRuntimeFields | null;
+  buyer?: ChatUserRuntimeFields | null;
+  seller?: ChatUserRuntimeFields | null;
+  unreadCount?: number | null;
+  unreadMessageCount?: number | null;
+  unreadMessagesCount?: number | null;
+  notReadCount?: number | null;
+  lastMessageContent?: string | null;
+  lastMessageText?: string | null;
+  lastMessageSenderId?: number | null;
+  lastMessageSenderUserId?: number | null;
+};
+
+function getChatUserProfileImageUrl(
+  user: ChatUserRuntimeFields | null | undefined,
+): string | null {
+  if (!user) {
+    return null;
+  }
+
+  return getFirstNonEmptyText(
+    user.profileImageUrl,
+    user.profileImage,
+    user.profileUrl,
+    user.imageUrl,
+    user.avatarUrl,
+  );
+}
+
+function getChatUserId(
+  user: ChatUserRuntimeFields | null | undefined,
+): number | null {
+  if (!user) {
+    return null;
+  }
+
+  return getPositiveInteger(user.userId) ?? getPositiveInteger(user.id);
+}
+
+function getCounterpartyProfileImageByUserId(
+  room: ChatRoomListItem,
+  userId: number,
+): string | null {
+  const runtimeRoom = room as ChatRoomRuntimeFields;
+  const candidates = [
+    {
+      userId:
+        getPositiveInteger(runtimeRoom.requesterId) ??
+        getChatUserId(runtimeRoom.requester),
+      imageUrl: getFirstNonEmptyText(
+        runtimeRoom.requesterProfileImageUrl,
+        getChatUserProfileImageUrl(runtimeRoom.requester),
+      ),
+    },
+    {
+      userId:
+        getPositiveInteger(runtimeRoom.providerId) ??
+        getChatUserId(runtimeRoom.provider),
+      imageUrl: getFirstNonEmptyText(
+        runtimeRoom.providerProfileImageUrl,
+        getChatUserProfileImageUrl(runtimeRoom.provider),
+      ),
+    },
+    {
+      userId:
+        getPositiveInteger(runtimeRoom.buyerId) ??
+        getChatUserId(runtimeRoom.buyer),
+      imageUrl: getFirstNonEmptyText(
+        runtimeRoom.buyerProfileImageUrl,
+        getChatUserProfileImageUrl(runtimeRoom.buyer),
+      ),
+    },
+    {
+      userId:
+        getPositiveInteger(runtimeRoom.sellerId) ??
+        getChatUserId(runtimeRoom.seller),
+      imageUrl: getFirstNonEmptyText(
+        runtimeRoom.sellerProfileImageUrl,
+        getChatUserProfileImageUrl(runtimeRoom.seller),
+      ),
+    },
+  ];
+
+  return (
+    candidates.find(
+      (candidate) => candidate.userId === userId && candidate.imageUrl !== null,
+    )?.imageUrl ?? null
+  );
+}
+
+function getChatRoomOpponentProfileImageUrl(
+  room: ChatRoomListItem,
+  currentUserId: number | null,
+): string | null {
+  const runtimeRoom = room as ChatRoomRuntimeFields;
+  const directImageUrl = getFirstNonEmptyText(
+    room.opponentProfileImageUrl,
+    runtimeRoom.opponentProfileImage,
+    runtimeRoom.opponentProfileUrl,
+    runtimeRoom.opponentImageUrl,
+    runtimeRoom.opponentAvatarUrl,
+    getChatUserProfileImageUrl(runtimeRoom.opponent),
+    getChatUserProfileImageUrl(runtimeRoom.opponentProfile),
+    runtimeRoom.profileImageUrl,
+  );
+
+  if (directImageUrl !== null) {
+    return directImageUrl;
+  }
+
+  const opponentId = getPositiveInteger(room.opponentId);
+  if (opponentId !== null) {
+    const imageUrl = getCounterpartyProfileImageByUserId(room, opponentId);
+
+    if (imageUrl !== null) {
+      return imageUrl;
+    }
+  }
+
+  if (currentUserId === null) {
+    return null;
+  }
+
+  if (getPositiveInteger(room.requesterId) === currentUserId) {
+    return getFirstNonEmptyText(
+      runtimeRoom.providerProfileImageUrl,
+      getChatUserProfileImageUrl(runtimeRoom.provider),
+    );
+  }
+
+  if (getPositiveInteger(room.providerId) === currentUserId) {
+    return getFirstNonEmptyText(
+      runtimeRoom.requesterProfileImageUrl,
+      getChatUserProfileImageUrl(runtimeRoom.requester),
+    );
+  }
+
+  if (getPositiveInteger(room.buyerId) === currentUserId) {
+    return getFirstNonEmptyText(
+      runtimeRoom.sellerProfileImageUrl,
+      getChatUserProfileImageUrl(runtimeRoom.seller),
+    );
+  }
+
+  if (getPositiveInteger(room.sellerId) === currentUserId) {
+    return getFirstNonEmptyText(
+      runtimeRoom.buyerProfileImageUrl,
+      getChatUserProfileImageUrl(runtimeRoom.buyer),
+    );
+  }
+
+  return null;
+}
+
+function withRoomOpponentProfileImage(
+  room: ChatRoomListItem,
+  profileImageUrl: string,
+): ChatRoomListItem {
+  return {
+    ...room,
+    opponentProfileImageUrl: profileImageUrl,
+  };
+}
+
+function getRoomUnreadCount(room: ChatRoomListItem): number {
+  const runtimeRoom = room as ChatRoomRuntimeFields;
+  const candidates = [
+    runtimeRoom.unreadCount,
+    runtimeRoom.unreadMessageCount,
+    runtimeRoom.unreadMessagesCount,
+    runtimeRoom.notReadCount,
+  ];
+
+  const count = candidates.find(
+    (candidate): candidate is number =>
+      typeof candidate === "number" &&
+      Number.isFinite(candidate) &&
+      candidate > 0,
+  );
+
+  return count ?? 0;
+}
+
+function getRoomLastMessageText(room: ChatRoomListItem): string {
+  const runtimeRoom = room as ChatRoomRuntimeFields;
+  const candidates = [
+    runtimeRoom.lastMessage,
+    runtimeRoom.lastMessageContent,
+    runtimeRoom.lastMessageText,
+  ];
+
+  return (
+    candidates
+      .find(
+        (candidate): candidate is string =>
+          typeof candidate === "string" && candidate.trim().length > 0,
+      )
+      ?.trim() ?? "아직 메시지가 없습니다."
+  );
+}
+
+function withRoomUnreadCount(
+  room: ChatRoomListItem,
+  unreadCount: number,
+): ChatRoomListItem {
+  return {
+    ...room,
+    unreadCount,
+  } as ChatRoomListItem;
+}
+
+function withRoomLastMessage(
+  room: ChatRoomListItem,
+  message: ChatMessageRes,
+): ChatRoomListItem {
+  const content = getMessageContent(message);
+  const createdAt = getMessageCreatedAtValue(message);
+
+  return {
+    ...room,
+    lastMessage: content || room.lastMessage,
+    lastMessageAt: createdAt || room.lastMessageAt,
+  };
+}
 
 function getMessageRoomId(message: ChatMessageRes): number | null {
   return getPositiveInteger(message.roomId);
@@ -393,6 +680,729 @@ function getMessageContent(message: ChatMessageRes): string {
         : "";
 
   return content;
+}
+
+function isMessageRead(message: ChatMessageRes): boolean {
+  const runtimeMessage = message as ChatMessageRuntimeFields;
+
+  if (typeof runtimeMessage.read === "boolean") {
+    return runtimeMessage.read;
+  }
+
+  if (typeof runtimeMessage.isRead === "boolean") {
+    return runtimeMessage.isRead;
+  }
+
+  return true;
+}
+
+function withRoomMessageSnapshot(
+  room: ChatRoomListItem,
+  messages: ChatMessageRes[],
+  currentUserId: number | null,
+): ChatRoomListItem {
+  if (messages.length === 0) {
+    return room;
+  }
+
+  const normalizedMessages = normalizeMessages(messages);
+  const lastMessage = normalizedMessages[normalizedMessages.length - 1];
+  const unreadCount = normalizedMessages.filter((message) => {
+    const senderId = getPositiveInteger(message.senderId);
+
+    return (
+      currentUserId !== null &&
+      senderId !== null &&
+      senderId !== currentUserId &&
+      !isMessageRead(message)
+    );
+  }).length;
+
+  return withRoomUnreadCount(
+    withRoomLastMessage(room, lastMessage),
+    unreadCount,
+  );
+}
+
+async function hydrateChatRoomsWithMessageSnapshots(
+  rooms: ChatRoomListItem[],
+  currentUserId: number | null,
+): Promise<ChatRoomListItem[]> {
+  const results = await Promise.allSettled(
+    rooms.map(async (room) => {
+      const response = await chatApi.getMessages(room.roomId);
+      const messages = Array.isArray(response.content) ? response.content : [];
+
+      return withRoomMessageSnapshot(room, messages, currentUserId);
+    }),
+  );
+
+  return rooms.map((room, index) => {
+    const result = results[index];
+
+    return result.status === "fulfilled" ? result.value : room;
+  });
+}
+
+type TradeListRuntimeFields = TradeListRes & {
+  title?: string | null;
+};
+
+const TRADE_LIST_HYDRATION_PAGE_SIZE = 50;
+
+function isGeneratedFallbackTitle(value: string | null): boolean {
+  return (
+    value !== null &&
+    (value === "재능 정보 없음" || /^재능\s*#\d+$/.test(value))
+  );
+}
+
+function getBestDisplayTitle(...values: unknown[]): string | null {
+  const titles = values
+    .map(getNonEmptyText)
+    .filter((value): value is string => value !== null);
+  const explicitTitle = titles.find((title) => !isGeneratedFallbackTitle(title));
+
+  return explicitTitle ?? titles[0] ?? null;
+}
+
+function getTradeDisplayTalentTitle(trade: TradeListRes): string {
+  const runtimeTrade = trade as TradeListRuntimeFields;
+  const talentTitle = getNonEmptyText(runtimeTrade.talentTitle);
+
+  if (talentTitle !== null) {
+    return talentTitle;
+  }
+
+  const title = getNonEmptyText(runtimeTrade.title);
+
+  if (title !== null) {
+    return title;
+  }
+
+  const talentId = getPositiveInteger(runtimeTrade.talentId);
+
+  return talentId === null ? "재능 정보 없음" : `재능 #${talentId}`;
+}
+
+function getTradeTalentLineValue(trade: TradeListRes): {
+  talentId: number | null;
+  talentTitle: string;
+} {
+  const talentId = getPositiveInteger(trade.talentId);
+
+  return {
+    talentId,
+    talentTitle: getTradeDisplayTalentTitle(trade),
+  };
+}
+
+function getChatRoomTalentTitleForTrade(
+  room: ChatRoomListItem,
+  trade: TradeListRes,
+  currentUserId: number | null,
+): string | null {
+  const sellerId = getPositiveInteger(trade.sellerId);
+  const talentId = getPositiveInteger(trade.talentId);
+  const requesterId = getPositiveInteger(room.requesterId);
+  const providerId = getPositiveInteger(room.providerId);
+  const opponentId = getPositiveInteger(room.opponentId);
+
+  if (sellerId !== null) {
+    if (requesterId !== null && sellerId === requesterId) {
+      return getNonEmptyText(room.requesterTalentTitle);
+    }
+
+    if (providerId !== null && sellerId === providerId) {
+      return getNonEmptyText(room.providerTalentTitle);
+    }
+
+    if (currentUserId !== null && sellerId === currentUserId) {
+      return getNonEmptyText(room.myTalentTitle);
+    }
+
+    if (opponentId !== null && sellerId === opponentId) {
+      return getNonEmptyText(room.opponentTalentTitle);
+    }
+  }
+
+  if (talentId !== null) {
+    if (talentId === getPositiveInteger(room.myTalentId)) {
+      return getNonEmptyText(room.myTalentTitle);
+    }
+
+    if (talentId === getPositiveInteger(room.opponentTalentId)) {
+      return getNonEmptyText(room.opponentTalentTitle);
+    }
+
+    if (talentId === getPositiveInteger(room.requesterTalentId)) {
+      return getNonEmptyText(room.requesterTalentTitle);
+    }
+
+    if (talentId === getPositiveInteger(room.providerTalentId)) {
+      return getNonEmptyText(room.providerTalentTitle);
+    }
+  }
+
+  return getNonEmptyText(room.talentTitle);
+}
+
+function getTradeTalentLineValueForRoom({
+  room,
+  trade,
+  currentUserId,
+}: {
+  room: ChatRoomListItem;
+  trade: TradeListRes;
+  currentUserId: number | null;
+}): {
+  talentId: number | null;
+  talentTitle: string;
+} {
+  const tradeTalent = getTradeTalentLineValue(trade);
+
+  return {
+    talentId: tradeTalent.talentId,
+    talentTitle:
+      getBestDisplayTitle(
+        getChatRoomTalentTitleForTrade(room, trade, currentUserId),
+        trade.talentTitle,
+        (trade as TradeListRuntimeFields).title,
+        tradeTalent.talentTitle,
+      ) ?? tradeTalent.talentTitle,
+  };
+}
+
+async function enrichChatTradeDetails(
+  trades: TradeListRes[],
+): Promise<TradeListRes[]> {
+  const targetTradeIds = Array.from(
+    new Set(
+      trades
+        .map((trade) => getPositiveInteger(trade.tradeId))
+        .filter((tradeId): tradeId is number => tradeId !== null),
+    ),
+  );
+
+  if (targetTradeIds.length === 0) {
+    return trades;
+  }
+
+  const settledTradeDetails = await Promise.allSettled(
+    targetTradeIds.map(async (tradeId) => ({
+      tradeId,
+      detail: await tradeApi.getDetail(tradeId),
+    })),
+  );
+  const detailsByTradeId = new Map<number, TradeRes>();
+
+  settledTradeDetails.forEach((result) => {
+    if (result.status !== "fulfilled") {
+      return;
+    }
+
+    const tradeId = getPositiveInteger(result.value.tradeId);
+
+    if (tradeId !== null) {
+      detailsByTradeId.set(tradeId, result.value.detail);
+    }
+  });
+
+  const targetTalentIds = Array.from(
+    new Set(
+      trades
+        .map((trade) => {
+          const tradeId = getPositiveInteger(trade.tradeId);
+          const detail =
+            tradeId === null ? null : detailsByTradeId.get(tradeId);
+
+          return (
+            getPositiveInteger(detail?.talentId) ??
+            getPositiveInteger(trade.talentId)
+          );
+        })
+        .filter((talentId): talentId is number => talentId !== null),
+    ),
+  );
+  const settledTalentDetails = await Promise.allSettled(
+    targetTalentIds.map(async (talentId) => ({
+      talentId,
+      detail: await talentApi.getDetail(talentId),
+    })),
+  );
+  const talentDetailsById = new Map<number, TalentDetailRes>();
+
+  settledTalentDetails.forEach((result) => {
+    if (result.status !== "fulfilled") {
+      return;
+    }
+
+    const talentId = getPositiveInteger(result.value.talentId);
+
+    if (talentId !== null) {
+      talentDetailsById.set(talentId, result.value.detail);
+    }
+  });
+
+  if (detailsByTradeId.size === 0 && talentDetailsById.size === 0) {
+    return trades;
+  }
+
+  return trades.map((trade) => {
+    const tradeId = getPositiveInteger(trade.tradeId);
+    const detail = tradeId === null ? null : detailsByTradeId.get(tradeId);
+    const talentId =
+      getPositiveInteger(detail?.talentId) ?? getPositiveInteger(trade.talentId);
+    const talentDetail =
+      talentId === null ? null : talentDetailsById.get(talentId);
+
+    return {
+      ...trade,
+      title: getBestDisplayTitle(
+        detail?.title,
+        talentDetail?.title,
+        (trade as TradeListRuntimeFields).title,
+      ),
+      tradeGroupId:
+        getPositiveInteger(detail?.tradeGroupId) ?? trade.tradeGroupId,
+      talentId: talentId ?? trade.talentId,
+      talentTitle: getBestDisplayTitle(
+        detail?.talentTitle,
+        talentDetail?.title,
+        trade.talentTitle,
+      ),
+      buyerId: getPositiveInteger(detail?.buyerId) ?? trade.buyerId,
+      sellerId: getPositiveInteger(detail?.sellerId) ?? trade.sellerId,
+      buyerNickname:
+        getNonEmptyText(detail?.buyerNickname) ?? trade.buyerNickname,
+      sellerNickname:
+        getNonEmptyText(detail?.sellerNickname) ?? trade.sellerNickname,
+      creditPrice:
+        typeof detail?.creditPrice === "number" &&
+          Number.isFinite(detail.creditPrice)
+          ? detail.creditPrice
+          : trade.creditPrice,
+      tradeStatus: detail?.tradeStatus ?? trade.tradeStatus,
+      updatedAt: getNonEmptyText(detail?.updatedAt) ?? trade.updatedAt,
+    };
+  });
+}
+
+function withRoomTradeTalentLines({
+  room,
+  receiveTrade,
+  provideTrade,
+  groupTrades,
+  currentUserId,
+}: {
+  room: ChatRoomListItem;
+  receiveTrade?: TradeListRes;
+  provideTrade?: TradeListRes;
+  groupTrades: TradeListRes[];
+  currentUserId: number | null;
+}): ChatRoomListItem {
+  const displayTalentLines: ChatRoomTalentLine[] = [];
+  const receiveTalent = receiveTrade
+    ? getTradeTalentLineValueForRoom({
+      room,
+      trade: receiveTrade,
+      currentUserId,
+    })
+    : null;
+  const provideTalent = provideTrade
+    ? getTradeTalentLineValueForRoom({
+      room,
+      trade: provideTrade,
+      currentUserId,
+    })
+    : null;
+
+  if (receiveTalent !== null) {
+    displayTalentLines.push({
+      label: "상대방 재능",
+      value: receiveTalent.talentTitle,
+      talentId: receiveTalent.talentId,
+    });
+  }
+
+  if (
+    provideTalent !== null &&
+    provideTalent.talentTitle !== receiveTalent?.talentTitle
+  ) {
+    displayTalentLines.push({
+      label: "내 재능",
+      value: provideTalent.talentTitle,
+      talentId: provideTalent.talentId,
+    });
+  }
+
+  if (displayTalentLines.length === 0) {
+    const uniqueTitles = Array.from(
+      new Set(
+        groupTrades
+          .map((trade) => getTradeDisplayTalentTitle(trade))
+          .map((title) => title.trim())
+          .filter((title) => title.length > 0),
+      ),
+    );
+
+    if (uniqueTitles.length >= 2) {
+      displayTalentLines.push({
+        label: "교환 재능",
+        value: uniqueTitles.slice(0, 2).join(" ↔ "),
+        talentId: null,
+      });
+    }
+  }
+
+  if (displayTalentLines.length === 0) {
+    return room;
+  }
+
+  return {
+    ...room,
+    displayTalentLines,
+    myReceiveTalentId: receiveTalent?.talentId ?? null,
+    myReceiveTalentTitle: receiveTalent?.talentTitle ?? null,
+    myProvideTalentId: provideTalent?.talentId ?? null,
+    myProvideTalentTitle: provideTalent?.talentTitle ?? null,
+    receivedTalentId: receiveTalent?.talentId ?? null,
+    receivedTalentTitle: receiveTalent?.talentTitle ?? null,
+  } as ChatRoomListItem;
+}
+
+function mergeUniqueTrades(trades: TradeListRes[]): TradeListRes[] {
+  const tradeMap = new Map<number, TradeListRes>();
+  const fallbackTrades: TradeListRes[] = [];
+
+  trades.forEach((trade) => {
+    const tradeId = getPositiveInteger(trade.tradeId);
+
+    if (tradeId === null) {
+      fallbackTrades.push(trade);
+      return;
+    }
+
+    const currentTrade = tradeMap.get(tradeId);
+
+    tradeMap.set(tradeId, {
+      ...currentTrade,
+      ...trade,
+      talentTitle:
+        getBestDisplayTitle(trade.talentTitle, currentTrade?.talentTitle) ??
+        trade.talentTitle,
+      title:
+        getBestDisplayTitle(
+          (trade as TradeListRuntimeFields).title,
+          currentTrade === undefined
+            ? null
+            : (currentTrade as TradeListRuntimeFields).title,
+        ) ?? (trade as TradeListRuntimeFields).title,
+    });
+  });
+
+  return [...tradeMap.values(), ...fallbackTrades];
+}
+
+async function loadRoomTradeDetailsForChatRoomHydration(
+  rooms: ChatRoomListItem[],
+): Promise<Map<number, TradeListRes>> {
+  const tradeIds = Array.from(
+    new Set(
+      rooms
+        .map((room) => getPositiveInteger(room.tradeId))
+        .filter((tradeId): tradeId is number => tradeId !== null),
+    ),
+  );
+
+  if (tradeIds.length === 0) {
+    return new Map();
+  }
+
+  const settledTradeDetails = await Promise.allSettled(
+    tradeIds.map(async (tradeId) => ({
+      tradeId,
+      detail: await tradeApi.getDetail(tradeId),
+    })),
+  );
+  const roomTradeDetails = settledTradeDetails
+    .filter(
+      (result): result is PromiseFulfilledResult<{
+        tradeId: number;
+        detail: TradeRes;
+      }> => result.status === "fulfilled",
+    )
+    .map((result) => result.value.detail);
+  const enrichedTradeDetails = await enrichChatTradeDetails(roomTradeDetails);
+  const detailsByTradeId = new Map<number, TradeListRes>();
+
+  enrichedTradeDetails.forEach((trade) => {
+    const tradeId = getPositiveInteger(trade.tradeId);
+
+    if (tradeId !== null) {
+      detailsByTradeId.set(tradeId, trade);
+    }
+  });
+
+  return detailsByTradeId;
+}
+
+async function loadTradeListForChatRoomHydration(): Promise<TradeListRes[]> {
+  const trades: TradeListRes[] = [];
+  const seenTradeIds = new Set<number>();
+  let cursor: number | null | undefined = null;
+
+  for (let requestCount = 0; requestCount < 10; requestCount += 1) {
+    const response = await tradeApi.getList({
+      cursor,
+      size: TRADE_LIST_HYDRATION_PAGE_SIZE,
+    });
+    const pageTrades = Array.isArray(response.content) ? response.content : [];
+    const enrichedPageTrades = await enrichChatTradeDetails(pageTrades);
+
+    enrichedPageTrades.forEach((trade) => {
+      const tradeId = getPositiveInteger(trade.tradeId);
+
+      if (tradeId !== null) {
+        if (seenTradeIds.has(tradeId)) {
+          return;
+        }
+
+        seenTradeIds.add(tradeId);
+      }
+
+      trades.push(trade);
+    });
+
+    if (!response.hasNext || response.nextCursor === null) {
+      break;
+    }
+
+    cursor = response.nextCursor;
+  }
+
+  return trades;
+}
+
+async function hydrateChatRoomsWithTradeGroupReceiveTalents(
+  rooms: ChatRoomListItem[],
+  currentUserId: number | null,
+): Promise<ChatRoomListItem[]> {
+  if (rooms.length === 0 || currentUserId === null) {
+    return rooms;
+  }
+
+  try {
+    const roomTradeDetailsByTradeId =
+      await loadRoomTradeDetailsForChatRoomHydration(rooms);
+    let listTrades: TradeListRes[] = [];
+
+    try {
+      listTrades = await loadTradeListForChatRoomHydration();
+    } catch {
+      listTrades = [];
+    }
+
+    const trades = mergeUniqueTrades([
+      ...roomTradeDetailsByTradeId.values(),
+      ...listTrades,
+    ]);
+    const tradesByGroupId = new Map<number, TradeListRes[]>();
+    const tradesById = new Map<number, TradeListRes>();
+
+    trades.forEach((trade) => {
+      const tradeId = getPositiveInteger(trade.tradeId);
+      const tradeGroupId = getPositiveInteger(trade.tradeGroupId);
+
+      if (tradeId !== null) {
+        tradesById.set(tradeId, trade);
+      }
+
+      if (tradeGroupId === null) {
+        return;
+      }
+
+      const groupTrades = tradesByGroupId.get(tradeGroupId) ?? [];
+      groupTrades.push(trade);
+      tradesByGroupId.set(tradeGroupId, groupTrades);
+    });
+
+    return rooms.map((room) => {
+      const roomTradeId = getPositiveInteger(room.tradeId);
+      const roomTrade =
+        roomTradeId === null
+          ? undefined
+          : roomTradeDetailsByTradeId.get(roomTradeId) ??
+          tradesById.get(roomTradeId);
+      const tradeGroupId =
+        getPositiveInteger(room.tradeGroupId) ??
+        getPositiveInteger(roomTrade?.tradeGroupId);
+      const groupTrades =
+        tradeGroupId === null ? [] : tradesByGroupId.get(tradeGroupId) ?? [];
+      const opponentId = getPositiveInteger(room.opponentId);
+
+      const receiveTrade =
+        groupTrades.find(
+          (trade) => getPositiveInteger(trade.buyerId) === currentUserId,
+        ) ??
+        (roomTrade !== undefined &&
+          getPositiveInteger(roomTrade.buyerId) === currentUserId
+          ? roomTrade
+          : undefined) ??
+        (opponentId === null
+          ? undefined
+          : trades.find(
+            (trade) =>
+              getPositiveInteger(trade.buyerId) === currentUserId &&
+              getPositiveInteger(trade.sellerId) === opponentId,
+          ));
+      const provideTrade =
+        groupTrades.find(
+          (trade) => getPositiveInteger(trade.sellerId) === currentUserId,
+        ) ??
+        (roomTrade !== undefined &&
+          getPositiveInteger(roomTrade.sellerId) === currentUserId
+          ? roomTrade
+          : undefined) ??
+        (opponentId === null
+          ? undefined
+          : trades.find(
+            (trade) =>
+              getPositiveInteger(trade.sellerId) === currentUserId &&
+              getPositiveInteger(trade.buyerId) === opponentId,
+          ));
+
+      return withRoomTradeTalentLines({
+        room: {
+          ...room,
+          tradeGroupId: tradeGroupId ?? room.tradeGroupId,
+        },
+        receiveTrade,
+        provideTrade,
+        groupTrades,
+        currentUserId,
+      });
+    });
+  } catch {
+    return rooms;
+  }
+}
+
+const talentAuthorProfileImageRequests = new Map<
+  number,
+  Promise<string | null>
+>();
+
+function getTalentAuthorProfileImageUrlOnce(
+  talentId: number,
+): Promise<string | null> {
+  const pendingRequest = talentAuthorProfileImageRequests.get(talentId);
+
+  if (pendingRequest) {
+    return pendingRequest;
+  }
+
+  const request = talentApi
+    .getDetail(talentId)
+    .then((talent) => getNonEmptyText(talent.author.profileImageUrl))
+    .catch(() => null)
+    .finally(() => {
+      talentAuthorProfileImageRequests.delete(talentId);
+    });
+
+  talentAuthorProfileImageRequests.set(talentId, request);
+  return request;
+}
+
+async function hydrateChatRoomsWithOpponentProfileImages(
+  rooms: ChatRoomListItem[],
+  currentUserId: number | null,
+): Promise<ChatRoomListItem[]> {
+  const directHydratedRooms = rooms.map((room) => {
+    const profileImageUrl = getChatRoomOpponentProfileImageUrl(
+      room,
+      currentUserId,
+    );
+
+    return profileImageUrl === null
+      ? room
+      : withRoomOpponentProfileImage(room, profileImageUrl);
+  });
+  const talentIds = Array.from(
+    new Set(
+      directHydratedRooms
+        .filter(
+          (room) =>
+            getChatRoomOpponentProfileImageUrl(room, currentUserId) === null,
+        )
+        .map((room) => getCounterpartyTalentId(room, currentUserId))
+        .filter((talentId): talentId is number => talentId !== null),
+    ),
+  );
+
+  if (talentIds.length === 0) {
+    return directHydratedRooms;
+  }
+
+  const results = await Promise.allSettled(
+    talentIds.map(async (talentId) => ({
+      talentId,
+      profileImageUrl: await getTalentAuthorProfileImageUrlOnce(talentId),
+    })),
+  );
+  const profileImageUrlByTalentId = new Map<number, string>();
+
+  results.forEach((result) => {
+    if (
+      result.status === "fulfilled" &&
+      result.value.profileImageUrl !== null
+    ) {
+      profileImageUrlByTalentId.set(
+        result.value.talentId,
+        result.value.profileImageUrl,
+      );
+    }
+  });
+
+  if (profileImageUrlByTalentId.size === 0) {
+    return directHydratedRooms;
+  }
+
+  return directHydratedRooms.map((room) => {
+    if (getChatRoomOpponentProfileImageUrl(room, currentUserId) !== null) {
+      return room;
+    }
+
+    const talentId = getCounterpartyTalentId(room, currentUserId);
+    const profileImageUrl =
+      talentId === null ? undefined : profileImageUrlByTalentId.get(talentId);
+
+    return profileImageUrl === undefined
+      ? room
+      : withRoomOpponentProfileImage(room, profileImageUrl);
+  });
+}
+
+function mergeChatRooms(
+  currentRooms: ChatRoomListItem[],
+  nextRooms: ChatRoomListItem[],
+  append: boolean,
+): ChatRoomListItem[] {
+  if (!append) {
+    return nextRooms;
+  }
+
+  const roomMap = new Map<number, ChatRoomListItem>();
+
+  currentRooms.forEach((room) => {
+    roomMap.set(room.roomId, room);
+  });
+
+  nextRooms.forEach((room) => {
+    roomMap.set(room.roomId, room);
+  });
+
+  return Array.from(roomMap.values());
 }
 
 function getMessageId(message: ChatMessageRes): string {
@@ -486,22 +1496,40 @@ export default function ChatsPage() {
   const [socketConnectionVersion, setSocketConnectionVersion] = useState(0);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const chatSocketRef = useRef<ChatSocketConnection | null>(null);
+  const chatRoomListSocketRef = useRef<ChatRoomListSocketConnection | null>(
+    null,
+  );
   const currentUserIdRef = useRef<number | null>(null);
   const selectedRoomIdRef = useRef<number | null>(null);
   const initialRoomQueryHandledRef = useRef(false);
   const currentRoomId = currentRoom?.id ?? null;
+  const subscribedRoomIdsKey = chatRooms.map((room) => room.roomId).join(",");
   const currentRoomListItem =
     currentRoomId === null
       ? undefined
       : chatRooms.find((room) => room.roomId === currentRoomId);
   const currentOpponentName =
     currentRoomListItem?.opponentNickname?.trim() || "상대방";
-  const currentTalentTitle =
+  const currentOpponentProfileImageUrl =
+    currentRoomListItem === undefined
+      ? null
+      : getChatRoomOpponentProfileImageUrl(currentRoomListItem, currentUserId);
+  const currentTalentLines =
     currentRoomListItem !== undefined
-      ? getChatRoomTalentSummary(currentRoomListItem, currentUserId)
+      ? getChatRoomTalentLines(currentRoomListItem)
       : currentRoom
-        ? getFallbackTalentLabel(null, currentRoom.talentId, "재능 정보 없음")
-        : "재능 정보 없음";
+        ? [
+          {
+            label: "상대방 재능",
+            value: getFallbackTalentLabel(
+              null,
+              currentRoom.talentId,
+              "재능 정보 없음",
+            ),
+            talentId: getPositiveInteger(currentRoom.talentId),
+          },
+        ]
+        : [];
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -523,6 +1551,82 @@ export default function ChatsPage() {
   }, [messages]);
 
   useEffect(() => {
+    chatRoomListSocketRef.current?.disconnect();
+    chatRoomListSocketRef.current = null;
+
+    if (currentUserId === null || subscribedRoomIdsKey.length === 0) {
+      return;
+    }
+
+    const roomIds = subscribedRoomIdsKey
+      .split(",")
+      .map((roomId) => Number(roomId))
+      .filter((roomId) => Number.isInteger(roomId) && roomId > 0);
+
+    if (roomIds.length === 0) {
+      return;
+    }
+
+    const connection = connectChatRoomListSocket({
+      roomIds,
+      onMessage: (message) => {
+        const messageRoomId = getMessageRoomId(message);
+        const userId = currentUserIdRef.current;
+
+        if (messageRoomId === null) {
+          return;
+        }
+
+        setChatRooms((prevRooms) =>
+          prevRooms.map((room) => {
+            if (room.roomId !== messageRoomId) {
+              return room;
+            }
+
+            const nextRoom = withRoomLastMessage(room, message);
+            const isCurrentRoomMessage =
+              selectedRoomIdRef.current === messageRoomId;
+            const isMyMessage = userId !== null && message.senderId === userId;
+
+            if (isCurrentRoomMessage || isMyMessage) {
+              return withRoomUnreadCount(nextRoom, 0);
+            }
+
+            return withRoomUnreadCount(nextRoom, getRoomUnreadCount(room) + 1);
+          }),
+        );
+      },
+      onRead: (event) => {
+        const readRoomId = getPositiveInteger(event.roomId);
+        const readerId = getPositiveInteger(event.readerId);
+        const userId = currentUserIdRef.current;
+
+        if (readRoomId === null || readerId === null || readerId === userId) {
+          return;
+        }
+
+        setChatRooms((prevRooms) =>
+          prevRooms.map((room) =>
+            room.roomId === readRoomId ? withRoomUnreadCount(room, 0) : room,
+          ),
+        );
+      },
+      onError: () => {
+        // 목록 실시간 알림 연결 실패는 채팅 화면 사용을 막지 않는다.
+      },
+    });
+
+    chatRoomListSocketRef.current = connection;
+
+    return () => {
+      connection.disconnect();
+      if (chatRoomListSocketRef.current === connection) {
+        chatRoomListSocketRef.current = null;
+      }
+    };
+  }, [currentUserId, subscribedRoomIdsKey]);
+
+  useEffect(() => {
     if (currentRoomId === null) {
       chatSocketRef.current?.disconnect();
       chatSocketRef.current = null;
@@ -536,10 +1640,29 @@ export default function ChatsPage() {
     connection = connectChatSocket({
       roomId: currentRoomId,
       onMessage: (message) => {
-        if (
-          selectedRoomIdRef.current !== currentRoomId ||
-          !isMessageForRoom(message, currentRoomId)
-        ) {
+        const messageRoomId = getMessageRoomId(message) ?? currentRoomId;
+        const userId = currentUserIdRef.current;
+        const isCurrentRoomMessage =
+          selectedRoomIdRef.current === messageRoomId &&
+          isMessageForRoom(message, messageRoomId);
+
+        setChatRooms((prevRooms) =>
+          prevRooms.map((room) => {
+            if (room.roomId !== messageRoomId) {
+              return room;
+            }
+
+            const nextRoom = withRoomLastMessage(room, message);
+
+            if (isCurrentRoomMessage || message.senderId === userId) {
+              return withRoomUnreadCount(nextRoom, 0);
+            }
+
+            return withRoomUnreadCount(nextRoom, getRoomUnreadCount(room) + 1);
+          }),
+        );
+
+        if (!isCurrentRoomMessage) {
           return;
         }
 
@@ -551,7 +1674,6 @@ export default function ChatsPage() {
           return normalizeMessages([...currentRoomMessages, message]);
         });
 
-        const userId = currentUserIdRef.current;
         if (userId !== null && message.senderId !== userId) {
           chatSocketRef.current?.markAsRead();
         }
@@ -654,7 +1776,10 @@ export default function ChatsPage() {
   }, []);
 
   const loadChatRooms = useCallback(
-    async ({ cursor, append = false }: { cursor?: number | null; append?: boolean } = {}) => {
+    async ({
+      cursor,
+      append = false,
+    }: { cursor?: number | null; append?: boolean } = {}) => {
       if (!append) {
         setIsLoadingRooms(true);
       } else {
@@ -668,9 +1793,26 @@ export default function ChatsPage() {
           cursor,
           size: 20,
         });
+        const responseRooms = Array.isArray(response.content)
+          ? response.content
+          : [];
+        const messageHydratedRooms = await hydrateChatRoomsWithMessageSnapshots(
+          responseRooms,
+          currentUserId,
+        );
+        const tradeHydratedRooms =
+          await hydrateChatRoomsWithTradeGroupReceiveTalents(
+            messageHydratedRooms,
+            currentUserId,
+          );
+        const profileHydratedRooms =
+          await hydrateChatRoomsWithOpponentProfileImages(
+            tradeHydratedRooms,
+            currentUserId,
+          );
 
         setChatRooms((prevRooms) =>
-          append ? [...prevRooms, ...response.content] : response.content,
+          mergeChatRooms(prevRooms, profileHydratedRooms, append),
         );
         setHasNextRooms(response.hasNext);
         setNextRoomCursor(response.nextCursor);
@@ -688,7 +1830,7 @@ export default function ChatsPage() {
         setIsLoadingMoreRooms(false);
       }
     },
-    [],
+    [currentUserId],
   );
 
   const openExistingRoom = useCallback(
@@ -712,6 +1854,13 @@ export default function ChatsPage() {
         activeRoomId = room.id;
         selectedRoomIdRef.current = room.id;
         setCurrentRoom(room);
+        setChatRooms((prevRooms) =>
+          prevRooms.map((prevRoom) =>
+            prevRoom.roomId === room.id
+              ? withRoomUnreadCount(prevRoom, 0)
+              : prevRoom,
+          ),
+        );
         setSocketConnectionVersion((version) => version + 1);
         await loadMessages(room.id);
       } catch (error) {
@@ -725,7 +1874,7 @@ export default function ChatsPage() {
           error instanceof Error
             ? error.message
             : "채팅방에 입장하지 못했습니다.",
-          );
+        );
       } finally {
         if (selectedRoomIdRef.current === activeRoomId) {
           setIsEnteringRoom(false);
@@ -778,6 +1927,8 @@ export default function ChatsPage() {
         setCurrentRoom(null);
         setMessages([]);
         selectedRoomIdRef.current = null;
+        chatRoomListSocketRef.current?.disconnect();
+        chatRoomListSocketRef.current = null;
       }, 0);
 
       return () => {
@@ -856,11 +2007,10 @@ export default function ChatsPage() {
 
       <div className="fixed-container relative py-10 sm:py-14">
         <header className="mx-auto mb-8 max-w-3xl text-center sm:mb-12">
-          <h1 className="baton-page-title mt-3 !font-bold">
-            CHATTING
-          </h1>
+          <h1 className="baton-page-title mt-3 !font-bold">CHATTING</h1>
           <p className="mx-auto mt-4 max-w-2xl text-sm font-semibold leading-7 text-zinc-500 sm:mt-5 sm:text-lg sm:leading-8">
-            매칭과 거래에서 이어진 대화를 한 곳에서 확인하고 실시간으로 메시지를 주고받으세요.
+            매칭과 거래에서 이어진 대화를 한 곳에서 확인하고 실시간으로 메시지를
+            주고받으세요.
           </p>
         </header>
 
@@ -873,7 +2023,8 @@ export default function ChatsPage() {
             <div className="border-b border-[#eee8ff] px-5 py-5">
               <p className="text-sm font-black text-zinc-950">대화 목록</p>
               <p className="mt-1 text-xs font-bold text-zinc-400">
-                총 {chatRooms.length}{hasNextRooms ? "+" : ""}개 대화
+                총 {chatRooms.length}
+                {hasNextRooms ? "+" : ""}개 대화
               </p>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto [overscroll-behavior-y:contain] [scrollbar-gutter:stable]">
@@ -938,16 +2089,60 @@ export default function ChatsPage() {
                 </div>
               ) : currentRoom ? (
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0">
-                    <p className="truncate text-lg font-black text-zinc-950">
-                      {currentOpponentName}
-                    </p>
-                    <p className="mt-1 truncate text-sm font-semibold text-zinc-500">
-                      {currentTalentTitle}
-                    </p>
+                  <div className="flex min-w-0 items-center gap-3">
+                    <ChatRoomAvatar
+                      imageUrl={currentOpponentProfileImageUrl}
+                      name={currentOpponentName}
+                      size="md"
+                    />
+                    <div className="min-w-0">
+                      <p className="truncate text-lg font-black text-zinc-950">
+                        {currentOpponentName}
+                      </p>
+                      <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm font-semibold text-zinc-500">
+                        {currentTalentLines.length > 0 ? (
+                          currentTalentLines.map((line, index) => (
+                            <Fragment
+                              key={`${line.label}-${line.talentId ?? index}`}
+                            >
+                              {index > 0 ? (
+                                <span
+                                  className="text-zinc-300"
+                                  aria-hidden="true"
+                                >
+                                  ·
+                                </span>
+                              ) : null}
+                              {line.talentId !== null ? (
+                                <Link
+                                  href={`/talents/${line.talentId}`}
+                                  className="min-w-0 truncate transition hover:text-[#8c5bff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8c5bff]/30"
+                                >
+                                  <span className="font-black text-zinc-600">
+                                    {line.label}
+                                  </span>
+                                  <span aria-hidden="true">: </span>
+                                  <span>{line.value}</span>
+                                </Link>
+                              ) : (
+                                <span className="min-w-0 truncate">
+                                  <span className="font-black text-zinc-600">
+                                    {line.label}
+                                  </span>
+                                  <span aria-hidden="true">: </span>
+                                  <span>{line.value}</span>
+                                </span>
+                              )}
+                            </Fragment>
+                          ))
+                        ) : (
+                          <span>재능 정보 없음</span>
+                        )}
+                      </div>
+                    </div>
                   </div>
                   <div className="flex shrink-0 flex-wrap justify-end gap-2">
-                    <span className="rounded-full border border-[#d9ccff] bg-[#f4f0ff] px-3 py-1 text-xs font-black text-[#8c5bff]">
+                    <span className="inline-flex h-9 shrink-0 items-center justify-center rounded-full border border-[#d9ccff] bg-[#f4f0ff] px-4 text-xs font-black text-[#8c5bff] sm:text-sm">
                       {getRoomStatusLabel(currentRoom.status)}
                     </span>
                     <SocketStatusBadge isConnected={isConnectedToSocket} />
@@ -1019,7 +2214,9 @@ export default function ChatsPage() {
                         ) : null}
                         <MessageBubble
                           message={message}
-                          isMine={senderId !== null && senderId === currentUserId}
+                          isMine={
+                            senderId !== null && senderId === currentUserId
+                          }
                           senderLabel={getMessageSenderLabel({
                             senderId,
                             currentUserId,
@@ -1035,7 +2232,10 @@ export default function ChatsPage() {
             </div>
 
             <div className="border-t border-[#eee8ff] bg-white/95 px-4 py-4 sm:px-6">
-              <form onSubmit={handleSubmit} className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <form
+                onSubmit={handleSubmit}
+                className="flex flex-col gap-3 sm:flex-row sm:items-center"
+              >
                 <label htmlFor="chat-message" className="sr-only">
                   메시지 입력
                 </label>
@@ -1091,11 +2291,10 @@ export default function ChatsPage() {
 function SocketStatusBadge({ isConnected }: { isConnected: boolean }) {
   return (
     <span
-      className={`inline-flex h-9 shrink-0 items-center justify-center rounded-full border px-4 text-xs font-black sm:text-sm ${
-        isConnected
-          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-          : "border-[#ded6ff] bg-white text-zinc-500"
-      }`}
+      className={`inline-flex h-9 shrink-0 items-center justify-center rounded-full border px-4 text-sm font-black ${isConnected
+        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+        : "border-[#ded6ff] bg-white text-zinc-500"
+        }`}
     >
       {isConnected ? "WebSocket 연결됨" : "WebSocket 연결 대기"}
     </span>
@@ -1115,7 +2314,13 @@ function ChatRoomListButton({
 }) {
   const opponentName = room.opponentNickname?.trim() || "상대방";
   const listDate = formatChatRoomListDate(room.lastMessageAt ?? room.createdAt);
-  const talentLines = getChatRoomTalentLines(room, currentUserId);
+  const talentLines = getChatRoomTalentLines(room);
+  const unreadCount = getRoomUnreadCount(room);
+  const lastMessageText = getRoomLastMessageText(room);
+  const profileImageUrl = getChatRoomOpponentProfileImageUrl(
+    room,
+    currentUserId,
+  );
 
   return (
     <button
@@ -1129,36 +2334,45 @@ function ChatRoomListButton({
           }`}
         aria-hidden="true"
       />
-      <ChatRoomAvatar
-        imageUrl={room.opponentProfileImageUrl}
-        name={opponentName}
-      />
+      <ChatRoomAvatar imageUrl={profileImageUrl} name={opponentName} />
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
           <p className="truncate text-sm font-black text-zinc-950">
             {opponentName}
           </p>
-          <p className="shrink-0 text-xs font-semibold text-zinc-400">
-            {listDate}
-          </p>
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            <p className="text-xs font-semibold text-zinc-400">{listDate}</p>
+          </div>
         </div>
-        <div className="mt-1 space-y-0.5">
+        <div className="mt-2 flex flex-wrap gap-2">
           {talentLines.map((line) => (
-            <p
-              key={line.label}
-              className="truncate text-xs font-semibold text-zinc-500"
+            <span
+              key={`${line.label}-${line.talentId ?? line.value}`}
+              className="inline-flex min-w-0 max-w-full items-center rounded-full border border-[#d9ccff] bg-[#f4f0ff] px-3 py-1.5 text-xs font-black text-[#8c5bff] shadow-sm shadow-violet-500/10"
               title={`${line.label}: ${line.value}`}
             >
-              <span className="font-black text-zinc-600">{line.label}</span>
+              <span className="shrink-0">{line.label}</span>
               <span aria-hidden="true">: </span>
-              <span>{line.value}</span>
-            </p>
+              <span className="min-w-0 truncate">{line.value}</span>
+            </span>
           ))}
         </div>
-        <p className="mt-2 truncate text-sm text-zinc-600">
-          {room.lastMessage ?? "아직 메시지가 없습니다."}
-        </p>
-        <span className="mt-3 inline-flex rounded-full border border-[#ded6ff] bg-white px-2.5 py-1 text-[11px] font-black text-[#8c5bff]">
+        <div className="mt-2 flex items-center gap-2">
+          <p
+            className={`min-w-0 flex-1 truncate text-sm ${unreadCount > 0 ? "font-black text-zinc-900" : "font-semibold text-zinc-600"}`}
+          >
+            {lastMessageText}
+          </p>
+          {unreadCount > 0 ? (
+            <span
+              className="inline-flex min-h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-black leading-none text-white shadow-sm shadow-red-500/30"
+              aria-label={`읽지 않은 메시지 ${unreadCount}개`}
+            >
+              {unreadCount > 99 ? "99+" : unreadCount}
+            </span>
+          ) : null}
+        </div>
+        <span className="mt-3 inline-flex h-9 items-center justify-center rounded-full border border-[#ded6ff] bg-white px-4 text-sm font-black text-[#8c5bff]">
           {getRoomStatusLabel(room.roomType)}
         </span>
       </div>
@@ -1169,25 +2383,28 @@ function ChatRoomListButton({
 function ChatRoomAvatar({
   imageUrl,
   name,
+  size = "sm",
 }: {
-  imageUrl: string | null;
+  imageUrl: string | null | undefined;
   name: string;
+  size?: "sm" | "md";
 }) {
-  if (imageUrl) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={imageUrl}
-        alt={`${name} 프로필 이미지`}
-        className="h-11 w-11 shrink-0 rounded-full border border-[#ded6ff] object-cover"
-      />
-    );
-  }
+  const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
+  const normalizedImageUrl = imageUrl?.trim() || null;
+  const avatarSizeClass = size === "md" ? "h-12 w-12" : "h-11 w-11";
+  const src =
+    failedImageUrl === normalizedImageUrl
+      ? getUserProfileImageUrl(null)
+      : getUserProfileImageUrl(normalizedImageUrl);
 
   return (
-    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#ded6ff] bg-[#f4f0ff] text-sm font-black text-[#8c5bff]">
-      {getInitial(name)}
-    </div>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt={`${name} 프로필 이미지`}
+      className={`${avatarSizeClass} shrink-0 rounded-full border border-[#ded6ff] object-cover`}
+      onError={() => setFailedImageUrl(normalizedImageUrl)}
+    />
   );
 }
 
@@ -1216,6 +2433,11 @@ function MessageBubble({
 
   return (
     <div className={`flex flex-col ${isMine ? "items-end" : "items-start"}`}>
+      {!isMine ? (
+        <p className="mb-1 text-sm font-semibold text-zinc-400">
+          {senderLabel}
+        </p>
+      ) : null}
       <div
         className={`flex w-full items-end gap-2 ${isMine ? "justify-end" : "justify-start"
           }`}
@@ -1247,10 +2469,6 @@ function MessageBubble({
           />
         ) : null}
       </div>
-
-      <p className="mt-1 text-xs font-semibold text-zinc-400">
-        {senderLabel}
-      </p>
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { matchApi, type MatchProposalReceivedRes } from "@/lib/api";
 import { hasStoredAccessToken, subscribeAuthChanged } from "@/lib/auth";
 import { formatDate } from "@/utils/format";
+import { getUserProfileImageUrl } from "@/utils/profileImage";
 
 function getBadgeLabel(count: number): string {
   return count > 99 ? "99+" : String(count);
@@ -21,10 +22,6 @@ function getBadgeSizeClass(count: number): string {
   }
 
   return "h-5 w-5 text-[10px]";
-}
-
-function getInitial(name: string): string {
-  return name.trim().slice(0, 1) || "?";
 }
 
 function getRequesterTalentTitle(proposal: MatchProposalReceivedRes): string {
@@ -239,20 +236,12 @@ function NotificationAvatar({
 }: {
   proposal: MatchProposalReceivedRes;
 }) {
-  if (proposal.requesterProfileImageUrl) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={proposal.requesterProfileImageUrl}
-        alt={`${proposal.requesterNickname} 프로필 이미지`}
-        className="h-11 w-11 shrink-0 rounded-full object-cover"
-      />
-    );
-  }
-
   return (
-    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-sm font-black text-zinc-500">
-      {getInitial(proposal.requesterNickname)}
-    </div>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={getUserProfileImageUrl(proposal.requesterProfileImageUrl)}
+      alt={`${proposal.requesterNickname} 프로필 이미지`}
+      className="h-11 w-11 shrink-0 rounded-full object-cover"
+    />
   );
 }

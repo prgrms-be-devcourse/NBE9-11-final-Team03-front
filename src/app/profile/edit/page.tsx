@@ -27,6 +27,7 @@ import {
   hasStoredAccessToken,
   setAuthStorage,
 } from "@/lib/auth";
+import { getUserProfileImageUrl } from "@/utils/profileImage";
 
 interface ProfileFormState {
   profileImageUrl: string;
@@ -238,18 +239,12 @@ export default function ProfileEditPage() {
         <section className="mt-5 rounded-lg border border-[#ded6ff] bg-white p-5 shadow-sm shadow-violet-950/[0.04] sm:p-6 lg:p-8">
           <div className="rounded-lg border border-[#ded6ff] bg-[#fbf9ff] p-5">
             <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
-              {form.profileImageUrl.trim() ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={form.profileImageUrl.trim()}
-                  alt="프로필 이미지 미리보기"
-                  className="size-20 rounded-full object-cover ring-2 ring-[#ded6ff]"
-                />
-              ) : (
-                <div className="flex size-20 items-center justify-center rounded-full border border-[#ded6ff] bg-white text-2xl font-black text-[#8c5bff]">
-                  {(profile?.nickname ?? "프").slice(0, 1)}
-                </div>
-              )}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={getUserProfileImageUrl(form.profileImageUrl)}
+                alt="프로필 이미지 미리보기"
+                className="size-20 rounded-full object-cover ring-2 ring-[#ded6ff]"
+              />
               <div className="min-w-0">
                 <p className="text-xs font-black uppercase tracking-[0.28em] text-[#8c5bff]">
                   Profile

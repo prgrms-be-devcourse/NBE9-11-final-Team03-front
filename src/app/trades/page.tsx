@@ -780,7 +780,7 @@ function getParticipantLabels(group: TradeGroupView) {
 
   const labels = [...labelsById.values(), ...labelsWithoutId];
 
-  return labels.length > 0 ? labels.join(" → ") : "참여자 정보 없음";
+  return labels.length > 0 ? labels.join(" ↔ ") : "참여자 정보 없음";
 }
 
 function getSwapLegSummaries(

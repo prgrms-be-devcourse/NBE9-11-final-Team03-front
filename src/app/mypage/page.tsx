@@ -5,10 +5,15 @@ import { useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
 import {
   ArrowRight,
+  Clock3,
   Coins,
+  Eye,
   Pencil,
+  Plus,
   ReceiptText,
   ShieldCheck,
+  Sparkles,
+  Star,
   UserX,
   Wallet,
 } from "lucide-react";
@@ -19,14 +24,22 @@ import {
   authApi,
   creditApi,
   profileApi,
+  talentApi,
   tradeApi,
   type CreditBalanceRes,
   type MyProfileDetailRes,
+  type TalentListRes,
   type TradeListRes,
   type TradeStatus,
 } from "@/lib/api";
 import { hasStoredAccessToken } from "@/lib/auth";
-import { formatCredit, formatDate } from "@/utils/format";
+import {
+  formatCredit,
+  formatDate,
+  formatEstimatedDuration,
+  formatRating,
+} from "@/utils/format";
+import { getUserProfileImageUrl } from "@/utils/profileImage";
 
 const TRADE_STATUS_LABELS: Record<TradeStatus, string> = {
   IN_PROGRESS: "진행 중",
@@ -50,6 +63,7 @@ export default function MyPage() {
   const router = useRouter();
   const [profile, setProfile] = useState<MyProfileDetailRes | null>(null);
   const [balance, setBalance] = useState<CreditBalanceRes | null>(null);
+  const [myTalents, setMyTalents] = useState<TalentListRes[]>([]);
   const [trades, setTrades] = useState<TradeListRes[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
@@ -65,10 +79,11 @@ export default function MyPage() {
         return;
       }
 
-      const [profileResult, balanceResult, tradesResult] =
+      const [profileResult, balanceResult, talentsResult, tradesResult] =
         await Promise.allSettled([
           profileApi.getMe(),
           creditApi.getBalance(),
+          talentApi.getMyList(),
           tradeApi.getList({ size: 5 }),
         ]);
 
@@ -84,13 +99,20 @@ export default function MyPage() {
         setBalance(balanceResult.value);
       }
 
+      if (talentsResult.status === "fulfilled") {
+        setMyTalents(talentsResult.value.content);
+      }
+
       if (tradesResult.status === "fulfilled") {
         setTrades(tradesResult.value.content);
       }
 
-      const rejected = [profileResult, balanceResult, tradesResult].find(
-        (result) => result.status === "rejected",
-      );
+      const rejected = [
+        profileResult,
+        balanceResult,
+        talentsResult,
+        tradesResult,
+      ].find((result) => result.status === "rejected");
 
       setErrorMessage(
         rejected?.status === "rejected" && rejected.reason instanceof Error
@@ -173,18 +195,12 @@ export default function MyPage() {
         <section className="mt-10 rounded-lg border border-[#ded6ff] bg-white p-5 shadow-sm shadow-violet-950/[0.04] sm:p-6 lg:mt-12">
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
             <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-center">
-              {profile?.profileImageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={profile.profileImageUrl}
-                  alt="내 프로필 이미지"
-                  className="size-20 rounded-full object-cover ring-2 ring-[#ded6ff]"
-                />
-              ) : (
-                <div className="flex size-20 items-center justify-center rounded-full border border-[#ded6ff] bg-[#f4f0ff] text-2xl font-black text-[#8c5bff]">
-                  {(profile?.nickname ?? "나").slice(0, 1)}
-                </div>
-              )}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={getUserProfileImageUrl(profile?.profileImageUrl)}
+                alt="내 프로필 이미지"
+                className="size-20 rounded-full object-cover ring-2 ring-[#ded6ff]"
+              />
               <div className="min-w-0">
                 <p className="text-xs font-black uppercase tracking-[0.28em] text-[#8c5bff]">
                   Profile
@@ -240,6 +256,46 @@ export default function MyPage() {
             value={formatCredit(balanceValue + escrowBalanceValue)}
             icon={<Coins className="size-5" aria-hidden="true" />}
           />
+        </section>
+
+        <section className="mt-8 rounded-lg border border-[#ded6ff] bg-[#fbf9ff] shadow-sm shadow-violet-950/[0.04]">
+          <div className="flex flex-col gap-4 border-b border-[#eee9ff] px-5 py-5 sm:flex-row sm:items-end sm:justify-between sm:px-6">
+            <div>
+              <p className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.28em] text-[#8c5bff]">
+                <Sparkles className="size-4" aria-hidden="true" />
+                My Talents
+              </p>
+              <h2 className="mt-2 text-2xl font-black text-zinc-950">
+                내가 등록한 재능
+              </h2>
+              <p className="mt-2 text-sm font-semibold text-zinc-500">
+                직접 작성한 재능 글을 확인하고 바로 관리하세요.
+              </p>
+            </div>
+            <Link
+              href="/talents/new"
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#8c5bff] px-4 text-sm font-black text-white shadow-sm shadow-violet-950/[0.08] transition hover:bg-[#7c45ff]"
+            >
+              <Plus className="size-4" aria-hidden="true" />
+              <span>재능 등록</span>
+            </Link>
+          </div>
+          <div className="p-5 sm:p-6">
+            {myTalents.length === 0 ? (
+              <EmptyState
+                title="아직 등록한 재능이 없습니다."
+                description="제공할 수 있는 작업을 재능 글로 등록해 보세요."
+                actionLabel="재능 등록하기"
+                actionHref="/talents/new"
+              />
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {myTalents.map((talent) => (
+                  <MyTalentCard key={talent.talentId} talent={talent} />
+                ))}
+              </div>
+            )}
+          </div>
         </section>
 
         <section className="mt-8 rounded-lg border border-[#ded6ff] bg-white shadow-sm shadow-violet-950/[0.04]">
@@ -347,6 +403,95 @@ function Summary({
         </div>
       </div>
       <p className="mt-5 text-2xl font-black text-zinc-950">{value}</p>
+    </div>
+  );
+}
+
+function MyTalentCard({ talent }: { talent: TalentListRes }) {
+  const title = talent.title?.trim() || `재능 #${talent.talentId}`;
+
+  return (
+    <article className="group flex min-h-[292px] flex-col rounded-lg border border-[#ded6ff] bg-white p-5 shadow-sm shadow-violet-950/[0.03] transition hover:-translate-y-0.5 hover:border-[#8c5bff] hover:shadow-lg hover:shadow-violet-950/[0.06]">
+      <div className="flex items-start justify-between gap-3">
+        <span className="inline-flex max-w-full items-center rounded-full border border-[#ded6ff] bg-[#f4f0ff] px-3 py-1 text-xs font-black text-[#8c5bff]">
+          <span className="truncate">{talent.categoryName}</span>
+        </span>
+        <span className="shrink-0 text-xs font-black text-zinc-400">
+          #{talent.talentId}
+        </span>
+      </div>
+
+      <h3 className="mt-4 line-clamp-2 min-h-14 text-lg font-black leading-7 text-zinc-950">
+        {title}
+      </h3>
+
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <MiniMetric label="가격" value={formatCredit(talent.creditPrice)} />
+        <MiniMetric
+          label="예상 소요"
+          value={formatEstimatedDuration(talent.estimatedHours)}
+        />
+      </div>
+
+      <div className="mt-4 grid grid-cols-3 gap-2">
+        <TalentStat
+          icon={<Star className="size-4" aria-hidden="true" />}
+          label="평점"
+          value={formatRating(talent.avgRating)}
+        />
+        <TalentStat
+          icon={<Sparkles className="size-4" aria-hidden="true" />}
+          label="완료"
+          value={`${talent.completeCount}건`}
+        />
+        <TalentStat
+          icon={<Eye className="size-4" aria-hidden="true" />}
+          label="조회"
+          value={`${talent.viewCount}`}
+        />
+      </div>
+
+      <div className="mt-auto flex flex-col gap-3 border-t border-[#f0ebff] pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <span className="inline-flex items-center gap-2 text-xs font-bold text-zinc-400">
+          <Clock3 className="size-4" aria-hidden="true" />
+          {formatDate(talent.createdAt)}
+        </span>
+        <div className="grid grid-cols-2 gap-2 sm:w-[168px]">
+          <Link
+            href={`/talents/${talent.talentId}`}
+            className="inline-flex h-9 items-center justify-center rounded-md border border-[#ded6ff] px-3 text-xs font-black text-[#8c5bff] transition hover:bg-[#f4f0ff]"
+          >
+            상세
+          </Link>
+          <Link
+            href={`/talents/${talent.talentId}/edit`}
+            className="inline-flex h-9 items-center justify-center gap-1 rounded-md bg-zinc-950 px-3 text-xs font-black text-white transition hover:bg-zinc-800"
+          >
+            <Pencil className="size-3.5" aria-hidden="true" />
+            수정
+          </Link>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function TalentStat({
+  icon,
+  label,
+  value,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-md border border-[#f0ebff] bg-[#fbf9ff] px-3 py-2">
+      <div className="flex items-center gap-1.5 text-[#8c5bff]">
+        {icon}
+        <span className="text-[11px] font-black">{label}</span>
+      </div>
+      <p className="mt-1 truncate text-sm font-black text-zinc-950">{value}</p>
     </div>
   );
 }

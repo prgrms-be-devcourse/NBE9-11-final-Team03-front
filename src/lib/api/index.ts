@@ -222,48 +222,19 @@ export const talentApi = {
     });
   },
 
-  async getMyList(params: TalentListParams = {}): Promise<CursorPageRes<TalentListRes>> {
-    const userId = getStoredUserId();
-
-    if (userId === null) {
-      return {
-        content: [],
-        hasNext: false,
-        nextCursor: null,
-      };
-    }
-
-    const pageSize = params.size ?? 100;
-    const maxScanPages = 5;
-    let cursor = params.cursor ?? null;
-    let hasNext = true;
-    let scannedPageCount = 0;
-    const myTalents: TalentListRes[] = [];
-
-    while (hasNext && scannedPageCount < maxScanPages) {
-      const page = await talentApi.getList({
-        cursor,
-        size: pageSize,
-        sort: params.sort ?? "LATEST",
-      });
-
-      myTalents.push(
-        ...page.content.filter((talent) => talent.authorId === userId),
-      );
-
-      hasNext = page.hasNext;
-      cursor = page.nextCursor;
-      scannedPageCount += 1;
-
-      if (cursor === null) {
-        break;
-      }
-    }
+  async getMyList(
+    params: TalentListParams = {},
+  ): Promise<CursorPageRes<TalentListRes>> {
+    const content = await apiFetch<TalentListRes[]>("/api/v1/talents/me");
+    const pageSize = params.size;
 
     return {
-      content: myTalents,
-      hasNext,
-      nextCursor: cursor,
+      content:
+        typeof pageSize === "number" && pageSize > 0
+          ? content.slice(0, pageSize)
+          : content,
+      hasNext: false,
+      nextCursor: null,
     };
   },
 
@@ -391,7 +362,7 @@ export const matchApi = {
     requesterTalentId,
   }: MatchRecommendationDetailParams): Promise<MatchRecommendationDetailRes> {
     return apiFetch<MatchRecommendationDetailRes>(
-      `/api/v1/match-recommendations`,
+      `/api/v1/match-recommendations/${providerTalentId}`,
       {
         query: {
           requesterTalentId,

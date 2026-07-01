@@ -30,6 +30,7 @@ import {
   formatEstimatedDuration,
   formatRating,
 } from "@/utils/format";
+import { getUserProfileImageUrl } from "@/utils/profileImage";
 
 type RecommendationSource =
   "MY_TALENT" | "PROFILE_OWN_CATEGORY" | "PROFILE_WANT_CATEGORY";
@@ -1036,28 +1037,16 @@ function ProviderAvatar({
   size: "sm" | "md";
 }) {
   const displayName = getDisplayName(nickname);
-  const imageUrl = profileImageUrl?.trim();
+  const imageUrl = getUserProfileImageUrl(profileImageUrl);
   const sizeClass = size === "sm" ? "h-9 w-9 text-xs" : "h-12 w-12 text-sm";
-  const placeholderText =
-    displayName === "프로필" ? "프로필" : displayName.slice(0, 1);
-
-  if (imageUrl) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={imageUrl}
-        alt={`${displayName} 프로필 이미지`}
-        className={`${sizeClass} shrink-0 rounded-full object-cover`}
-      />
-    );
-  }
 
   return (
-    <div
-      className={`${sizeClass} flex shrink-0 items-center justify-center rounded-full bg-zinc-100 font-black text-zinc-500`}
-    >
-      {placeholderText}
-    </div>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={imageUrl}
+      alt={`${displayName} 프로필 이미지`}
+      className={`${sizeClass} shrink-0 rounded-full object-cover`}
+    />
   );
 }
 
