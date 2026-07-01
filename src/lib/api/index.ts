@@ -127,6 +127,7 @@ interface TradeListParams extends CursorParams {
 
 interface MatchRecommendationParams {
   talentId: number;
+  rows?: number;
 }
 
 interface MatchRecommendationDetailParams {
@@ -352,6 +353,7 @@ export const matchApi = {
       {
         query: {
           talentId: params.talentId,
+          rows: params.rows,
         },
       },
     );

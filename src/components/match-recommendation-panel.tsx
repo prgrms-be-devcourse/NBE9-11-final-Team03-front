@@ -55,6 +55,7 @@ interface SetupAction {
 
 const RECOMMENDATION_API_ERROR_MESSAGE =
   "내 재능과 매칭 추천 목록을 불러오는 중 문제가 발생했습니다.";
+const RECOMMENDATION_ROWS = 100;
 
 const categoryVisuals = {
   development: {
@@ -187,6 +188,7 @@ export function MatchRecommendationPanel() {
         activeMyTalents.map(async (myTalent) => {
           const recommendations = await matchApi.getRecommendations({
             talentId: myTalent.talentId,
+            rows: RECOMMENDATION_ROWS,
           });
 
           return recommendations.map((recommendation) => {
