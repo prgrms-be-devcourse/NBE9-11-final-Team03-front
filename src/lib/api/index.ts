@@ -391,7 +391,7 @@ export const matchApi = {
     requesterTalentId,
   }: MatchRecommendationDetailParams): Promise<MatchRecommendationDetailRes> {
     return apiFetch<MatchRecommendationDetailRes>(
-      `/api/v1/match-recommendations/${providerTalentId}`,
+      `/api/v1/match-recommendations`,
       {
         query: {
           requesterTalentId,

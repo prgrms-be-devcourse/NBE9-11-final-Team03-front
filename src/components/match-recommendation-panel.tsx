@@ -1,6 +1,7 @@
 "use client";
 
 import { Code2, FileText, Palette, Sparkles } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -14,7 +15,6 @@ import {
   talentApi,
   type MatchRecommendationDetailRes,
   type MatchRecommendationRes,
-  type TalentListRes,
 } from "@/lib/api";
 import {
   getStoredUserId,
@@ -47,10 +47,13 @@ interface SelectedRecommendationContext {
   requesterTalentTitle: string;
 }
 
+interface SetupAction {
+  label: string;
+  href: string;
+}
+
 const RECOMMENDATION_API_ERROR_MESSAGE =
   "내 재능과 매칭 추천 목록을 불러오는 중 문제가 발생했습니다.";
-const MY_TALENTS_API_ERROR_MESSAGE =
-  "내가 등록한 재능 목록을 불러오지 못했습니다. 현재 백엔드 API 기준으로 전체 재능 목록에서 내 작성 재능을 찾아 추천을 조회합니다.";
 
 const categoryVisuals = {
   development: {
@@ -120,9 +123,7 @@ function getCategoryVisual(categoryName: string) {
 export function MatchRecommendationPanel() {
   const router = useRouter();
   const [isHydrated, setIsHydrated] = useState(false);
-  const [myTalents, setMyTalents] = useState<TalentListRes[]>([]);
-  const [profileCategoryCount, setProfileCategoryCount] = useState(0);
-  const [recommendationItems, setRecommendationItems] = useState<
+  const [matchRecommendationItems, setMatchRecommendationItems] = useState<
     RecommendationItem[]
   >([]);
   const [selectedRecommendationContext, setSelectedRecommendationContext] =
@@ -133,16 +134,18 @@ export function MatchRecommendationPanel() {
   const [requestMessage, setRequestMessage] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [setupActions, setSetupActions] = useState<SetupAction[]>([]);
   const [isLoadingList, setIsLoadingList] = useState(false);
   const [loadingDetailKey, setLoadingDetailKey] = useState<string | null>(null);
   const [isSubmittingProposal, setIsSubmittingProposal] = useState(false);
 
-  const hasRecommendationSources =
-    isHydrated && (myTalents.length > 0 || profileCategoryCount > 0);
+  const hasMissingSetup = setupActions.length > 0;
+  const hasRecommendationItems = matchRecommendationItems.length > 0;
 
   const loadAutoRecommendations = useCallback(async () => {
     setErrorMessage(null);
     setStatusMessage("");
+    setSetupActions([]);
     setIsLoadingList(true);
 
     try {
@@ -153,14 +156,31 @@ export function MatchRecommendationPanel() {
       const activeMyTalents = Array.isArray(myTalentsResponse.content)
         ? myTalentsResponse.content
         : [];
-      const ownTalentIds = new Set(
-        activeMyTalents.map((talent) => talent.talentId),
+      const activeWantCategories = (profile.wantTalentCategories ?? []).filter(
+        (category) => category.active,
       );
-      const seenRecommendationTalentIds = new Set<number>();
-      const profileCategories = getProfileRecommendationCategories(profile);
+      const nextSetupActions: SetupAction[] = [];
+      if (activeMyTalents.length === 0) {
+        nextSetupActions.push({
+          label: "재능 등록하기",
+          href: "/talents/new",
+        });
+      }
 
-      setMyTalents(activeMyTalents);
-      setProfileCategoryCount(profileCategories.length);
+      if (activeWantCategories.length === 0) {
+        nextSetupActions.push({
+          label: "원하는 재능 카테고리 설정하기",
+          href: "/profile/edit",
+        });
+      }
+
+      if (nextSetupActions.length > 0) {
+        setSetupActions(nextSetupActions);
+        setMatchRecommendationItems([]);
+        setSelectedRecommendationContext(null);
+        setStatusMessage("");
+        return;
+      }
 
       const recommendationResults = await Promise.allSettled(
         activeMyTalents.map(async (myTalent) => {
@@ -169,8 +189,6 @@ export function MatchRecommendationPanel() {
           });
 
           return recommendations.map((recommendation) => {
-            seenRecommendationTalentIds.add(recommendation.talentId);
-
             return {
               requesterTalentId: myTalent.talentId,
               requesterTalentTitle: myTalent.title,
@@ -190,42 +208,58 @@ export function MatchRecommendationPanel() {
         throw rejectedResult.reason;
       }
 
-      const myTalentRecommendationItems = recommendationResults.flatMap(
-        (result) => (result.status === "fulfilled" ? result.value : []),
+      const myTalentRecommendationItems = dedupeRecommendationItemsByProvider(
+        recommendationResults.flatMap((result) =>
+          result.status === "fulfilled" ? result.value : [],
+        ),
       );
-      const profileCategoryRecommendationItems =
-        await loadProfileCategoryRecommendationItems({
-          categories: profileCategories,
-          ownTalentIds,
-          seenRecommendationTalentIds,
-        });
-      const nextItems = [
-        ...myTalentRecommendationItems,
-        ...profileCategoryRecommendationItems,
-      ];
+
+      // 프로필 카테고리 기반 검색 추천은 백엔드 매칭 추천과 섞지 않기 위해 비활성화합니다.
+      // 필요하면 아래 함수를 다시 호출해 별도 화면에서만 사용하세요.
+      // const profile = await profileApi.getMe();
+      // const profileCategories = getProfileRecommendationCategories(profile);
+      // const ownTalentIds = new Set(
+      //   activeMyTalents.map((talent) => talent.talentId),
+      // );
+      // const seenRecommendationTalentIds = new Set(
+      //   myTalentRecommendationItems.map((item) => item.recommendation.talentId),
+      // );
+      // const nextProfileCategoryRecommendationItems =
+      //   await loadProfileCategoryRecommendationItems({
+      //     categories: profileCategories,
+      //     ownTalentIds,
+      //     seenRecommendationTalentIds,
+      //   });
 
       const userId = getStoredUserId();
       if (userId !== null && activeMyTalents[0]) {
         setStoredLastTalentId(userId, activeMyTalents[0].talentId);
       }
 
-      setRecommendationItems(nextItems);
+      setMatchRecommendationItems(myTalentRecommendationItems);
       setSelectedRecommendationContext(null);
       setStatusMessage("");
     } catch (error) {
-      setMyTalents([]);
-      setProfileCategoryCount(0);
-      setRecommendationItems([]);
+      setMatchRecommendationItems([]);
       setSelectedRecommendationContext(null);
       setStatusMessage("");
+      if (error instanceof ApiError && error.status === 404) {
+        setErrorMessage(null);
+        setSetupActions([
+          {
+            label: "재능 등록하기",
+            href: "/talents/new",
+          },
+        ]);
+        return;
+      }
+
       setErrorMessage(
         isAuthRequiredError(error)
           ? "로그인 후 이용해 주세요."
-          : error instanceof ApiError && error.status === 404
-            ? MY_TALENTS_API_ERROR_MESSAGE
-            : error instanceof Error
-              ? error.message || RECOMMENDATION_API_ERROR_MESSAGE
-              : RECOMMENDATION_API_ERROR_MESSAGE,
+          : error instanceof Error
+            ? error.message || RECOMMENDATION_API_ERROR_MESSAGE
+            : RECOMMENDATION_API_ERROR_MESSAGE,
       );
     } finally {
       setIsLoadingList(false);
@@ -383,29 +417,27 @@ export function MatchRecommendationPanel() {
 
       {isHydrated &&
         !isLoadingList &&
-        !hasRecommendationSources &&
+        hasMissingSetup &&
         !errorMessage ? (
-        <EmptyState
-          title="추천 기준이 없습니다."
-          description="재능을 등록하거나 프로필에서 카테고리를 선택하면 추천 상대가 자동으로 표시됩니다."
-          actionLabel="재능 등록하기"
-          actionHref="/talents/new"
+        <RecommendationSetupState
+          actions={setupActions}
         />
       ) : null}
 
       {isHydrated &&
         !isLoadingList &&
-        hasRecommendationSources &&
-        recommendationItems.length === 0 ? (
+        !hasMissingSetup &&
+        !hasRecommendationItems &&
+        !errorMessage ? (
         <EmptyState
           title="현재 추천 가능한 상대 재능이 없습니다."
-          description="내 재능 또는 프로필 카테고리와 연결 가능한 다른 사용자의 재능이 생기면 자동으로 추천됩니다."
+          description="내 재능과 원하는 재능 카테고리에 맞는 다른 사용자의 재능이 생기면 자동으로 추천됩니다."
         />
       ) : null}
 
-      {isHydrated && !isLoadingList && recommendationItems.length > 0 ? (
+      {isHydrated && !isLoadingList && hasRecommendationItems ? (
         <div className="grid grid-cols-1 gap-x-6 gap-y-14 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {recommendationItems.map((item) => (
+          {matchRecommendationItems.map((item) => (
             <RecommendationCard
               key={getRecommendationItemKey(item)}
               recommendation={item.recommendation}
@@ -451,6 +483,37 @@ export function MatchRecommendationPanel() {
   );
 }
 
+function RecommendationSetupState({ actions }: { actions: SetupAction[] }) {
+  const hasMultipleActions = actions.length > 1;
+
+  return (
+    <div className="rounded-lg border border-dashed border-zinc-300 bg-white p-8 text-center">
+      <p className="text-base font-semibold text-zinc-900">
+        추천을 받기 위한 정보가 부족합니다.
+      </p>
+      <p className="mt-2 text-sm leading-6 text-zinc-600">
+        {hasMultipleActions
+          ? "내 재능과 원하는 재능 카테고리를 등록하면 매칭 추천을 확인할 수 있습니다."
+          : actions[0]?.href === "/talents/new"
+            ? "내가 제공할 재능을 먼저 등록하면 매칭 추천을 확인할 수 있습니다."
+            : "프로필에 원하는 재능 카테고리를 설정하면 매칭 추천을 확인할 수 있습니다."}
+      </p>
+      <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+        {actions.map((action) => (
+          <Link
+            key={action.href}
+            href={action.href}
+            className="inline-flex h-10 items-center justify-center rounded-md bg-zinc-900 px-4 text-sm font-semibold text-white transition hover:bg-zinc-700"
+          >
+            {action.label}
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/*
 function getProfileRecommendationCategories(profile: {
   myTalentCategories?: { id: number; name: string; active: boolean }[];
   wantTalentCategories?: { id: number; name: string; active: boolean }[];
@@ -564,6 +627,7 @@ function getTalentProviderId(talent: TalentListRes): number {
     0
   );
 }
+*/
 
 function getRecommendationReason(source: RecommendationSource): string {
   switch (source) {
@@ -580,8 +644,25 @@ function getRecommendationActionLabel(source: RecommendationSource): string {
   return source === "MY_TALENT" ? "교환 상세 보기" : "재능 상세로 이동";
 }
 
+function dedupeRecommendationItemsByProvider(
+  items: RecommendationItem[],
+): RecommendationItem[] {
+  const seenProviderIds = new Set<number>();
+
+  return items.filter((item) => {
+    const providerId = item.recommendation.providerId;
+
+    if (seenProviderIds.has(providerId)) {
+      return false;
+    }
+
+    seenProviderIds.add(providerId);
+    return true;
+  });
+}
+
 function getRecommendationItemKey(item: RecommendationItem): string {
-  return `${item.source}-${item.requesterTalentId ?? item.requesterCategoryName}-${item.recommendation.talentId}`;
+  return `${item.source}-${item.requesterTalentId ?? item.requesterCategoryName}-${item.recommendation.providerId}`;
 }
 
 function RecommendationCard({
