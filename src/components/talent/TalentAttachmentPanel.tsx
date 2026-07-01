@@ -65,6 +65,147 @@ function isImageAttachmentUrl(value: string): boolean {
 
 type AttachmentMode = "file" | "link";
 
+interface LinkPreviewData {
+  url: string;
+  title: string | null;
+  description: string | null;
+  image: string | null;
+  siteName: string | null;
+  domain: string;
+}
+
+const linkPreviewCache = new Map<string, Promise<LinkPreviewData | null>>();
+
+function normalizePreviewString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim()
+    : null;
+}
+
+function normalizeLinkPreviewPayload(payload: unknown): LinkPreviewData | null {
+  if (payload === null || typeof payload !== "object") {
+    return null;
+  }
+
+  const record = payload as Record<string, unknown>;
+  const url = normalizePreviewString(record.url);
+  const domain = normalizePreviewString(record.domain);
+
+  if (!url || !domain) {
+    return null;
+  }
+
+  return {
+    url,
+    domain,
+    title: normalizePreviewString(record.title),
+    description: normalizePreviewString(record.description),
+    image: normalizePreviewString(record.image),
+    siteName: normalizePreviewString(record.siteName),
+  };
+}
+
+function getAttachmentDomain(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "외부 링크";
+  }
+}
+
+async function requestLinkPreview(url: string): Promise<LinkPreviewData | null> {
+  const response = await fetch(
+    `/api/link-preview?url=${encodeURIComponent(url)}`,
+    {
+      cache: "force-cache",
+      credentials: "same-origin",
+    },
+  );
+
+  if (!response.ok) {
+    return null;
+  }
+
+  return normalizeLinkPreviewPayload(await response.json());
+}
+
+function getLinkPreview(url: string): Promise<LinkPreviewData | null> {
+  const cachedPreview = linkPreviewCache.get(url);
+
+  if (cachedPreview) {
+    return cachedPreview;
+  }
+
+  const previewRequest = requestLinkPreview(url).catch(() => null);
+  linkPreviewCache.set(url, previewRequest);
+
+  return previewRequest;
+}
+
+function useLinkPreview(url: string, enabled: boolean) {
+  const [state, setState] = useState<{
+    url: string;
+    preview: LinkPreviewData | null;
+    isLoading: boolean;
+  }>({
+    url: "",
+    preview: null,
+    isLoading: false,
+  });
+
+  useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
+    let ignore = false;
+
+    queueMicrotask(() => {
+      if (!ignore) {
+        setState({
+          url,
+          preview: null,
+          isLoading: true,
+        });
+      }
+    });
+
+    void getLinkPreview(url)
+      .then((nextPreview) => {
+        if (!ignore) {
+          setState({
+            url,
+            preview: nextPreview,
+            isLoading: false,
+          });
+        }
+      })
+      .catch(() => {
+        if (!ignore) {
+          setState({
+            url,
+            preview: null,
+            isLoading: false,
+          });
+        }
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [enabled, url]);
+
+  if (!enabled) {
+    return { preview: null, isLoading: false };
+  }
+
+  if (state.url !== url) {
+    return { preview: null, isLoading: true };
+  }
+
+  return { preview: state.preview, isLoading: state.isLoading };
+}
+
 export function TalentAttachmentPanel({
   talentId,
   isOwner,
@@ -452,6 +593,19 @@ function AttachmentPreviewCard({
   onDelete: (attachmentId: number) => void;
 }) {
   const isImage = isImageAttachmentUrl(attachment.url);
+  const { preview, isLoading: isPreviewLoading } = useLinkPreview(
+    attachment.url,
+    !isImage,
+  );
+  const domain = preview?.domain ?? getAttachmentDomain(attachment.url);
+  const title = isImage
+    ? (attachment.description ?? "설명이 없습니다.")
+    : (preview?.title ?? attachment.description ?? domain);
+  const description = !isImage ? preview?.description : null;
+  const memo =
+    !isImage && preview?.title && attachment.description
+      ? attachment.description
+      : null;
 
   return (
     <article className="overflow-hidden rounded-lg border border-[#ded6ff] bg-white shadow-sm shadow-violet-950/[0.03]">
@@ -471,9 +625,11 @@ function AttachmentPreviewCard({
             />
           </div>
         ) : (
-          <div className="flex aspect-[16/10] items-center justify-center bg-[linear-gradient(135deg,#fbf9ff_0%,#eef8ff_100%)] text-[#8c5bff]">
-            <Link2 className="size-10" aria-hidden="true" />
-          </div>
+          <LinkPreviewMedia
+            domain={domain}
+            isLoading={isPreviewLoading}
+            preview={preview}
+          />
         )}
       </a>
       <div className="p-4">
@@ -485,13 +641,23 @@ function AttachmentPreviewCard({
               ) : (
                 <Link2 className="size-3.5" aria-hidden="true" />
               )}
-              {isImage ? "이미지" : "링크"}
+              {isImage ? "이미지" : (preview?.siteName ?? "링크")}
             </p>
             <p className="mt-3 break-words text-sm font-black leading-6 text-zinc-950">
-              {attachment.description ?? "설명이 없습니다."}
+              {title}
             </p>
+            {description ? (
+              <p className="mt-2 text-sm font-semibold leading-6 text-zinc-500">
+                {description}
+              </p>
+            ) : null}
+            {memo ? (
+              <p className="mt-3 rounded-lg bg-[#fbf9ff] p-3 text-xs font-bold leading-5 text-zinc-500">
+                메모: {memo}
+              </p>
+            ) : null}
             <p className="mt-2 text-xs font-semibold text-zinc-400">
-              등록일 {formatDate(attachment.createdAt)}
+              {isImage ? "등록일" : domain} · {formatDate(attachment.createdAt)}
             </p>
           </div>
           <a
@@ -517,6 +683,51 @@ function AttachmentPreviewCard({
         ) : null}
       </div>
     </article>
+  );
+}
+
+function LinkPreviewMedia({
+  domain,
+  isLoading,
+  preview,
+}: {
+  domain: string;
+  isLoading: boolean;
+  preview: LinkPreviewData | null;
+}) {
+  const imageUrl = preview?.image ?? null;
+  const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
+
+  if (isLoading) {
+    return (
+      <div className="flex aspect-[16/10] animate-pulse flex-col items-center justify-center gap-3 bg-[linear-gradient(135deg,#fbf9ff_0%,#eef8ff_100%)] text-[#8c5bff]">
+        <Link2 className="size-9" aria-hidden="true" />
+        <span className="text-xs font-black">미리보기 불러오는 중</span>
+      </div>
+    );
+  }
+
+  if (imageUrl && failedImageUrl !== imageUrl) {
+    return (
+      <div className="relative aspect-[16/10] overflow-hidden bg-[#fbf9ff]">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={imageUrl}
+          alt={preview?.title ?? "링크 미리보기 이미지"}
+          onError={() => setFailedImageUrl(imageUrl)}
+          className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex aspect-[16/10] flex-col items-center justify-center gap-3 bg-[linear-gradient(135deg,#fbf9ff_0%,#eef8ff_100%)] px-5 text-center text-[#8c5bff]">
+      <Link2 className="size-10" aria-hidden="true" />
+      <span className="max-w-full truncate text-xs font-black text-zinc-500">
+        {domain}
+      </span>
+    </div>
   );
 }
 
