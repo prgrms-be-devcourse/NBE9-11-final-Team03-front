@@ -17,14 +17,17 @@ import { ErrorState } from "@/components/common/ErrorState";
 import { LoginRequiredState } from "@/components/common/LoginRequiredState";
 import {
   creditApi,
+  talentApi,
+  tradeApi,
   type CreditBalanceRes,
   type CreditTransactionRes,
   type CreditTransactionSearchParams,
   type CreditTransactionType,
+  type TalentDetailRes,
+  type TradeRes,
 } from "@/lib/api";
 import { isAuthRequiredMessage } from "@/lib/auth-required";
 import { formatCredit, formatDate } from "@/utils/format";
-
 
 interface ListboxOption<TValue extends string> {
   value: TValue;
@@ -85,9 +88,8 @@ function Listbox<TValue extends string>({
           {selected?.label ?? placeholder}
         </span>
         <ChevronDown
-          className={`h-4 w-4 text-zinc-500 transition ${
-            isOpen ? "rotate-180" : ""
-          }`}
+          className={`h-4 w-4 text-zinc-500 transition ${isOpen ? "rotate-180" : ""
+            }`}
           aria-hidden="true"
         />
       </button>
@@ -109,11 +111,10 @@ function Listbox<TValue extends string>({
                   onChange(option.value);
                   setIsOpen(false);
                 }}
-                className={`flex h-11 w-full items-center justify-between rounded-md px-3 text-left text-base transition ${
-                  isSelected
+                className={`flex h-11 w-full items-center justify-between rounded-md px-3 text-left text-base transition ${isSelected
                     ? "bg-[#f4f0ff] font-bold text-[#8c5bff]"
                     : "font-bold text-zinc-700 hover:bg-[#f8f5ff] hover:text-[#8c5bff]"
-                } disabled:cursor-not-allowed disabled:text-zinc-300`}
+                  } disabled:cursor-not-allowed disabled:text-zinc-300`}
               >
                 <span className="font-bold">{option.label}</span>
                 {isSelected ? (
@@ -134,6 +135,19 @@ const TRANSACTION_PAGE_SIZE = 10;
 
 type TransactionTypeFilter = "" | CreditTransactionType;
 type PeriodFilter = "ALL" | "TODAY" | "7D" | "30D" | "CUSTOM";
+
+type CreditTransactionView = CreditTransactionRes & {
+  tradeDetail?: TradeRes | null;
+  talentDetail?: TalentDetailRes | null;
+};
+
+interface CreditTransactionGroupView {
+  groupKey: string;
+  tradeGroupId: number | null;
+  relatedTradeId: number | null;
+  transactions: CreditTransactionView[];
+  latestCreatedAt: string;
+}
 
 const transactionTypeLabels: Record<CreditTransactionType, string> = {
   WELCOME: "가입 보너스",
@@ -273,9 +287,153 @@ function isTransactionInDateRange(
   return true;
 }
 
+function getTradeDisplayTitle(transaction: CreditTransactionView): string {
+  const detailTitle = transaction.talentDetail?.title?.trim();
+
+  if (detailTitle) {
+    return detailTitle;
+  }
+
+  const talentTitle = transaction.tradeDetail?.talentTitle?.trim();
+
+  if (talentTitle) {
+    return talentTitle;
+  }
+
+  const title = transaction.tradeDetail?.title?.trim();
+
+  if (title) {
+    return title;
+  }
+
+  if (transaction.relatedTradeId !== null) {
+    return `거래 #${transaction.relatedTradeId}`;
+  }
+
+  return "관련 거래 없음";
+}
+
+function getGroupDisplayTitle(group: CreditTransactionGroupView): string {
+  const titles = Array.from(
+    new Set(group.transactions.map(getTradeDisplayTitle).filter(Boolean)),
+  );
+
+  if (titles.length === 0) {
+    return "관련 거래 없음";
+  }
+
+  if (titles.length === 1) {
+    return titles[0];
+  }
+
+  return titles.slice(0, 2).join(" ↔ ");
+}
+
+function buildCreditTransactionGroups(
+  transactions: CreditTransactionView[],
+): CreditTransactionGroupView[] {
+  const groups = new Map<string, CreditTransactionGroupView>();
+
+  transactions.forEach((transaction) => {
+    const tradeGroupId = transaction.tradeDetail?.tradeGroupId ?? null;
+    const relatedTradeId = transaction.relatedTradeId;
+    const groupKey =
+      tradeGroupId !== null
+        ? `GROUP-${tradeGroupId}`
+        : relatedTradeId !== null
+          ? `TRADE-${relatedTradeId}`
+          : `TX-${transaction.transactionId}`;
+    const current = groups.get(groupKey);
+
+    if (!current) {
+      groups.set(groupKey, {
+        groupKey,
+        tradeGroupId,
+        relatedTradeId,
+        transactions: [transaction],
+        latestCreatedAt: transaction.createdAt,
+      });
+      return;
+    }
+
+    current.transactions.push(transaction);
+
+    if (
+      new Date(transaction.createdAt).getTime() >
+      new Date(current.latestCreatedAt).getTime()
+    ) {
+      current.latestCreatedAt = transaction.createdAt;
+    }
+  });
+
+  return Array.from(groups.values())
+    .map((group) => ({
+      ...group,
+      transactions: [...group.transactions].sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      ),
+    }))
+    .sort(
+      (a, b) =>
+        new Date(b.latestCreatedAt).getTime() -
+        new Date(a.latestCreatedAt).getTime(),
+    );
+}
+
+function formatSignedCredit(amount: number): string {
+  return `${amount > 0 ? "+" : ""}${formatCredit(amount)}`;
+}
+
+function getAmountClassName(amount: number): string {
+  if (amount > 0) {
+    return "text-emerald-700";
+  }
+
+  if (amount < 0) {
+    return "text-rose-600";
+  }
+
+  return "text-zinc-700";
+}
+
+function getGroupSummaryAmountLabel(group: CreditTransactionGroupView): string {
+  if (group.transactions.length === 1) {
+    return formatSignedCredit(group.transactions[0].amount);
+  }
+
+  const creditPrice = group.transactions.find(
+    (transaction) => typeof transaction.tradeDetail?.creditPrice === "number",
+  )?.tradeDetail?.creditPrice;
+
+  if (typeof creditPrice === "number") {
+    return `거래 금액 ${formatCredit(creditPrice)}`;
+  }
+
+  const representativeAmounts = Array.from(
+    new Set(
+      group.transactions
+        .map((transaction) => Math.abs(transaction.amount))
+        .filter((amount) => amount > 0),
+    ),
+  );
+
+  if (representativeAmounts.length === 1) {
+    return `관련 금액 ${formatCredit(representativeAmounts[0])}`;
+  }
+
+  return `크레딧 로그 ${group.transactions.length}건`;
+}
+
 export default function CreditsPage() {
   const [balance, setBalance] = useState<CreditBalanceRes | null>(null);
   const [transactions, setTransactions] = useState<CreditTransactionRes[]>([]);
+  const [tradeDetailsById, setTradeDetailsById] = useState<
+    Record<number, TradeRes | null>
+  >({});
+  const [talentDetailsById, setTalentDetailsById] = useState<
+    Record<number, TalentDetailRes | null>
+  >({});
   const [nextCursor, setNextCursor] = useState<number | null>(null);
   const [hasNext, setHasNext] = useState(false);
   const [isBalanceLoading, setIsBalanceLoading] = useState(true);
@@ -285,54 +443,46 @@ export default function CreditsPage() {
   const [filterErrorMessage, setFilterErrorMessage] = useState<string | null>(
     null,
   );
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const transactionRequestIdRef = useRef(0);
   const [typeFilter, setTypeFilter] = useState<TransactionTypeFilter>("");
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>("ALL");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
-  const [appliedTypeFilter, setAppliedTypeFilter] =
-    useState<TransactionTypeFilter>("");
-  const [appliedPeriodFilter, setAppliedPeriodFilter] =
-    useState<PeriodFilter>("ALL");
-  const [appliedFromDate, setAppliedFromDate] = useState("");
-  const [appliedToDate, setAppliedToDate] = useState("");
 
   const activeFilterDescription = useMemo(() => {
     const descriptions: string[] = [];
 
-    if (appliedTypeFilter) {
-      descriptions.push(transactionTypeLabels[appliedTypeFilter]);
+    if (typeFilter) {
+      descriptions.push(transactionTypeLabels[typeFilter]);
     }
 
-    if (appliedPeriodFilter !== "ALL") {
+    if (periodFilter !== "ALL") {
       const periodLabel =
-        periodOptions.find((option) => option.value === appliedPeriodFilter)
-          ?.label ?? "선택 기간";
+        periodOptions.find((option) => option.value === periodFilter)?.label ??
+        "선택 기간";
       descriptions.push(periodLabel);
     }
 
-    if (appliedFromDate || appliedToDate) {
-      descriptions.push(
-        `${appliedFromDate || "처음"} ~ ${appliedToDate || "오늘"}`,
-      );
+    if (fromDate || toDate) {
+      descriptions.push(`${fromDate || "처음"} ~ ${toDate || "오늘"}`);
     }
 
     return descriptions.join(" · ");
-  }, [appliedFromDate, appliedPeriodFilter, appliedToDate, appliedTypeFilter]);
+  }, [fromDate, periodFilter, toDate, typeFilter]);
 
-  const loadTransactions = useCallback(
+  const fetchTransactionPage = useCallback(
     async ({
       cursor = null,
-      append = false,
-      type = appliedTypeFilter,
-      from = appliedFromDate,
-      to = appliedToDate,
+      type,
+      from,
+      to,
     }: {
       cursor?: number | null;
-      append?: boolean;
-      type?: TransactionTypeFilter;
-      from?: string;
-      to?: string;
-    } = {}) => {
+      type: TransactionTypeFilter;
+      from: string;
+      to: string;
+    }) => {
       const transactionPage = await creditApi.getTransactions(
         buildTransactionParams({
           cursor,
@@ -346,13 +496,65 @@ export default function CreditsPage() {
         isTransactionInDateRange(transaction, from, to),
       );
 
-      setTransactions((prevTransactions) =>
-        append ? [...prevTransactions, ...nextContent] : nextContent,
-      );
-      setNextCursor(transactionPage.nextCursor);
-      setHasNext(transactionPage.hasNext);
+      return {
+        content: nextContent,
+        nextCursor: transactionPage.nextCursor,
+        hasNext: transactionPage.hasNext,
+      };
     },
-    [appliedFromDate, appliedToDate, appliedTypeFilter],
+    [],
+  );
+
+  const reloadTransactions = useCallback(
+    async ({
+      type,
+      from,
+      to,
+    }: {
+      type: TransactionTypeFilter;
+      from: string;
+      to: string;
+    }) => {
+      const requestId = transactionRequestIdRef.current + 1;
+      transactionRequestIdRef.current = requestId;
+
+      setIsTransactionsLoading(true);
+      setIsLoadingMore(false);
+      setTransactions([]);
+      setNextCursor(null);
+      setHasNext(false);
+      setErrorMessage(null);
+
+      try {
+        const transactionPage = await fetchTransactionPage({
+          type,
+          from,
+          to,
+        });
+
+        if (requestId !== transactionRequestIdRef.current) {
+          return;
+        }
+
+        setTransactions(transactionPage.content);
+        setNextCursor(transactionPage.nextCursor);
+        setHasNext(transactionPage.hasNext);
+      } catch (error) {
+        if (requestId !== transactionRequestIdRef.current) {
+          return;
+        }
+
+        setTransactions([]);
+        setNextCursor(null);
+        setHasNext(false);
+        setErrorMessage(getCreditErrorMessage(error));
+      } finally {
+        if (requestId === transactionRequestIdRef.current) {
+          setIsTransactionsLoading(false);
+        }
+      }
+    },
+    [fetchTransactionPage],
   );
 
   useEffect(() => {
@@ -368,15 +570,20 @@ export default function CreditsPage() {
         return;
       }
 
+      const requestId = transactionRequestIdRef.current + 1;
+      transactionRequestIdRef.current = requestId;
+
       try {
         const [nextBalance, transactionPage] = await Promise.all([
           creditApi.getBalance(),
-          creditApi.getTransactions({
-            size: TRANSACTION_PAGE_SIZE,
+          fetchTransactionPage({
+            type: "",
+            from: "",
+            to: "",
           }),
         ]);
 
-        if (ignore) {
+        if (ignore || requestId !== transactionRequestIdRef.current) {
           return;
         }
 
@@ -386,7 +593,7 @@ export default function CreditsPage() {
         setHasNext(transactionPage.hasNext);
         setErrorMessage(null);
       } catch (error) {
-        if (ignore) {
+        if (ignore || requestId !== transactionRequestIdRef.current) {
           return;
         }
 
@@ -394,7 +601,7 @@ export default function CreditsPage() {
         setTransactions([]);
         setErrorMessage(getCreditErrorMessage(error));
       } finally {
-        if (!ignore) {
+        if (!ignore && requestId === transactionRequestIdRef.current) {
           setIsBalanceLoading(false);
           setIsTransactionsLoading(false);
         }
@@ -406,104 +613,303 @@ export default function CreditsPage() {
     return () => {
       ignore = true;
     };
-  }, []);
+  }, [fetchTransactionPage]);
+
+  useEffect(() => {
+    const tradeIds = Array.from(
+      new Set(
+        transactions
+          .map((transaction) => transaction.relatedTradeId)
+          .filter((tradeId): tradeId is number => typeof tradeId === "number"),
+      ),
+    ).filter((tradeId) => !(tradeId in tradeDetailsById));
+
+    if (tradeIds.length === 0) {
+      return;
+    }
+
+    let ignore = false;
+
+    async function loadTradeDetails() {
+      const results = await Promise.allSettled(
+        tradeIds.map(async (tradeId) => ({
+          tradeId,
+          detail: await tradeApi.getDetail(tradeId),
+        })),
+      );
+
+      if (ignore) {
+        return;
+      }
+
+      setTradeDetailsById((current) => {
+        const next = { ...current };
+
+        results.forEach((result, index) => {
+          const tradeId = tradeIds[index];
+
+          if (result.status === "fulfilled") {
+            next[tradeId] = result.value.detail;
+          } else {
+            next[tradeId] = null;
+          }
+        });
+
+        return next;
+      });
+    }
+
+    void loadTradeDetails();
+
+    return () => {
+      ignore = true;
+    };
+  }, [transactions, tradeDetailsById]);
+
+  useEffect(() => {
+    const talentIds = Array.from(
+      new Set(
+        transactions
+          .map((transaction) =>
+            transaction.relatedTradeId === null
+              ? null
+              : tradeDetailsById[transaction.relatedTradeId]?.talentId ?? null,
+          )
+          .filter((talentId): talentId is number => typeof talentId === "number"),
+      ),
+    ).filter((talentId) => !(talentId in talentDetailsById));
+
+    if (talentIds.length === 0) {
+      return;
+    }
+
+    let ignore = false;
+
+    async function loadTalentDetails() {
+      const results = await Promise.allSettled(
+        talentIds.map(async (talentId) => ({
+          talentId,
+          detail: await talentApi.getDetail(talentId),
+        })),
+      );
+
+      if (ignore) {
+        return;
+      }
+
+      setTalentDetailsById((current) => {
+        const next = { ...current };
+
+        results.forEach((result, index) => {
+          const talentId = talentIds[index];
+
+          if (result.status === "fulfilled") {
+            next[result.value.talentId] = result.value.detail;
+          } else {
+            next[talentId] = null;
+          }
+        });
+
+        return next;
+      });
+    }
+
+    void loadTalentDetails();
+
+    return () => {
+      ignore = true;
+    };
+  }, [transactions, talentDetailsById, tradeDetailsById]);
+
+  const transactionViews = useMemo(() => {
+    return transactions.map((transaction) => {
+      const tradeDetail =
+        transaction.relatedTradeId === null
+          ? null
+          : tradeDetailsById[transaction.relatedTradeId] ?? null;
+
+      return {
+        ...transaction,
+        tradeDetail,
+        talentDetail:
+          tradeDetail === null
+            ? null
+            : talentDetailsById[tradeDetail.talentId] ?? null,
+      };
+    });
+  }, [transactions, talentDetailsById, tradeDetailsById]);
+
+  const transactionGroups = useMemo(() => {
+    return buildCreditTransactionGroups(transactionViews);
+  }, [transactionViews]);
 
   const balanceValue = balance?.balance ?? 0;
   const escrowBalanceValue = balance?.escrowBalance ?? 0;
   const isLoginRequired = isAuthRequiredMessage(errorMessage);
   const isFilterDisabled = isTransactionsLoading || isLoadingMore;
 
-  function handlePeriodChange(nextPeriod: PeriodFilter) {
-    setPeriodFilter(nextPeriod);
-    setFilterErrorMessage(null);
+  function applyFilterChange({
+    type,
+    period,
+    from,
+    to,
+  }: {
+    type: TransactionTypeFilter;
+    period: PeriodFilter;
+    from: string;
+    to: string;
+  }) {
+    setTypeFilter(type);
+    setPeriodFilter(period);
+    setFromDate(from);
+    setToDate(to);
 
-    if (nextPeriod === "CUSTOM") {
-      return;
-    }
-
-    const nextRange = getPeriodDateRange(nextPeriod);
-    setFromDate(nextRange.fromDate);
-    setToDate(nextRange.toDate);
-  }
-
-  async function handleApplyFilters() {
-    if (isInvalidDateRange(fromDate, toDate)) {
+    if (isInvalidDateRange(from, to)) {
       setFilterErrorMessage("시작일은 종료일보다 늦을 수 없습니다.");
       return;
     }
 
     setFilterErrorMessage(null);
-    setErrorMessage(null);
-    setIsTransactionsLoading(true);
-    setAppliedTypeFilter(typeFilter);
-    setAppliedPeriodFilter(periodFilter);
-    setAppliedFromDate(fromDate);
-    setAppliedToDate(toDate);
 
-    try {
-      await loadTransactions({
-        type: typeFilter,
-        from: fromDate,
-        to: toDate,
-      });
-    } catch (error) {
-      setTransactions([]);
-      setNextCursor(null);
-      setHasNext(false);
-      setErrorMessage(getCreditErrorMessage(error));
-    } finally {
-      setIsTransactionsLoading(false);
-    }
+    void reloadTransactions({
+      type,
+      from,
+      to,
+    });
   }
 
-  async function handleResetFilters() {
+  function handleTypeChange(nextType: TransactionTypeFilter) {
+    applyFilterChange({
+      type: nextType,
+      period: periodFilter,
+      from: fromDate,
+      to: toDate,
+    });
+  }
+
+  function handlePeriodChange(nextPeriod: PeriodFilter) {
+    const nextRange =
+      nextPeriod === "CUSTOM"
+        ? { fromDate, toDate }
+        : getPeriodDateRange(nextPeriod);
+
+    applyFilterChange({
+      type: typeFilter,
+      period: nextPeriod,
+      from: nextRange.fromDate,
+      to: nextRange.toDate,
+    });
+  }
+
+  function handleCustomDateChange(field: "from" | "to", value: string) {
+    const nextFromDate = field === "from" ? value : fromDate;
+    const nextToDate = field === "to" ? value : toDate;
+
+    applyFilterChange({
+      type: typeFilter,
+      period: "CUSTOM",
+      from: nextFromDate,
+      to: nextToDate,
+    });
+  }
+
+  function handleResetFilters() {
     setTypeFilter("");
     setPeriodFilter("ALL");
     setFromDate("");
     setToDate("");
-    setAppliedTypeFilter("");
-    setAppliedPeriodFilter("ALL");
-    setAppliedFromDate("");
-    setAppliedToDate("");
     setFilterErrorMessage(null);
-    setErrorMessage(null);
-    setIsTransactionsLoading(true);
 
-    try {
-      await loadTransactions({
-        type: "",
-        from: "",
-        to: "",
-      });
-    } catch (error) {
-      setTransactions([]);
-      setNextCursor(null);
-      setHasNext(false);
-      setErrorMessage(getCreditErrorMessage(error));
-    } finally {
-      setIsTransactionsLoading(false);
-    }
+    void reloadTransactions({
+      type: "",
+      from: "",
+      to: "",
+    });
   }
 
-  async function handleLoadMore() {
-    if (!hasNext || nextCursor === null || isLoadingMore) {
+  const loadNextPage = useCallback(async () => {
+    if (
+      !hasNext ||
+      nextCursor === null ||
+      isTransactionsLoading ||
+      isLoadingMore
+    ) {
       return;
     }
+
+    const requestId = transactionRequestIdRef.current;
 
     setIsLoadingMore(true);
     setErrorMessage(null);
 
     try {
-      await loadTransactions({
+      const transactionPage = await fetchTransactionPage({
         cursor: nextCursor,
-        append: true,
+        type: typeFilter,
+        from: fromDate,
+        to: toDate,
       });
+
+      if (requestId !== transactionRequestIdRef.current) {
+        return;
+      }
+
+      setTransactions((prevTransactions) => [
+        ...prevTransactions,
+        ...transactionPage.content,
+      ]);
+      setNextCursor(transactionPage.nextCursor);
+      setHasNext(transactionPage.hasNext);
     } catch (error) {
-      setErrorMessage(getCreditErrorMessage(error));
+      if (requestId === transactionRequestIdRef.current) {
+        setErrorMessage(getCreditErrorMessage(error));
+      }
     } finally {
-      setIsLoadingMore(false);
+      if (requestId === transactionRequestIdRef.current) {
+        setIsLoadingMore(false);
+      }
     }
-  }
+  }, [
+    fetchTransactionPage,
+    fromDate,
+    hasNext,
+    isLoadingMore,
+    isTransactionsLoading,
+    nextCursor,
+    toDate,
+    typeFilter,
+  ]);
+
+  useEffect(() => {
+    const target = loadMoreRef.current;
+
+    if (!target || !hasNext || isTransactionsLoading || isLoadingMore) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+
+        if (!entry.isIntersecting) {
+          return;
+        }
+
+        void loadNextPage();
+      },
+      {
+        root: null,
+        rootMargin: "240px",
+        threshold: 0,
+      },
+    );
+
+    observer.observe(target);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [hasNext, isLoadingMore, isTransactionsLoading, loadNextPage]);
 
   return (
     <main className="relative min-h-[calc(100dvh-64px)] overflow-hidden bg-white">
@@ -549,7 +955,7 @@ export default function CreditsPage() {
           />
           <Summary
             title="총 보유"
-            description="사용 가능 금액과 예치금을 합산"
+            description="사용 가능 금액과 예치금을 함께 표시"
             value={formatCredit(balanceValue + escrowBalanceValue)}
             isLoading={isBalanceLoading}
             icon={<Coins className="size-6" aria-hidden="true" />}
@@ -573,7 +979,8 @@ export default function CreditsPage() {
             <div className="inline-flex items-center gap-2 rounded-full border border-[#ded6ff] bg-white px-4 py-2 text-sm font-black text-[#8c5bff] shadow-sm shadow-violet-950/[0.04]">
               <History className="size-4" aria-hidden="true" />총{" "}
               {transactions.length}
-              {hasNext ? "+" : ""}건
+              {hasNext ? "+" : ""}건 · {transactionGroups.length}
+              {hasNext ? "+" : ""}개 거래
             </div>
           </div>
 
@@ -589,7 +996,7 @@ export default function CreditsPage() {
                   options={transactionTypeOptions}
                   onChange={(nextType) => {
                     if (!isFilterDisabled) {
-                      setTypeFilter(nextType);
+                      handleTypeChange(nextType);
                     }
                   }}
                   className="mt-2"
@@ -617,14 +1024,6 @@ export default function CreditsPage() {
                 <button
                   type="button"
                   disabled={isFilterDisabled}
-                  onClick={handleApplyFilters}
-                  className="h-11 flex-1 cursor-pointer rounded-lg bg-[#8c5bff] px-4 text-sm font-black text-white shadow-sm shadow-violet-950/[0.08] transition hover:bg-[#7847f5] disabled:cursor-not-allowed disabled:opacity-60 md:flex-none"
-                >
-                  필터 적용
-                </button>
-                <button
-                  type="button"
-                  disabled={isFilterDisabled}
                   onClick={handleResetFilters}
                   className="h-11 flex-1 cursor-pointer rounded-lg border border-[#ded6ff] bg-white px-4 text-sm font-black text-zinc-700 shadow-sm shadow-violet-950/[0.04] transition hover:border-[#8c5bff] hover:bg-[#fbf9ff] hover:text-[#8c5bff] disabled:cursor-not-allowed disabled:opacity-60 md:flex-none"
                 >
@@ -643,7 +1042,9 @@ export default function CreditsPage() {
                     type="date"
                     value={fromDate}
                     disabled={isFilterDisabled}
-                    onChange={(event) => setFromDate(event.target.value)}
+                    onChange={(event) =>
+                      handleCustomDateChange("from", event.target.value)
+                    }
                     className="mt-2 h-12 w-full rounded-lg border border-[#d9ccff] bg-white px-4 text-sm font-bold text-zinc-900 shadow-sm shadow-violet-950/[0.03] outline-none transition hover:border-[#c8b7ff] hover:bg-[#fbf9ff] focus:border-[#8c5bff] focus:ring-4 focus:ring-[#f4f0ff] disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-400"
                   />
                 </label>
@@ -656,7 +1057,9 @@ export default function CreditsPage() {
                     type="date"
                     value={toDate}
                     disabled={isFilterDisabled}
-                    onChange={(event) => setToDate(event.target.value)}
+                    onChange={(event) =>
+                      handleCustomDateChange("to", event.target.value)
+                    }
                     className="mt-2 h-12 w-full rounded-lg border border-[#d9ccff] bg-white px-4 text-sm font-bold text-zinc-900 shadow-sm shadow-violet-950/[0.03] outline-none transition hover:border-[#c8b7ff] hover:bg-[#fbf9ff] focus:border-[#8c5bff] focus:ring-4 focus:ring-[#f4f0ff] disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-400"
                   />
                 </label>
@@ -684,24 +1087,18 @@ export default function CreditsPage() {
             ) : (
               <>
                 <div className="grid gap-3">
-                  {transactions.map((transaction) => (
-                    <CreditTransactionCard
-                      key={transaction.transactionId}
-                      transaction={transaction}
+                  {transactionGroups.map((group) => (
+                    <CreditTransactionGroupCard
+                      key={group.groupKey}
+                      group={group}
                     />
                   ))}
                 </div>
-                {hasNext ? (
-                  <div className="mt-5 flex justify-center">
-                    <button
-                      type="button"
-                      disabled={isLoadingMore}
-                      onClick={handleLoadMore}
-                      className="h-11 cursor-pointer rounded-lg border border-[#ded6ff] bg-white px-5 text-sm font-black text-zinc-700 shadow-sm shadow-violet-950/[0.04] transition hover:border-[#8c5bff] hover:bg-[#fbf9ff] hover:text-[#8c5bff] disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {isLoadingMore ? "불러오는 중" : "더 보기"}
-                    </button>
-                  </div>
+                <div ref={loadMoreRef} className="h-10" aria-hidden="true" />
+                {isLoadingMore ? (
+                  <p className="py-4 text-center text-sm font-semibold text-zinc-400">
+                    다음 내역을 불러오는 중입니다.
+                  </p>
                 ) : null}
               </>
             )}
@@ -712,22 +1109,46 @@ export default function CreditsPage() {
   );
 }
 
-function CreditTransactionCard({
-  transaction,
+function CreditTransactionGroupCard({
+  group,
 }: {
-  transaction: CreditTransactionRes;
+  group: CreditTransactionGroupView;
 }) {
-  const isPositive = transaction.amount > 0;
-  const amountClassName = isPositive ? "text-emerald-700" : "text-rose-600";
-  const amountBadgeClassName = isPositive
-    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-    : "border-rose-200 bg-rose-50 text-rose-600";
+  const isGroupedSwap =
+    group.tradeGroupId !== null && group.transactions.length > 1;
+  const representativeTransaction = group.transactions[0];
+  const isSingleTransaction = group.transactions.length === 1;
+  const displayAmount = isSingleTransaction
+    ? representativeTransaction.amount
+    : 0;
+  const isPositive = displayAmount > 0;
+  const isNegative = displayAmount < 0;
+  const amountClassName = isSingleTransaction
+    ? getAmountClassName(displayAmount)
+    : "text-zinc-950";
+  const amountBadgeClassName = isGroupedSwap
+    ? "border-[#d9ccff] bg-[#f4f0ff] text-[#8c5bff]"
+    : isPositive
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : isNegative
+        ? "border-rose-200 bg-rose-50 text-rose-600"
+        : "border-zinc-200 bg-zinc-50 text-zinc-600";
   const topLineClassName = isPositive
     ? "bg-[linear-gradient(90deg,#8c5bff_0%,#34d399_100%)]"
-    : "bg-[linear-gradient(90deg,#8c5bff_0%,#fb7185_100%)]";
-  const formattedAmount = `${isPositive ? "+" : ""}${formatCredit(
-    transaction.amount,
-  )}`;
+    : isNegative
+      ? "bg-[linear-gradient(90deg,#8c5bff_0%,#fb7185_100%)]"
+      : "bg-[#8c5bff]";
+  const formattedAmount = getGroupSummaryAmountLabel(group);
+  const badgeLabel = isGroupedSwap
+    ? "재능 교환"
+    : transactionTypeLabels[representativeTransaction.type] ??
+    representativeTransaction.type;
+  const groupSubText =
+    group.tradeGroupId !== null
+      ? `교환 그룹 #${group.tradeGroupId}`
+      : group.relatedTradeId !== null
+        ? `거래 #${group.relatedTradeId}`
+        : null;
 
   return (
     <article className="relative overflow-hidden rounded-lg border border-[#ded6ff] bg-white/95 p-5 shadow-sm shadow-violet-950/[0.04] transition hover:-translate-y-0.5 hover:shadow-lg hover:shadow-violet-950/[0.08]">
@@ -737,43 +1158,108 @@ function CreditTransactionCard({
           <span
             className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-black ${amountBadgeClassName}`}
           >
-            {isPositive ? (
+            {isGroupedSwap ? (
+              <Coins className="size-3.5" aria-hidden="true" />
+            ) : isPositive ? (
               <ArrowDownLeft className="size-3.5" aria-hidden="true" />
-            ) : (
+            ) : isNegative ? (
               <ArrowUpRight className="size-3.5" aria-hidden="true" />
+            ) : (
+              <Coins className="size-3.5" aria-hidden="true" />
             )}
-            {transactionTypeLabels[transaction.type] ?? transaction.type}
+            {badgeLabel}
           </span>
           <p className="mt-3 text-base font-black text-zinc-950">
-            {transaction.defaultReason || "상세 사유 없음"}
+            {getGroupDisplayTitle(group)}
           </p>
-          <p className="mt-1 text-xs font-semibold text-zinc-500">
-            {formatDate(transaction.createdAt)}
-          </p>
+          {groupSubText ? (
+            <p className="mt-1 text-xs font-semibold text-zinc-500">
+              {groupSubText}
+            </p>
+          ) : null}
         </div>
-        <p className={`shrink-0 text-2xl font-black ${amountClassName}`}>
-          {formattedAmount}
+        <div className="shrink-0 text-right">
+          <p className={`text-2xl font-black ${amountClassName}`}>
+            {formattedAmount}
+          </p>
+          {group.transactions.length > 1 ? (
+            <p className="mt-1 text-xs font-semibold text-zinc-400">
+              {group.transactions.length}개 크레딧 로그
+            </p>
+          ) : null}
+        </div>
+      </div>
+      <div className="mt-5 overflow-hidden rounded-lg border border-[#eee8ff] bg-[#fbf9ff]">
+        {group.transactions.map((transaction, index) => (
+          <CreditTransactionRow
+            key={transaction.transactionId}
+            transaction={transaction}
+            isFirst={index === 0}
+          />
+        ))}
+      </div>
+    </article>
+  );
+}
+
+function CreditTransactionRow({
+  transaction,
+  isFirst,
+}: {
+  transaction: CreditTransactionView;
+  isFirst: boolean;
+}) {
+  const amountClassName = getAmountClassName(transaction.amount);
+
+  return (
+    <div
+      className={`grid gap-4 p-4 text-sm lg:grid-cols-[minmax(0,1.25fr)_minmax(0,2fr)_auto] lg:items-start ${isFirst ? "" : "border-t border-[#eee8ff]"
+        }`}
+    >
+      <div className="min-w-0">
+        <span className="inline-flex rounded-full border border-[#d9ccff] bg-white px-2.5 py-1 text-xs font-black text-[#8c5bff]">
+          {transactionTypeLabels[transaction.type] ?? transaction.type}
+        </span>
+        <p className="mt-2 break-words font-black text-zinc-950">
+          {transaction.defaultReason || "사유 없음"}
+        </p>
+        <p className="mt-1 text-xs font-semibold text-zinc-400">
+          트랜잭션 #{transaction.transactionId}
         </p>
       </div>
-      <div className="mt-5 grid gap-3 rounded-lg border border-[#eee8ff] bg-[#fbf9ff] p-4 text-sm md:grid-cols-3">
-        <TransactionInfo
-          label="거래 후 잔액"
-          value={formatCredit(transaction.balanceAfter)}
-        />
-        <TransactionInfo
-          label="관련 거래 ID"
-          value={
-            transaction.relatedTradeId === null
-              ? "-"
-              : `#${transaction.relatedTradeId}`
-          }
-        />
+
+      <div className="grid gap-3 md:grid-cols-2">
         <TransactionInfo
           label="상세 사유"
           value={transaction.detailReason ?? "-"}
         />
+        <TransactionInfo
+          label="발생일"
+          value={formatDate(transaction.createdAt)}
+        />
+        <div>
+          <TransactionInfo
+            label="관련 거래"
+            value={getTradeDisplayTitle(transaction)}
+          />
+          <p className="mt-1 text-xs font-semibold text-zinc-400">
+            {transaction.relatedTradeId !== null
+              ? `거래 #${transaction.relatedTradeId}`
+              : "거래 ID 없음"}
+          </p>
+        </div>
+        <TransactionInfo
+          label="거래 후 잔액"
+          value={formatCredit(transaction.balanceAfter)}
+        />
       </div>
-    </article>
+
+      <p
+        className={`whitespace-nowrap text-right text-lg font-black ${amountClassName}`}
+      >
+        {formatSignedCredit(transaction.amount)}
+      </p>
+    </div>
   );
 }
 

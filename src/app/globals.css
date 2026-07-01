@@ -23,7 +23,8 @@
 }
 
 html {
-  scrollbar-gutter: stable both-edges;
+  width: 100%;
+  scrollbar-gutter: stable;
   min-width: 320px;
   max-width: 100%;
   overflow-x: hidden;
@@ -35,6 +36,7 @@ html {
 }
 
 body {
+  width: 100%;
   background: var(--background);
   color: var(--foreground);
   margin: 0;
@@ -47,6 +49,7 @@ body {
 .app-fixed-shell {
   width: 100%;
   min-width: 0;
+  padding-top: 64px;
 }
 
 .fixed-container {
@@ -104,17 +107,20 @@ canvas {
 }
 
 /* Shared desktop header style
-   기준: 메인 페이지(`/`) 헤더. AppShell 공통 Header와 랜딩 Header가 같은 크기/간격으로 보이도록 강제한다. */
+   疫꿸퀣占�: 筌롫뗄�� 占쎌꼷�좑쭪占�(`/`) 占썬끇��. AppShell �⑤벏�� Header占쏙옙 占쎌뮆逾� Header揶쏉옙 揶쏆늿占� 占싼덈┛/揶쏄쑨爰쏙옙�곗쨮 癰귣똻�좑옙袁⑥쨯 揶쏅벡�ｏ옙�뺣뼄. */
 .siteHeader {
-  position: sticky !important;
+  position: fixed !important;
   top: 0 !important;
-  z-index: 1000 !important;
+  left: 0 !important;
+  right: 0 !important;
+  z-index: 1100 !important;
+  width: 100% !important;
   height: 64px !important;
   font-family: var(--font-baton) !important;
-  background: rgba(255, 255, 255, 0.88) !important;
-  border-bottom: 1px solid rgba(140, 91, 255, 0.08) !important;
-  backdrop-filter: blur(20px) !important;
-  -webkit-backdrop-filter: blur(20px) !important;
+  background: #ffffff !important;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
 .siteHeader .headerInner {
@@ -296,6 +302,7 @@ canvas {
 
 @media (max-width: 760px) {
   .app-fixed-shell {
+    padding-top: 60px;
     padding-bottom: calc(64px + env(safe-area-inset-bottom)) !important;
   }
 
