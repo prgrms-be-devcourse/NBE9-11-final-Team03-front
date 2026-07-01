@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
+import { BrandLogo } from "@/components/layout/BrandLogo";
 import { authApi } from "@/lib/api";
 import { validatePassword } from "@/lib/validation/password";
 
@@ -424,7 +425,7 @@ export default function SignupPage() {
               inputMode="numeric"
               maxLength={6}
               placeholder="6자리 인증번호"
-              className="form-input h-12 rounded-xl border-zinc-200 bg-white/90 px-4 text-[15px] font-semibold tracking-[0.18em] shadow-sm shadow-zinc-950/5 transition placeholder:tracking-normal focus:border-violet-400 focus:ring-violet-100"
+              className="form-input h-12 rounded-xl border-zinc-200 bg-white/90 px-4 text-[15px] font-semibold tracking-[0.18em] shadow-sm shadow-zinc-950/5 transition placeholder:font-normal placeholder:tracking-normal focus:border-violet-400 focus:ring-violet-100"
             />
             <button
               type="button"
@@ -499,7 +500,7 @@ export default function SignupPage() {
               })}
               maxLength={10}
               placeholder="3~10자"
-              className="form-input h-12 rounded-xl border-zinc-200 bg-white/90 px-4 text-[15px] font-semibold shadow-sm shadow-zinc-950/5 transition focus:border-violet-400 focus:ring-violet-100"
+              className="form-input h-12 rounded-xl border-zinc-200 bg-white/90 px-4 text-[15px] font-semibold shadow-sm shadow-zinc-950/5 transition placeholder:font-normal focus:border-violet-400 focus:ring-violet-100"
             />
             <button
               type="button"
@@ -541,7 +542,7 @@ export default function SignupPage() {
               },
             })}
             placeholder="https://example.com/profile.png"
-            className="form-input h-12 rounded-xl border-zinc-200 bg-white/90 px-4 text-[15px] font-semibold shadow-sm shadow-zinc-950/5 transition placeholder:text-zinc-400 focus:border-violet-400 focus:ring-violet-100"
+            className="form-input h-12 rounded-xl border-zinc-200 bg-white/90 px-4 text-[15px] font-semibold shadow-sm shadow-zinc-950/5 transition placeholder:font-normal placeholder:text-zinc-400 focus:border-violet-400 focus:ring-violet-100"
           />
           {profileImageUrlPreview ? (
             <div className="mt-3 flex items-center gap-3 rounded-2xl bg-zinc-50 px-4 py-3 ring-1 ring-zinc-100">
@@ -576,7 +577,7 @@ export default function SignupPage() {
             {...register("introduction")}
             maxLength={120}
             placeholder="어떤 재능을 나누고 싶은지 짧게 소개해 주세요."
-            className="form-input min-h-28 resize-none rounded-xl border-zinc-200 bg-white/90 px-4 py-3 text-[15px] font-semibold leading-6 shadow-sm shadow-zinc-950/5 transition placeholder:text-zinc-400 focus:border-violet-400 focus:ring-violet-100"
+            className="form-input min-h-28 resize-none rounded-xl border-zinc-200 bg-white/90 px-4 py-3 text-[15px] font-semibold leading-6 shadow-sm shadow-zinc-950/5 transition placeholder:font-normal placeholder:text-zinc-400 focus:border-violet-400 focus:ring-violet-100"
           />
         </Field>
 
@@ -589,7 +590,7 @@ export default function SignupPage() {
         <button
           type="submit"
           disabled={isSubmitting || !isEmailVerified || !isNicknameChecked}
-          className="h-12 w-full cursor-pointer rounded-xl bg-[linear-gradient(135deg,#8c5bff_0%,#8973ff_38%,#78a9ff_72%,#79e4dd_100%)] text-lg font-black text-white shadow-lg shadow-violet-400/20 transition hover:-translate-y-0.5 hover:bg-[linear-gradient(135deg,#8250ff_0%,#8570ff_36%,#70a5ff_70%,#66ddd7_100%)] hover:shadow-xl hover:shadow-violet-400/25 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-60"
+          className="h-12 w-full cursor-pointer rounded-xl bg-[linear-gradient(135deg,#8c5bff_0%,#8973ff_38%,#78a9ff_72%,#79e4dd_100%)] text-lg !font-bold text-white shadow-lg shadow-violet-400/20 transition hover:-translate-y-0.5 hover:bg-[linear-gradient(135deg,#8250ff_0%,#8570ff_36%,#70a5ff_70%,#66ddd7_100%)] hover:shadow-xl hover:shadow-violet-400/25 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-60"
         >
           {isSubmitting ? "가입 중..." : "가입하기"}
         </button>
@@ -691,8 +692,7 @@ function AuthShell({ children }: { children: ReactNode }) {
           className="mx-auto mb-7 inline-flex items-center gap-3 rounded-xl outline-none transition focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2"
           aria-label="Baton 홈"
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/baton-logo.svg" alt="Baton" className="h-12 w-auto" />
+          <BrandLogo compact />
         </Link>
 
         <section className="rounded-3xl border border-white/80 bg-white/88 p-6 shadow-2xl shadow-violet-950/10 backdrop-blur sm:p-8">

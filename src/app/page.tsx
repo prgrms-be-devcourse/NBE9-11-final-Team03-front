@@ -346,25 +346,6 @@ export default function Home() {
               무료 시작
             </a>
           </div>
-          <div className="mobileLaptopPreview" aria-hidden="true">
-            <div className="mobileLaptopScreen">
-              <div className="mobileLaptopSide" />
-              <div className="mobileLaptopBoard">
-                <span />
-                <span />
-                <span />
-                <span />
-                <span />
-                <span />
-              </div>
-            </div>
-            <div className="mobileLaptopBase" />
-          </div>
-          <div className="mobileSlideDots" aria-hidden="true">
-            <span className="active" />
-            <span />
-            <span />
-          </div>
         </div>
         <FloatingIcon className="floatIcon slack" icon={<SiSlack />} />
         <FloatingIcon className="floatIcon google" icon={<SiGoogle />} />
@@ -2616,7 +2597,7 @@ export default function Home() {
           right: auto !important;
           background: #15151f !important;
           color: #ffffff !important;
-          transform: translate(-100%, -50%) rotate(-18deg);
+          transform: translate(-100%, -50%) rotate(-14deg);
           animation: startFloat 5.2s ease-in-out infinite;
         }
 
@@ -3616,8 +3597,13 @@ export default function Home() {
             overflow: hidden !important;
           }
 
+          .reveal {
+            opacity: 1 !important;
+            transform: none !important;
+            transition: none !important;
+          }
+
           .heroContent,
-          .laptopStage,
           .floatIcon,
           .floatingPanel {
             display: none !important;
@@ -3629,11 +3615,11 @@ export default function Home() {
             display: flex !important;
             width: 100% !important;
             max-width: 100vw !important;
-            min-height: calc(100dvh - 60px) !important;
+            min-height: auto !important;
             flex-direction: column !important;
             align-items: center !important;
             justify-content: flex-start !important;
-            padding: 46px 18px 72px !important;
+            padding: 46px 18px 18px !important;
             text-align: center !important;
             overflow: hidden !important;
           }
@@ -3705,113 +3691,72 @@ export default function Home() {
             box-shadow: 0 16px 34px rgba(120, 92, 255, 0.24) !important;
           }
 
-          .mobileLaptopPreview {
+          .laptopStage {
             position: relative !important;
-            width: min(100%, 360px) !important;
-            margin: 38px auto 0 !important;
-            padding: 8px 8px 0 !important;
-            border-radius: 18px 18px 8px 8px !important;
-            background: linear-gradient(180deg, #2f3440 0%, #080a10 100%) !important;
-            box-shadow:
-              inset 0 1px 0 rgba(255, 255, 255, 0.32),
-              0 22px 48px rgba(38, 52, 88, 0.22),
-              0 0 0 4px rgba(255, 255, 255, 0.42) !important;
+            display: block !important;
+            width: min(calc(100vw - 36px), 430px) !important;
+            height: clamp(292px, 74vw, 372px) !important;
+            margin: 26px auto 0 !important;
+            overflow: visible !important;
           }
 
-          .mobileLaptopScreen {
-            display: grid !important;
-            grid-template-columns: 74px 1fr !important;
-            aspect-ratio: 16 / 10.5 !important;
-            overflow: hidden !important;
-            border-radius: 10px 10px 4px 4px !important;
-            background: #ffffff !important;
-            border: 1px solid rgba(255, 255, 255, 0.15) !important;
+          .laptopStage::before {
+            top: -18px !important;
+            width: 118% !important;
+            height: 118% !important;
           }
 
-          .mobileLaptopSide {
-            position: relative !important;
-            background: linear-gradient(180deg, #fbfaff 0%, #f4f6ff 100%) !important;
-            border-right: 1px solid #e8ecfb !important;
+          .laptopStage::after {
+            bottom: 40px !important;
+            width: 86% !important;
+            height: 32px !important;
           }
 
-          .mobileLaptopSide::before {
-            content: "" !important;
-            position: absolute !important;
-            left: 14px !important;
-            top: 24px !important;
-            width: 44px !important;
-            height: 7px !important;
-            border-radius: 999px !important;
-            background: #dce3f3 !important;
-            box-shadow:
-              0 26px 0 #edf1fb,
-              0 52px 0 #edf1fb,
-              0 78px 0 #edf1fb !important;
+          .laptop {
+            top: 22px !important;
+            width: min(100%, 390px) !important;
+            padding: 7px 7px 15px !important;
+            border-radius: 16px 16px 7px 7px !important;
           }
 
-          .mobileLaptopSide::after {
-            content: "" !important;
-            position: absolute !important;
-            left: 14px !important;
-            bottom: 24px !important;
-            width: 48px !important;
-            height: 40px !important;
-            border-radius: 13px !important;
-            background: linear-gradient(135deg, #8c5bff, #63d6d0) !important;
-          }
-
-          .mobileLaptopBoard {
-            display: grid !important;
-            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-            gap: 10px !important;
-            padding: 38px 16px 16px !important;
-            background:
-              linear-gradient(90deg, transparent 0 48%, rgba(245, 247, 252, 0.9) 48% 66%, transparent 66%),
-              #ffffff !important;
-          }
-
-          .mobileLaptopBoard span {
-            min-height: 42px !important;
-            border-radius: 12px !important;
-            border: 1px solid #e2e8f4 !important;
-            background:
-              linear-gradient(90deg, #dfe5f0 0 42%, transparent 42%),
-              rgba(255, 255, 255, 0.88) !important;
-          }
-
-          .mobileLaptopBoard span:nth-child(1),
-          .mobileLaptopBoard span:nth-child(4) {
-            background: linear-gradient(135deg, #8c5bff, #63d6d0) !important;
-            border-color: transparent !important;
-          }
-
-          .mobileLaptopBase {
-            position: relative !important;
-            left: 50% !important;
-            width: 100% !important;
+          .laptop::before {
+            bottom: -26px !important;
+            width: 110% !important;
             height: 28px !important;
-            border-radius: 0 0 18px 18px !important;
-            transform: translateX(-50%) !important;
-            background: linear-gradient(180deg, #eef3fa 0%, #b8c2d0 100%) !important;
-            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95) !important;
+            border-radius: 0 0 15px 15px !important;
           }
 
-          .mobileSlideDots {
-            display: inline-flex !important;
+          .laptop::after {
+            bottom: -14px !important;
+            width: 88px !important;
+            height: 7px !important;
+          }
+
+          .laptopTop {
+            top: 7px !important;
+            width: 58px !important;
+            height: 13px !important;
+            border-radius: 0 0 7px 7px !important;
+          }
+
+          .laptopScreen {
+            grid-template-columns: clamp(72px, 21vw, 94px) 1fr !important;
+            border-radius: 9px 9px 5px 5px !important;
+          }
+
+          .slideSwitcher {
+            display: flex !important;
             gap: 10px !important;
-            margin-top: 28px !important;
+            margin-top: 22px !important;
           }
 
-          .mobileSlideDots span {
+          .slideSwitcher button {
             width: 10px !important;
             height: 10px !important;
-            border-radius: 999px !important;
-            background: #c5c9d3 !important;
           }
 
-          .mobileSlideDots .active {
+          .slideSwitcher button.active {
             width: 42px !important;
-            background: #8c5bff !important;
           }
         }
 
@@ -3825,8 +3770,13 @@ export default function Home() {
             font-size: 14px !important;
           }
 
-          .mobileLaptopPreview {
-            width: min(100%, 330px) !important;
+          .laptopStage {
+            width: min(calc(100vw - 32px), 360px) !important;
+            height: clamp(276px, 75vw, 336px) !important;
+          }
+
+          .laptop {
+            width: min(100%, 340px) !important;
           }
         }
       `}</style>
