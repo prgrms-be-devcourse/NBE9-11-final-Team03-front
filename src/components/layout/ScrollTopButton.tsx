@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowUp } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 function canScrollPage(): boolean {
   if (typeof document === "undefined") {
@@ -13,19 +13,45 @@ function canScrollPage(): boolean {
 
 export function ScrollTopButton() {
   const [isVisible, setIsVisible] = useState(false);
+  const animationFrameRef = useRef<number | null>(null);
+  const isVisibleRef = useRef(false);
 
   useEffect(() => {
     function syncVisibility(): void {
-      setIsVisible(canScrollPage() && window.scrollY > 260);
+      const nextIsVisible = canScrollPage() && window.scrollY > 260;
+
+      if (isVisibleRef.current === nextIsVisible) {
+        return;
+      }
+
+      isVisibleRef.current = nextIsVisible;
+      setIsVisible(nextIsVisible);
+    }
+
+    function scheduleSyncVisibility(): void {
+      if (animationFrameRef.current !== null) {
+        return;
+      }
+
+      animationFrameRef.current = window.requestAnimationFrame(() => {
+        animationFrameRef.current = null;
+        syncVisibility();
+      });
     }
 
     syncVisibility();
-    window.addEventListener("scroll", syncVisibility, { passive: true });
-    window.addEventListener("resize", syncVisibility);
+    window.addEventListener("scroll", scheduleSyncVisibility, {
+      passive: true,
+    });
+    window.addEventListener("resize", scheduleSyncVisibility);
 
     return () => {
-      window.removeEventListener("scroll", syncVisibility);
-      window.removeEventListener("resize", syncVisibility);
+      window.removeEventListener("scroll", scheduleSyncVisibility);
+      window.removeEventListener("resize", scheduleSyncVisibility);
+
+      if (animationFrameRef.current !== null) {
+        window.cancelAnimationFrame(animationFrameRef.current);
+      }
     };
   }, []);
 
