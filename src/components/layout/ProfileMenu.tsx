@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { getUserProfileImageUrl } from "@/utils/profileImage";
 
 interface ProfileMenuProps {
   nickname: string | null;
@@ -71,6 +72,7 @@ export function ProfileMenu({
   }
 
   const menuItems = isAdmin ? adminMenuItems : profileMenuItems;
+  const imageUrl = getUserProfileImageUrl(profileImageUrl);
 
   return (
     <div ref={containerRef} className="relative">
@@ -85,16 +87,12 @@ export function ProfileMenu({
             : "border-zinc-200 bg-white hover:border-[#d9ccff] hover:bg-[#f8f5ff]"
           }`}
       >
-        {profileImageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={profileImageUrl}
-            alt="내 프로필 이미지"
-            className="h-full w-full object-cover"
-          />
-        ) : (
-          <DefaultProfileAvatar />
-        )}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={imageUrl}
+          alt="내 프로필 이미지"
+          className="h-full w-full object-cover"
+        />
       </button>
 
       {isOpen ? (
@@ -125,23 +123,5 @@ export function ProfileMenu({
         </div>
       ) : null}
     </div>
-  );
-}
-
-function DefaultProfileAvatar() {
-  return (
-    <svg
-      viewBox="0 0 48 48"
-      className="h-full w-full"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <rect width="48" height="48" rx="24" fill="#8C5BFF" />
-      <circle cx="24" cy="17" r="8" fill="#E7D8F5" />
-      <path
-        d="M10 42C10 32.6 16.2 27.2 24 27.2C31.8 27.2 38 32.6 38 42H10Z"
-        fill="#E7D8F5"
-      />
-    </svg>
   );
 }

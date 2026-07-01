@@ -5,8 +5,7 @@ import {
   getStoredUserRole,
   isLoggedIn as getIsLoggedIn,
 } from "@/lib/auth";
-
-export const ADMIN_PROFILE_IMAGE_URL = "/admin-profile-blue.jpg";
+import { getRoleProfileImageUrl } from "@/utils/profileImage";
 
 export interface HeaderAuthState {
   isLoggedIn: boolean;
@@ -26,10 +25,6 @@ export function readHeaderAuthState(): HeaderAuthState {
 
 export function getHeaderProfileImageUrl(
   authState: HeaderAuthState,
-): string | null {
-  if (authState.role === "ADMIN") {
-    return ADMIN_PROFILE_IMAGE_URL;
-  }
-
-  return authState.profileImageUrl;
+): string {
+  return getRoleProfileImageUrl(authState.profileImageUrl, authState.role);
 }

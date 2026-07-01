@@ -7,6 +7,7 @@ import {
   formatEstimatedDuration,
   formatRating,
 } from "@/utils/format";
+import { getUserProfileImageUrl } from "@/utils/profileImage";
 
 interface UserProfileModalProps {
   detail: MatchRecommendationDetailRes;
@@ -183,24 +184,13 @@ function ProfileAvatar({
   nickname: string;
   profileImageUrl: string | null;
 }) {
-  const placeholderText =
-    nickname === "프로필" ? "프로필" : nickname.slice(0, 1);
-
-  if (profileImageUrl) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={profileImageUrl}
-        alt={`${nickname} 프로필 이미지`}
-        className="h-16 w-16 shrink-0 rounded-full object-cover"
-      />
-    );
-  }
-
   return (
-    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-sm font-black text-zinc-500">
-      {placeholderText}
-    </div>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={getUserProfileImageUrl(profileImageUrl)}
+      alt={`${nickname} 프로필 이미지`}
+      className="h-16 w-16 shrink-0 rounded-full object-cover"
+    />
   );
 }
 

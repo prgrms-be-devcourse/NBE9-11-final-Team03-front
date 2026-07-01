@@ -4,6 +4,7 @@ import type {
   MatchProposalStatus,
 } from "@/lib/api";
 import { formatDate } from "@/utils/format";
+import { getUserProfileImageUrl } from "@/utils/profileImage";
 
 type ProposalCardVariant = "received" | "sent";
 
@@ -50,10 +51,6 @@ function getStatusClass(status: MatchProposalStatus): string {
   return classes[getStatusTone(status)];
 }
 
-function getInitial(name: string): string {
-  return name.trim().slice(0, 1) || "?";
-}
-
 function ProfileAvatar({
   imageUrl,
   name,
@@ -61,21 +58,13 @@ function ProfileAvatar({
   imageUrl: string | null;
   name: string;
 }) {
-  if (imageUrl) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={imageUrl}
-        alt={`${name} 프로필 이미지`}
-        className="h-12 w-12 shrink-0 rounded-full object-cover"
-      />
-    );
-  }
-
   return (
-    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-[#d9ccff] bg-[#f4f0ff] text-sm font-black text-[#8c5bff]">
-      {getInitial(name)}
-    </div>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={getUserProfileImageUrl(imageUrl)}
+      alt={`${name} 프로필 이미지`}
+      className="h-12 w-12 shrink-0 rounded-full object-cover"
+    />
   );
 }
 

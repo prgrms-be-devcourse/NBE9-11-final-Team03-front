@@ -42,6 +42,7 @@ interface ListboxProps<TValue extends string> {
   onChange: (value: TValue) => void;
   placeholder?: string;
   className?: string;
+  placement?: "auto" | "top" | "bottom";
 }
 
 function Listbox<TValue extends string>({
@@ -51,8 +52,10 @@ function Listbox<TValue extends string>({
   onChange,
   placeholder = "선택해 주세요",
   className = "mt-2",
+  placement = "auto",
 }: ListboxProps<TValue>) {
   const [isOpen, setIsOpen] = useState(false);
+  const [shouldOpenUpward, setShouldOpenUpward] = useState(false);
   const listboxRef = useRef<HTMLDivElement | null>(null);
   const selected = options.find((option) => option.value === value);
 
@@ -74,6 +77,50 @@ function Listbox<TValue extends string>({
     };
   }, [isOpen]);
 
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const updatePlacement = () => {
+      if (placement === "top") {
+        setShouldOpenUpward(true);
+        return;
+      }
+
+      if (placement === "bottom") {
+        setShouldOpenUpward(false);
+        return;
+      }
+
+      const container = listboxRef.current;
+
+      if (container === null) {
+        return;
+      }
+
+      const rect = container.getBoundingClientRect();
+      const viewportHeight = window.innerHeight;
+      const estimatedDropdownHeight = Math.min(options.length * 44 + 12, 288);
+      const spaceBelow = viewportHeight - rect.bottom;
+      const spaceAbove = rect.top;
+
+      setShouldOpenUpward(
+        spaceBelow < estimatedDropdownHeight || spaceBelow < spaceAbove,
+      );
+    };
+
+    updatePlacement();
+
+    window.addEventListener("resize", updatePlacement);
+    window.addEventListener("scroll", updatePlacement, true);
+
+    return () => {
+      window.removeEventListener("resize", updatePlacement);
+      window.removeEventListener("scroll", updatePlacement, true);
+    };
+  }, [isOpen, options.length, placement]);
+
   return (
     <div ref={listboxRef} className={`relative ${className}`}>
       <button
@@ -84,7 +131,11 @@ function Listbox<TValue extends string>({
         onClick={() => setIsOpen((current) => !current)}
         className="flex h-12 w-full items-center justify-between rounded-lg border border-[#d9ccff] bg-white px-4 text-left text-sm font-black text-zinc-900 shadow-sm shadow-violet-950/[0.03] outline-none transition hover:border-[#c8b7ff] hover:bg-[#fbf9ff] focus:border-[#8c5bff] focus:ring-4 focus:ring-[#f4f0ff]"
       >
-        <span className={selected ? "font-black text-zinc-900" : "font-black text-zinc-400"}>
+        <span
+          className={
+            selected ? "font-black text-zinc-900" : "font-black text-zinc-400"
+          }
+        >
           {selected?.label ?? placeholder}
         </span>
         <ChevronDown
@@ -96,7 +147,8 @@ function Listbox<TValue extends string>({
       {isOpen ? (
         <div
           role="listbox"
-          className="absolute z-40 mt-2 max-h-72 w-full overflow-y-auto rounded-lg border border-[#d9ccff] bg-white p-1.5 shadow-[0_18px_42px_rgba(80,60,160,0.16)]"
+          className={`absolute z-[1200] max-h-72 w-full overflow-y-auto rounded-lg border border-[#d9ccff] bg-white p-1.5 shadow-[0_18px_42px_rgba(80,60,160,0.16)] ${shouldOpenUpward ? "bottom-full mb-2" : "top-full mt-2"
+            }`}
         >
           {options.map((option) => {
             const isSelected = option.value === value;
@@ -118,7 +170,10 @@ function Listbox<TValue extends string>({
               >
                 <span className="font-bold">{option.label}</span>
                 {isSelected ? (
-                  <Check className="h-4 w-4 text-[#8c5bff]" aria-hidden="true" />
+                  <Check
+                    className="h-4 w-4 text-[#8c5bff]"
+                    aria-hidden="true"
+                  />
                 ) : null}
               </button>
             );
@@ -402,12 +457,36 @@ function getGroupSummaryAmountLabel(group: CreditTransactionGroupView): string {
     return formatSignedCredit(group.transactions[0].amount);
   }
 
-  const creditPrice = group.transactions.find(
-    (transaction) => typeof transaction.tradeDetail?.creditPrice === "number",
-  )?.tradeDetail?.creditPrice;
+  const tradePrices = Array.from(
+    new Map(
+      group.transactions
+        .map((transaction) => {
+          const tradeId = transaction.relatedTradeId;
+          const creditPrice = transaction.tradeDetail?.creditPrice;
 
-  if (typeof creditPrice === "number") {
-    return `거래 금액 ${formatCredit(creditPrice)}`;
+          if (
+            typeof tradeId !== "number" ||
+            typeof creditPrice !== "number" ||
+            !Number.isFinite(creditPrice)
+          ) {
+            return null;
+          }
+
+          return [tradeId, creditPrice] as const;
+        })
+        .filter((entry): entry is readonly [number, number] => entry !== null),
+    ).values(),
+  );
+  const uniqueTradePrices = Array.from(new Set(tradePrices)).sort(
+    (a, b) => b - a,
+  );
+
+  if (uniqueTradePrices.length === 1) {
+    return `거래 금액 ${formatCredit(uniqueTradePrices[0])}`;
+  }
+
+  if (uniqueTradePrices.length > 1) {
+    return `거래 금액 ${uniqueTradePrices.map(formatCredit).join(" / ")}`;
   }
 
   const representativeAmounts = Array.from(
@@ -673,9 +752,12 @@ export default function CreditsPage() {
           .map((transaction) =>
             transaction.relatedTradeId === null
               ? null
-              : tradeDetailsById[transaction.relatedTradeId]?.talentId ?? null,
+              : (tradeDetailsById[transaction.relatedTradeId]?.talentId ??
+                null),
           )
-          .filter((talentId): talentId is number => typeof talentId === "number"),
+          .filter(
+            (talentId): talentId is number => typeof talentId === "number",
+          ),
       ),
     ).filter((talentId) => !(talentId in talentDetailsById));
 
@@ -726,7 +808,7 @@ export default function CreditsPage() {
       const tradeDetail =
         transaction.relatedTradeId === null
           ? null
-          : tradeDetailsById[transaction.relatedTradeId] ?? null;
+          : (tradeDetailsById[transaction.relatedTradeId] ?? null);
 
       return {
         ...transaction,
@@ -734,7 +816,7 @@ export default function CreditsPage() {
         talentDetail:
           tradeDetail === null
             ? null
-            : talentDetailsById[tradeDetail.talentId] ?? null,
+            : (talentDetailsById[tradeDetail.talentId] ?? null),
       };
     });
   }, [transactions, talentDetailsById, tradeDetailsById]);
@@ -1000,6 +1082,7 @@ export default function CreditsPage() {
                     }
                   }}
                   className="mt-2"
+                  placement="top"
                 />
               </div>
 
@@ -1017,6 +1100,7 @@ export default function CreditsPage() {
                     }
                   }}
                   className="mt-2"
+                  placement="top"
                 />
               </div>
 
@@ -1141,8 +1225,8 @@ function CreditTransactionGroupCard({
   const formattedAmount = getGroupSummaryAmountLabel(group);
   const badgeLabel = isGroupedSwap
     ? "재능 교환"
-    : transactionTypeLabels[representativeTransaction.type] ??
-    representativeTransaction.type;
+    : (transactionTypeLabels[representativeTransaction.type] ??
+      representativeTransaction.type);
   const groupSubText =
     group.tradeGroupId !== null
       ? `교환 그룹 #${group.tradeGroupId}`

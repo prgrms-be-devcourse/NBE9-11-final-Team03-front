@@ -19,6 +19,7 @@ import {
   formatEstimatedDuration,
   formatRating,
 } from "@/utils/format";
+import { getUserProfileImageUrl } from "@/utils/profileImage";
 
 function readStoredUserId(): number | null {
   if (typeof window === "undefined") {
@@ -373,18 +374,12 @@ export default function TalentDetailPage() {
                 제공자 프로필
               </h2>
               <div className="mt-5 flex items-center gap-3">
-                {talent.author.profileImageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={talent.author.profileImageUrl}
-                    alt=""
-                    className="h-14 w-14 rounded-full object-cover"
-                  />
-                ) : (
-                  <div className="flex h-14 w-14 items-center justify-center rounded-full border border-[#ded6ff] bg-[#f4f0ff] text-base font-black text-[#8c5bff]">
-                    {talent.author.nickname.slice(0, 1)}
-                  </div>
-                )}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={getUserProfileImageUrl(talent.author.profileImageUrl)}
+                  alt=""
+                  className="h-14 w-14 rounded-full object-cover"
+                />
                 <div>
                   <p className="text-xl font-black text-zinc-950">
                     {talent.author.nickname}
