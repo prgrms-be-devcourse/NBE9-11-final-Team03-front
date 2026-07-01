@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoginRequiredState } from "@/components/common/LoginRequiredState";
@@ -838,6 +838,7 @@ export default function TradesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   const loadTrades = useCallback(
     async ({
@@ -914,13 +915,42 @@ export default function TradesPage() {
     };
   }, [loadTrades]);
 
-  async function handleLoadMore() {
+  const handleLoadMore = useCallback(async () => {
     if (!hasNext || nextCursor === null || isLoadingMore) {
       return;
     }
 
     await loadTrades({ cursor: nextCursor, append: true });
-  }
+  }, [hasNext, isLoadingMore, loadTrades, nextCursor]);
+
+  useEffect(() => {
+    const target = loadMoreRef.current;
+
+    if (!target || !hasNext || isLoading || isLoadingMore) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+
+        if (entry.isIntersecting) {
+          void handleLoadMore();
+        }
+      },
+      {
+        root: null,
+        rootMargin: "360px 0px",
+        threshold: 0,
+      },
+    );
+
+    observer.observe(target);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [handleLoadMore, hasNext, isLoading, isLoadingMore]);
 
   const tradeGroups = buildTradeCardsForView(trades);
   const visibleTradeGroups = filterTradeGroupsByStatus(
@@ -998,7 +1028,7 @@ export default function TradesPage() {
             ) : null}
 
             {hasNext ? (
-              <div className="mt-8 flex justify-center">
+              <div ref={loadMoreRef} className="mt-8 flex justify-center">
                 <button
                   type="button"
                   disabled={isLoadingMore}

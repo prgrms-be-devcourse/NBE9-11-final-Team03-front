@@ -144,6 +144,7 @@ export default function NewTalentPage() {
   const router = useRouter();
   const [message, setMessage] = useState("");
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
+  const [createdTalentId, setCreatedTalentId] = useState<number | null>(null);
   const [authStatus, setAuthStatus] = useState<
     "checking" | "authenticated" | "required"
   >("checking");
@@ -291,6 +292,7 @@ export default function NewTalentPage() {
         setStoredLastTalentId(userId, createdTalentId);
       }
 
+      setCreatedTalentId(createdTalentId);
       setIsSuccessModalOpen(true);
     } catch (error) {
       if (isAuthRequiredError(error)) {
@@ -516,9 +518,19 @@ export default function NewTalentPage() {
         {isSuccessModalOpen ? (
           <FeedbackModal
             title="재능이 등록되었습니다"
-            description="등록한 재능은 재능 둘러보기에서 확인할 수 있어요."
-            confirmLabel="재능 둘러보기로 이동"
-            onConfirm={() => router.push("/talents")}
+            description="이제 포트폴리오 이미지나 참고 링크를 추가할 수 있어요."
+            confirmLabel={
+              createdTalentId === null
+                ? "재능 둘러보기로 이동"
+                : "첨부 관리로 이동"
+            }
+            onConfirm={() =>
+              router.push(
+                createdTalentId === null
+                  ? "/talents"
+                  : `/talents/${createdTalentId}/edit`,
+              )
+            }
           />
         ) : null}
       </div>

@@ -10,7 +10,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoginRequiredState } from "@/components/common/LoginRequiredState";
@@ -39,12 +39,6 @@ const sortOptions: { value: TalentSortType; label: string }[] = [
   { value: "LATEST", label: "신규 재능" },
   { value: "RATING", label: "평점 높은 순" },
 ];
-
-const shelfFilters = [
-  { value: "ALL", label: "전체" },
-  { value: "NEW", label: "NEW" },
-  { value: "BEST", label: "BEST" },
-] as const;
 
 const categoryVisuals = {
   development: {
@@ -100,8 +94,6 @@ const categoryVisuals = {
     headline: "재능",
   },
 };
-
-type ShelfFilter = (typeof shelfFilters)[number]["value"];
 
 function getCategoryErrorMessage(error: unknown) {
   const message =
@@ -260,7 +252,6 @@ function TalentSortMenu({
 export default function TalentsPage() {
   const [keyword, setKeyword] = useState("");
   const [categoryId, setCategoryId] = useState<number | undefined>(undefined);
-  const [shelfFilter, setShelfFilter] = useState<ShelfFilter>("ALL");
   const [sortBy, setSortBy] = useState<TalentSortType>("POPULAR");
   const [categories, setCategories] = useState<CategoryRes[]>([]);
   const [isCategoryLoading, setIsCategoryLoading] = useState(true);
@@ -273,6 +264,8 @@ export default function TalentsPage() {
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isMoreLoading, setIsMoreLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const talentRequestIdRef = useRef(0);
 
   useEffect(() => {
     let ignore = false;
@@ -316,6 +309,8 @@ export default function TalentsPage() {
 
   useEffect(() => {
     let ignore = false;
+    const requestId = talentRequestIdRef.current + 1;
+    talentRequestIdRef.current = requestId;
 
     async function loadInitialTalents() {
       setIsInitialLoading(true);
@@ -324,12 +319,11 @@ export default function TalentsPage() {
       try {
         const response = await talentApi.search({
           categoryId,
-          completedOnly: shelfFilter === "BEST" ? true : undefined,
           sort: sortBy,
           size: PAGE_SIZE,
         });
 
-        if (ignore) {
+        if (ignore || requestId !== talentRequestIdRef.current) {
           return;
         }
 
@@ -337,7 +331,7 @@ export default function TalentsPage() {
         setHasNext(response.hasNext);
         setNextCursor(response.nextCursor);
       } catch (error) {
-        if (ignore) {
+        if (ignore || requestId !== talentRequestIdRef.current) {
           return;
         }
 
@@ -350,7 +344,7 @@ export default function TalentsPage() {
         setHasNext(false);
         setNextCursor(null);
       } finally {
-        if (!ignore) {
+        if (!ignore && requestId === talentRequestIdRef.current) {
           setIsInitialLoading(false);
         }
       }
@@ -361,46 +355,82 @@ export default function TalentsPage() {
     return () => {
       ignore = true;
     };
-  }, [categoryId, shelfFilter, sortBy]);
+  }, [categoryId, sortBy]);
 
-  async function handleLoadMore() {
+  const handleLoadMore = useCallback(async () => {
+    if (!hasNext || nextCursor === null || isInitialLoading || isMoreLoading) {
+      return;
+    }
+
+    const requestId = talentRequestIdRef.current;
+
     setErrorMessage(null);
     setIsMoreLoading(true);
 
     try {
       const response = await talentApi.search({
         categoryId,
-        completedOnly: shelfFilter === "BEST" ? true : undefined,
         sort: sortBy,
         cursor: nextCursor,
         size: PAGE_SIZE,
       });
+      if (requestId !== talentRequestIdRef.current) {
+        return;
+      }
+
       setTalents((previous) => [...previous, ...response.content]);
       setHasNext(response.hasNext);
       setNextCursor(response.nextCursor);
     } catch (error) {
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "재능 목록을 추가로 불러오지 못했습니다.",
-      );
+      if (requestId === talentRequestIdRef.current) {
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "재능 목록을 추가로 불러오지 못했습니다.",
+        );
+      }
     } finally {
-      setIsMoreLoading(false);
+      if (requestId === talentRequestIdRef.current) {
+        setIsMoreLoading(false);
+      }
     }
-  }
+  }, [
+    categoryId,
+    hasNext,
+    isInitialLoading,
+    isMoreLoading,
+    nextCursor,
+    sortBy,
+  ]);
 
-  function handleShelfFilterChange(nextFilter: ShelfFilter): void {
-    setShelfFilter(nextFilter);
+  useEffect(() => {
+    const target = loadMoreRef.current;
 
-    if (nextFilter === "NEW") {
-      setSortBy("LATEST");
+    if (!target || !hasNext || isInitialLoading || isMoreLoading) {
       return;
     }
 
-    if (nextFilter === "BEST") {
-      setSortBy("POPULAR");
-    }
-  }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+
+        if (entry.isIntersecting) {
+          void handleLoadMore();
+        }
+      },
+      {
+        root: null,
+        rootMargin: "480px 0px",
+        threshold: 0,
+      },
+    );
+
+    observer.observe(target);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [handleLoadMore, hasNext, isInitialLoading, isMoreLoading]);
 
   const filteredTalents = useMemo(() => {
     const normalizedKeyword = keyword.trim().toLowerCase();
@@ -415,7 +445,10 @@ export default function TalentsPage() {
   }, [keyword, talents]);
 
   const isEmpty =
-    !isInitialLoading && !errorMessage && filteredTalents.length === 0;
+    !isInitialLoading &&
+    !errorMessage &&
+    filteredTalents.length === 0 &&
+    !hasNext;
   const countLabel = isInitialLoading
     ? "재능을 불러오는 중"
     : `총 ${filteredTalents.length}${hasNext ? "+" : ""}개 재능`;
@@ -443,12 +476,12 @@ export default function TalentsPage() {
 
         <nav
           aria-label="재능 카테고리"
-          className="mt-12 flex items-center gap-7 overflow-x-auto border-b border-slate-400/55 pb-5 text-sm font-black text-zinc-950 [scrollbar-width:none] sm:mt-16 sm:gap-10 sm:text-[15px] lg:mt-20"
+          className="mt-12 flex items-center gap-7 overflow-x-auto border-b border-slate-400/55 pb-3.5 text-base font-black text-zinc-950 [scrollbar-width:none] sm:mt-16 sm:gap-10 sm:text-lg lg:mt-20"
         >
           <button
             type="button"
             onClick={() => setCategoryId(undefined)}
-            className={`shrink-0 cursor-pointer whitespace-nowrap border-b-2 pb-5 transition ${categoryId === undefined
+            className={`shrink-0 cursor-pointer whitespace-nowrap border-b-2 pb-3.5 transition ${categoryId === undefined
               ? "border-[#8c5bff] text-[#8c5bff]"
               : "border-transparent hover:text-[#8c5bff]"
               }`}
@@ -460,7 +493,7 @@ export default function TalentsPage() {
               key={category.categoryId}
               type="button"
               onClick={() => setCategoryId(category.categoryId)}
-              className={`shrink-0 cursor-pointer whitespace-nowrap border-b-2 pb-5 transition ${categoryId === category.categoryId
+              className={`shrink-0 cursor-pointer whitespace-nowrap border-b-2 pb-3.5 transition ${categoryId === category.categoryId
                 ? "border-[#8c5bff] text-[#8c5bff]"
                 : "border-transparent hover:text-[#8c5bff]"
                 }`}
@@ -489,23 +522,7 @@ export default function TalentsPage() {
           </div>
         ) : null}
 
-        <section className="mt-7 flex flex-col gap-5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-          <div className="flex w-full items-center gap-2 overflow-x-auto [scrollbar-width:none] sm:w-auto sm:gap-3">
-            {shelfFilters.map((filter) => (
-              <button
-                key={filter.value}
-                type="button"
-                onClick={() => handleShelfFilterChange(filter.value)}
-                className={`h-12 min-w-[76px] cursor-pointer rounded-xl border px-5 text-sm font-black transition sm:h-[58px] sm:min-w-[86px] sm:px-7 sm:text-base ${shelfFilter === filter.value
-                  ? "border-[#8c5bff] bg-[#8c5bff] text-white"
-                  : "border-[#ded6ff] bg-white/90 text-zinc-500 hover:border-[#d9ccff] hover:bg-[#fbf9ff] hover:text-[#8c5bff]"
-                  }`}
-              >
-                {filter.label}
-              </button>
-            ))}
-          </div>
-
+        <section className="mt-7 flex flex-col gap-5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
           <div className="flex w-full items-center gap-3 sm:w-auto">
             <label className="relative block w-full sm:w-[260px]">
               <span className="sr-only">재능 검색</span>
@@ -529,10 +546,7 @@ export default function TalentsPage() {
           </p>
           <TalentSortMenu
             value={sortBy}
-            onChange={(nextSort) => {
-              setSortBy(nextSort);
-              setShelfFilter("ALL");
-            }}
+            onChange={setSortBy}
           />
         </section>
 
@@ -563,18 +577,20 @@ export default function TalentsPage() {
           </div>
         ) : null}
 
-        {!isInitialLoading && !errorMessage && filteredTalents.length > 0 ? (
+        {!isInitialLoading && !errorMessage && (filteredTalents.length > 0 || hasNext) ? (
           <>
-            <div className="mt-8 grid grid-cols-1 gap-x-6 gap-y-14 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {filteredTalents.map((talent) => (
-                <TalentProductCard
-                  key={talent.talentId}
-                  talent={talent}
-                />
-              ))}
-            </div>
+            {filteredTalents.length > 0 ? (
+              <div className="mt-8 grid grid-cols-1 gap-x-6 gap-y-14 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {filteredTalents.map((talent) => (
+                  <TalentProductCard
+                    key={talent.talentId}
+                    talent={talent}
+                  />
+                ))}
+              </div>
+            ) : null}
             {hasNext ? (
-              <div className="mt-14 flex justify-center">
+              <div ref={loadMoreRef} className="mt-14 flex justify-center">
                 <button
                   type="button"
                   disabled={isMoreLoading}

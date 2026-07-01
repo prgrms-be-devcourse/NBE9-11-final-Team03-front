@@ -2610,11 +2610,13 @@ export default function Home() {
         }
 
         .startSticker {
-          top: -50px !important;
-          left: auto !important;
-          right: -200px !important;
+          position: absolute !important;
+          top: 10% !important;
+          left: 50% !important;
+          right: auto !important;
           background: #15151f !important;
           color: #ffffff !important;
+          transform: translate(-100%, -50%) rotate(-18deg);
           animation: startFloat 5.2s ease-in-out infinite;
         }
 

@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
+import { TalentAttachmentPanel } from "@/components/talent/TalentAttachmentPanel";
 import { TalentDetailActions } from "@/components/talent/TalentDetailActions";
 import {
   talentApi,
@@ -343,6 +344,8 @@ export default function TalentDetailPage() {
                 </p>
               ) : null}
             </section>
+
+            <TalentAttachmentPanel talentId={talent.id} isOwner={isOwner} />
 
             <section className="rounded-lg border border-[#ded6ff] bg-white p-5 shadow-sm shadow-violet-950/[0.04] sm:p-6">
               <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
