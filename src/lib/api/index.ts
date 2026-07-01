@@ -245,8 +245,13 @@ export const talentApi = {
     });
   },
 
-  getDetail(talentId: number): Promise<TalentDetailRes> {
-    return apiFetch<TalentDetailRes>(`/api/v1/talents/${talentId}`);
+  getDetail(
+    talentId: number,
+    options?: { increaseView?: boolean },
+  ): Promise<TalentDetailRes> {
+    return apiFetch<TalentDetailRes>(`/api/v1/talents/${talentId}`, {
+      query: { increaseView: options?.increaseView ? true : undefined },
+    });
   },
 
   create(payload: TalentCreateReq): Promise<TalentCreateRes> {
