@@ -166,8 +166,7 @@ async function fetchWithTimeout(url: URL): Promise<Response> {
     return await fetch(url, {
       headers: {
         accept: "text/html,application/xhtml+xml",
-        "user-agent":
-          "Mozilla/5.0 (compatible; BatonLinkPreview/1.0; +https://baton.local)",
+        "user-agent": "facebookexternalhit/1.1",
       },
       redirect: "manual",
       signal: controller.signal,
@@ -332,20 +331,22 @@ function normalizeText(value: string | null): string | null {
 
 function findMetaContent(html: string, keys: string[]): string | null {
   const normalizedKeys = keys.map((key) => key.toLowerCase());
+  const metaTags = [...html.matchAll(/<meta\b[^>]*>/gi)].map((match) => ({
+    tag: match[0],
+    property: getTagAttribute(match[0], "property")?.toLowerCase(),
+    name: getTagAttribute(match[0], "name")?.toLowerCase(),
+  }));
 
-  for (const match of html.matchAll(/<meta\b[^>]*>/gi)) {
-    const tag = match[0];
-    const property = getTagAttribute(tag, "property")?.toLowerCase();
-    const name = getTagAttribute(tag, "name")?.toLowerCase();
+  for (const key of normalizedKeys) {
+    const matchedTag = metaTags.find(
+      ({ property, name }) => property === key || name === key,
+    );
 
-    if (
-      !normalizedKeys.includes(property ?? "") &&
-      !normalizedKeys.includes(name ?? "")
-    ) {
+    if (!matchedTag) {
       continue;
     }
 
-    const content = normalizeText(getTagAttribute(tag, "content"));
+    const content = normalizeText(getTagAttribute(matchedTag.tag, "content"));
 
     if (content) {
       return content;

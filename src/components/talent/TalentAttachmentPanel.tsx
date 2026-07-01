@@ -121,7 +121,7 @@ async function requestLinkPreview(url: string): Promise<LinkPreviewData | null> 
   const response = await fetch(
     `/api/link-preview?url=${encodeURIComponent(url)}`,
     {
-      cache: "force-cache",
+      cache: "no-store",
       credentials: "same-origin",
     },
   );
